@@ -1,24 +1,23 @@
-import { useState } from 'react'
-import Home from "./pages/home"
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Home from "./pages/home";
+import Login from "./pages/login";
+import Register from "./pages/register";
 
 function App() {
-    const [message, setMessage] = useState('')
-
-    const callBackend = async () => {
-        try {
-            const response = await fetch('/api/hello')
-            const data = await response.text()
-
-            setMessage(data)
-        } catch (error) {
-            console.error(error)
-            setMessage('Không thể kết nối Backend')
-        }
-    }
-
     return (
-        <Home />
-    )
+        <BrowserRouter>
+            <Routes>
+                {/* Trang chủ */}
+                <Route path="/" element={<Home />} />
+
+                {/* Trang Đăng nhập */}
+                <Route path="/login" element={<Login />} />
+
+                {/* Trang Đăng ký */}
+                <Route path="/register" element={<Register />} />
+            </Routes>
+        </BrowserRouter>
+    );
 }
 
-export default App
+export default App;

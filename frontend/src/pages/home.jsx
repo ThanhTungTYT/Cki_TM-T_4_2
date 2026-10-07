@@ -1,4 +1,5 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { Link } from 'react-router-dom';
 import {
     faBroom,
     faHouse,
@@ -44,8 +45,8 @@ function Home() {
                     </nav>
 
                     <div className="header-actions">
-                        <button className="login-btn">Đăng nhập</button>
-                        <button className="register-btn">Đăng ký</button>
+                        <Link to="/login" className="login-btn">Đăng nhập</Link>
+                        <Link to="/register" className="register-btn">Đăng ký</Link>
                         <button className="service-btn">Đặt dịch vụ</button>
                     </div>
                 </div>
