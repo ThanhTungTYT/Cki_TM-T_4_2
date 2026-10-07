@@ -1,14 +1,42 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #1e385c;
+    background: #ffffff;
+}
+
+button,
+input,
+select {
+    font-family: inherit;
+}
+
+button {
+    cursor: pointer;
+    border: none;
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
 .services-page {
     min-height: 100vh;
     background: #ffffff;
-    color: #173f35;
+    color: #1e385c;
 }
 
 /* HEADER */
 
 .services-header {
     background: #ffffff;
-    border-bottom: 1px solid #e5eeee;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 .services-header-inner {
@@ -28,7 +56,7 @@
 
     font-size: 28px;
     font-weight: 700;
-    color: #159570;
+    color: #1e385c;
 }
 
 .logo-icon {
@@ -39,7 +67,7 @@
     align-items: center;
     justify-content: center;
 
-    background: #e1f7ef;
+    background: #2563eb;
     border-radius: 12px;
 }
 
@@ -52,12 +80,12 @@
 
 .services-header .nav a {
     text-decoration: none;
-    color: #405953;
+    color: #4b5563;
     font-weight: 600;
 }
 
 .services-header .nav a.active {
-    color: #159570;
+    color: #2563eb;
 }
 
 /* HEADER BUTTONS */
@@ -71,15 +99,15 @@
     padding: 12px 22px;
     border-radius: 10px;
     background: white;
-    border: 1px solid #d7e5e1;
+    border: 1px solid #e2e8f0;
     font-weight: 600;
     cursor: pointer;
 }
 
 .header-actions .service-btn {
-    background: #159570;
+    background: #2563eb;
     color: white;
-    border-color: #159570;
+    border-color: #2563eb;
 }
 
 .header-actions {
@@ -110,33 +138,33 @@
 }
 
 .login-btn {
-    color: #159a75;
+    color: #2563eb;
     background: white;
-    border: 1px solid #159a75;
+    border: 1px solid #2563eb;
 }
 
 .register-btn {
-    color: #159a75;
+    color: #2563eb;
     background: white;
-    border: 1px solid #d8e5e1;
+    border: 1px solid #e2e8f0;
 }
 
 .service-btn {
     color: white;
-    background: #159a75;
-    border: 1px solid #159a75;
+    background: #2563eb;
+    border: 1px solid #2563eb;
 }
 
 .login-btn:hover {
-    background: #eaf9f3;
+    background: #eff6ff;
 }
 
 .register-btn:hover {
-    background: #f3faf7;
+    background: #f8fafc;
 }
 
 .service-btn:hover {
-    background: #107d5d;
+    background: #1d4ed8;
     transform: translateY(-1px);
 }
 
@@ -148,8 +176,8 @@
     justify-content: center;
     gap: 8px;
     border-radius: 9px;
-    background: #e8f7f2;
-    color: #159a75;
+    background: #eff6ff;
+    color: #2563eb;
     font-size: 14px;
     font-weight: 700;
     text-decoration: none;
@@ -162,12 +190,12 @@
 }
 
 .user-btn:hover {
-    background: #159a75;
+    background: #2563eb;
     color: white;
 }
 
 .user-btn:hover {
-    background: #159a75;
+    background: #2563eb;
     color: white;
 }
 
@@ -178,7 +206,7 @@
     margin: 0 auto;
     padding: 22px 0;
 
-    color: #84928f;
+    color: #64748b;
     font-size: 14px;
 }
 
@@ -187,7 +215,7 @@
 }
 
 .breadcrumb strong {
-    color: #159570;
+    color: #2563eb;
 }
 
 /* MAIN */
@@ -204,7 +232,7 @@
 /* FILTER */
 
 .filter-sidebar {
-    border: 1px solid #e3ebe8;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
     padding: 20px;
     height: fit-content;
@@ -223,13 +251,13 @@
 .filter-title button {
     border: none;
     background: none;
-    color: #2878e8;
+    color: #2563eb;
     cursor: pointer;
 }
 
 .filter-section {
     padding: 22px 0;
-    border-bottom: 1px solid #e5ebe9;
+    border-bottom: 1px solid #e2e8f0;
 }
 
 .filter-section:last-child {
@@ -249,19 +277,19 @@
     margin: 12px 0;
 
     font-size: 14px;
-    color: #586863;
+    color: #4b5563;
 }
 
 .filter-section label span {
     margin-left: auto;
-    color: #9aa6a3;
+    color: #94a3b8;
 }
 
 .filter-section select {
     width: 100%;
     padding: 10px;
 
-    border: 1px solid #dce5e2;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
 }
 
@@ -274,7 +302,7 @@
     justify-content: space-between;
 
     font-size: 12px;
-    color: #66736f;
+    color: #64748b;
 }
 
 /* SERVICE LIST */
@@ -294,12 +322,12 @@
 
 .service-list-header p {
     margin: 0;
-    color: #87938f;
+    color: #64748b;
 }
 
 .service-list-header select {
     padding: 10px 15px;
-    border: 1px solid #dce5e2;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
 }
 
@@ -316,7 +344,7 @@
 .service-card {
     overflow: hidden;
 
-    border: 1px solid #e1e9e6;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
 
     background: white;
@@ -326,7 +354,7 @@
 
 .service-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 25px rgba(30, 56, 92, 0.08);
 }
 
 .service-image {
@@ -336,8 +364,8 @@
     align-items: center;
     justify-content: center;
 
-    background: #d9f2ea;
-    color: #159570;
+    background: #eff6ff;
+    color: #2563eb;
 }
 
 .service-content {
@@ -350,7 +378,7 @@
 }
 
 .provider {
-    color: #88938f;
+    color: #64748b;
     font-size: 13px;
 
     white-space: nowrap;
@@ -365,15 +393,15 @@
     margin: 15px 0;
 
     font-size: 12px;
-    color: #7d8985;
+    color: #64748b;
 }
 
 .rating {
-    color: #333;
+    color: #1e385c;
 }
 
 .rating svg {
-    color: #f4b400;
+    color: #eab308;
 }
 
 .service-bottom {
@@ -381,18 +409,18 @@
     align-items: end;
     justify-content: space-between;
 
-    border-top: 1px solid #edf1ef;
+    border-top: 1px solid #e2e8f0;
     padding-top: 12px;
 }
 
 .service-bottom small {
     display: block;
-    color: #8b9692;
+    color: #94a3b8;
 }
 
 .service-bottom strong {
     display: block;
-    color: #2878e8;
+    color: #2563eb;
     font-size: 16px;
     margin-top: 4px;
 }
@@ -403,7 +431,7 @@
 
     padding: 10px 18px;
 
-    background: #2878e8;
+    background: #2563eb;
     color: white;
 
     font-weight: 600;

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
     faMagnifyingGlass,
     faStar,
-    faLocationDot, faUser
+    faLocationDot, faUser, faBroom
 } from '@fortawesome/free-solid-svg-icons'
 
 import './services.css'
@@ -80,7 +80,9 @@ function Services() {
                 <div className="services-header-inner">
 
                     <div className="logo">
-                        <span className="logo-icon">🧹</span>
+                        <span className="logo-icon">
+                            <FontAwesomeIcon icon={faBroom} />
+                        </span>
                         <span>CleanMate</span>
                     </div>
 
