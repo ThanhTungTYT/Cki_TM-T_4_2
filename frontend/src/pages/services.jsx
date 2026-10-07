@@ -72,7 +72,7 @@ const services = [
 ]
 
 function Services() {
-    const storedUser = localStorage.getItem("user");
+    const storedUser = sessionStorage.getItem("user");
     const user = storedUser ? JSON.parse(storedUser) : null;
     return (
         <div className="services-page">
