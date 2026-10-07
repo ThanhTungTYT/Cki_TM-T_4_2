@@ -7,7 +7,59 @@ import './login.css'
 
 function Login() {
     const [showPassword, setShowPassword] = useState(false);
-
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [message, setMessage] = useState("");
+    const [loading, setLoading] = useState(false);
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        setMessage("");
+        setLoading(true);
+        try {
+            const response = await fetch(
+                "http://localhost:8080/api/auth/login",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        password: password
+                    })
+                }
+            );
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    data.message || "Đăng nhập thất bại"
+                );
+            }
+            localStorage.setItem(
+                "accessToken",
+                data.accessToken
+            );
+            localStorage.setItem(
+                "user",
+                JSON.stringify({
+                    userId: data.userId,
+                    fullName: data.fullName,
+                    email: data.email,
+                    role: data.role
+                })
+            );
+            setMessage("Đăng nhập thành công");
+            if (data.role === "ADMIN") {
+                window.location.href = "/admin";
+            } else {
+                window.location.href = "/";
+            }
+        } catch (error) {
+            setMessage(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
     return (
         <div className="home">
             <header className="header">
@@ -20,7 +72,7 @@ function Login() {
                     </div>
 
                     <nav className="nav">
-                        <a href="#">Trang chủ</a>
+                        <a href="/">Trang chủ</a>
                         <a href="#">Dịch vụ</a>
                         <a href="#">Đối tác vệ sinh</a>
                         <a href="#">Về chúng tôi</a>
@@ -40,15 +92,15 @@ function Login() {
                         <h2>Đăng nhập</h2>
                         <p>Chào mừng bạn trở lại với ứng dụng CleanMate!</p>
                     </div>
-                    <form>
+                    <form onSubmit={handleLogin}>
                         <div className="form-group">
-                            <label>Email / Số điện thoại</label>
-                            <input type="text" placeholder="Nhập email hoặc số điện thoại"/>
+                            <label>Email</label>
+                            <input type="text" placeholder="Nhập email" value={email} onChange={(e) => setEmail(e.target.value)} required/>
                         </div>
                         <div className="form-group">
                             <label>Mật khẩu</label>
                             <div className="password-wrapper">
-                                <input type={showPassword ? "text" : "password"} placeholder="Nhập mật khẩu"/>
+                                <input type={showPassword ? "text" : "password"} placeholder="Nhập mật khẩu" value={password} onChange={(e) => setPassword(e.target.value)} required/>
                                 <button type="button" className="eye-btn" onClick={() => setShowPassword(!showPassword)}>
                                     <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye}/>
                                 </button>
@@ -61,7 +113,12 @@ function Login() {
                             </label>
                             <a href="#">Quên mật khẩu?</a>
                         </div>
-                        <button type="submit" className="login-submit">Đăng nhập</button>
+                        <button type="submit" className="login-submit" disabled={loading}>{loading ? "Đang đăng nhập..." : "Đăng nhập"}</button>
+                        {message && (
+                            <p className="auth-message">
+                                {message}
+                            </p>
+                        )}
                     </form>
                     <div className="login-divider">
                         <span>hoặc</span>
