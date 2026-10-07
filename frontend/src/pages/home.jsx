@@ -26,7 +26,7 @@ function Home() {
     const partners = []
     const reviews = []
 
-    const storedUser = localStorage.getItem("user");
+    const storedUser = sessionStorage.getItem("user");
     const user = storedUser ? JSON.parse(storedUser) : null;
 
     return (

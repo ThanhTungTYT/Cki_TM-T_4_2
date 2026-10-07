@@ -36,19 +36,14 @@ function Login() {
                     data.message || "Đăng nhập thất bại"
                 );
             }
-            localStorage.setItem(
-                "accessToken",
-                data.accessToken
-            );
-            localStorage.setItem(
-                "user",
-                JSON.stringify({
-                    userId: data.userId,
-                    fullName: data.fullName,
-                    email: data.email,
-                    role: data.role
-                })
-            );
+            sessionStorage.setItem("accessToken", data.accessToken);
+            sessionStorage.setItem("user", JSON.stringify({
+                userId: data.userId,
+                fullName: data.fullName,
+                email: data.email,
+                role: data.role
+            }));
+
             setMessage("Đăng nhập thành công");
             if (data.role === "ADMIN") {
                 window.location.href = "/admin";
@@ -91,19 +86,14 @@ function Login() {
                     data.message || "Đăng nhập Google thất bại"
                 );
             }
-            localStorage.setItem(
-                "accessToken",
-                data.accessToken
-            );
-            localStorage.setItem(
-                "user",
-                JSON.stringify({
-                    userId: data.userId,
-                    fullName: data.fullName,
-                    email: data.email,
-                    role: data.role
-                })
-            );
+            sessionStorage.setItem("accessToken", data.accessToken);
+
+            sessionStorage.setItem("user", JSON.stringify({
+                userId: data.userId,
+                fullName: data.fullName,
+                email: data.email,
+                role: data.role
+            }));
             setMessage("Đăng nhập Google thành công");
             if (data.role === "ADMIN") {
                 window.location.href = "/admin";
@@ -130,7 +120,7 @@ function Login() {
 
                     <nav className="nav">
                         <a href="/">Trang chủ</a>
-                        <a href="/sevices">Dịch vụ</a>
+                        <a href="/services">Dịch vụ</a>
                         <a href="#">Đối tác vệ sinh</a>
                         <a href="#">Về chúng tôi</a>
                         <a href="#">Hỗ trợ</a>
