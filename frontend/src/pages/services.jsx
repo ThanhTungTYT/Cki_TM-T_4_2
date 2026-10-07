@@ -1,8 +1,9 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { Link } from "react-router-dom";
 import {
     faMagnifyingGlass,
     faStar,
-    faLocationDot
+    faLocationDot, faUser
 } from '@fortawesome/free-solid-svg-icons'
 
 import './services.css'
@@ -71,6 +72,8 @@ const services = [
 ]
 
 function Services() {
+    const storedUser = localStorage.getItem("user");
+    const user = storedUser ? JSON.parse(storedUser) : null;
     return (
         <div className="services-page">
             <header className="services-header">
@@ -90,9 +93,25 @@ function Services() {
                     </nav>
 
                     <div className="header-actions">
-                        <button className="login-btn">Đăng nhập</button>
-                        <button className="register-btn">Đăng ký</button>
-                        <button className="service-btn">Đặt dịch vụ</button>
+                        {user ? (
+                            <Link to="/profile" className="user-btn">
+                                <FontAwesomeIcon icon={faUser} />
+                                <span>{user.fullName}</span>
+                            </Link>
+                        ) : (
+                            <>
+                                <Link to="/login" className="login-btn">
+                                    Đăng nhập
+                                </Link>
+
+                                <Link to="/register" className="register-btn">
+                                    Đăng ký
+                                </Link>
+                            </>
+                        )}
+                        <button className="service-btn">
+                            Đặt dịch vụ
+                        </button>
                     </div>
                 </div>
             </header>

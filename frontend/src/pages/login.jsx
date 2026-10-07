@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from 'react-router-dom';
 import {FontAwesomeIcon} from "@fortawesome/react-fontawesome";
+import { GoogleLogin } from "@react-oauth/google";
 import {faBroom, faEye, faEyeSlash} from "@fortawesome/free-solid-svg-icons";
 import {faFacebookF, faInstagram, faYoutube, faGoogle} from "@fortawesome/free-brands-svg-icons";
 import './login.css'
@@ -60,6 +61,62 @@ function Login() {
             setLoading(false);
         }
     };
+    const handleGoogleLogin = async (credentialResponse) => {
+        setMessage("");
+        setLoading(true);
+        try {
+            const response = await fetch(
+                "http://localhost:8080/api/auth/google",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        credential: credentialResponse.credential
+                    })
+                }
+            );
+            const text = await response.text();
+            let data = {};
+            if (text) {
+                try {
+                    data = JSON.parse(text);
+                } catch {
+                    throw new Error("Backend trả về dữ liệu không hợp lệ");
+                }
+            }
+            if (!response.ok) {
+                throw new Error(
+                    data.message || "Đăng nhập Google thất bại"
+                );
+            }
+            localStorage.setItem(
+                "accessToken",
+                data.accessToken
+            );
+            localStorage.setItem(
+                "user",
+                JSON.stringify({
+                    userId: data.userId,
+                    fullName: data.fullName,
+                    email: data.email,
+                    role: data.role
+                })
+            );
+            setMessage("Đăng nhập Google thành công");
+            if (data.role === "ADMIN") {
+                window.location.href = "/admin";
+            } else {
+                window.location.href = "/";
+            }
+        } catch (error) {
+            console.error(error);
+            setMessage(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
     return (
         <div className="home">
             <header className="header">
@@ -73,16 +130,24 @@ function Login() {
 
                     <nav className="nav">
                         <a href="/">Trang chủ</a>
-                        <a href="#">Dịch vụ</a>
+                        <a href="/sevices">Dịch vụ</a>
                         <a href="#">Đối tác vệ sinh</a>
                         <a href="#">Về chúng tôi</a>
                         <a href="#">Hỗ trợ</a>
                     </nav>
 
                     <div className="header-actions">
-                        <button className="login-btn">Đăng nhập</button>
-                        <button className="register-btn" onClick={() => window.location.href = "/register"}>Đăng ký</button>
-                        <button className="service-btn">Đặt dịch vụ</button>
+                        <Link to="/login" className="login-btn">
+                            Đăng nhập
+                        </Link>
+
+                        <Link to="/register" className="register-btn">
+                            Đăng ký
+                        </Link>
+
+                        <button className="service-btn">
+                            Đặt dịch vụ
+                        </button>
                     </div>
                 </div>
             </header>
@@ -124,10 +189,21 @@ function Login() {
                         <span>hoặc</span>
                     </div>
                     <div className="social-login">
-                        <button>
-                            <FontAwesomeIcon icon={faGoogle} />
-                            <span>Google</span>
-                        </button>
+                        <div className="google-login-wrapper">
+                            <button type="button" className="custom-google-btn">
+                                <FontAwesomeIcon icon={faGoogle} />
+                                <span>Google</span>
+                            </button>
+
+                            <div className="google-login-hidden">
+                                <GoogleLogin
+                                    onSuccess={handleGoogleLogin}
+                                    onError={() => {
+                                        setMessage("Không thể đăng nhập bằng Google");
+                                    }}
+                                />
+                            </div>
+                        </div>
 
                         <button>
                             <FontAwesomeIcon icon={faFacebookF} />

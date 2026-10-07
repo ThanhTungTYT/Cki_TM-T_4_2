@@ -149,6 +149,37 @@ a {
     transform: translateY(-1px);
 }
 
+.user-btn {
+    height: 42px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 9px;
+    background: #e8f7f2;
+    color: #159a75;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: 0.2s;
+}
+
+.user-btn svg {
+    font-size: 16px;
+}
+
+.user-btn:hover {
+    background: #159a75;
+    color: white;
+}
+
+.user-btn:hover {
+    background: #159a75;
+    color: white;
+}
+
 .hero {
     background: linear-gradient(135deg, #f0fbf7 0%, #ffffff 58%, #eaf8f3 100%);
     padding: 72px 32px 80px;

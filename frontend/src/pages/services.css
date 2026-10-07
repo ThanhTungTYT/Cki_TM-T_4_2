@@ -82,6 +82,95 @@
     border-color: #159570;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.login-btn,
+.register-btn,
+.service-btn {
+    height: 42px;
+    padding: 0 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    border-radius: 9px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    margin: 0;
+    cursor: pointer;
+}
+
+.login-btn {
+    color: #159a75;
+    background: white;
+    border: 1px solid #159a75;
+}
+
+.register-btn {
+    color: #159a75;
+    background: white;
+    border: 1px solid #d8e5e1;
+}
+
+.service-btn {
+    color: white;
+    background: #159a75;
+    border: 1px solid #159a75;
+}
+
+.login-btn:hover {
+    background: #eaf9f3;
+}
+
+.register-btn:hover {
+    background: #f3faf7;
+}
+
+.service-btn:hover {
+    background: #107d5d;
+    transform: translateY(-1px);
+}
+
+.user-btn {
+    height: 42px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 9px;
+    background: #e8f7f2;
+    color: #159a75;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: 0.2s;
+}
+
+.user-btn svg {
+    font-size: 16px;
+}
+
+.user-btn:hover {
+    background: #159a75;
+    color: white;
+}
+
+.user-btn:hover {
+    background: #159a75;
+    color: white;
+}
+
 /* BREADCRUMB */
 
 .breadcrumb {
