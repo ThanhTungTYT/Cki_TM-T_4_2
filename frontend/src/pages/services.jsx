@@ -1,11 +1,11 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { Link } from "react-router-dom";
 import {
     faMagnifyingGlass,
     faStar,
-    faLocationDot, faUser, faBroom
+    faLocationDot
 } from '@fortawesome/free-solid-svg-icons'
-
+import Header from '../components/Header';
+import Footer from '../components/Footer';
 import './services.css'
 
 const services = [
@@ -72,51 +72,9 @@ const services = [
 ]
 
 function Services() {
-    const storedUser = sessionStorage.getItem("user");
-    const user = storedUser ? JSON.parse(storedUser) : null;
     return (
         <div className="services-page">
-            <header className="services-header">
-                <div className="services-header-inner">
-
-                    <div className="logo">
-                        <span className="logo-icon">
-                            <FontAwesomeIcon icon={faBroom} />
-                        </span>
-                        <span>CleanMate</span>
-                    </div>
-
-                    <nav className="nav">
-                        <a href="/">Trang chủ</a>
-                        <a href="#" className="active">Dịch vụ</a>
-                        <a href="#">Đối tác vệ sinh</a>
-                        <a href="#">Về chúng tôi</a>
-                        <a href="#">Hỗ trợ</a>
-                    </nav>
-
-                    <div className="header-actions">
-                        {user ? (
-                            <Link to="/profile" className="user-btn">
-                                <FontAwesomeIcon icon={faUser} />
-                                <span>{user.fullName}</span>
-                            </Link>
-                        ) : (
-                            <>
-                                <Link to="/login" className="login-btn">
-                                    Đăng nhập
-                                </Link>
-
-                                <Link to="/register" className="register-btn">
-                                    Đăng ký
-                                </Link>
-                            </>
-                        )}
-                        <button className="service-btn">
-                            Đặt dịch vụ
-                        </button>
-                    </div>
-                </div>
-            </header>
+            <Header />
             <div className="breadcrumb">
                 Trang chủ <span>›</span> <strong>Dịch vụ</strong>
             </div>
@@ -306,6 +264,7 @@ function Services() {
                 </section>
 
             </main>
+            <Footer />
         </div>
     )
 }
