@@ -11,7 +11,8 @@ import {
     faShieldHalved,
     faCircleCheck,
     faHeadset,
-    faCreditCard
+    faCreditCard,
+    faUser
 } from '@fortawesome/free-solid-svg-icons'
 import {
     faFacebookF,
@@ -24,6 +25,9 @@ function Home() {
     const services = []
     const partners = []
     const reviews = []
+
+    const storedUser = localStorage.getItem("user");
+    const user = storedUser ? JSON.parse(storedUser) : null;
 
     return (
         <div className="home">
@@ -38,16 +42,32 @@ function Home() {
 
                     <nav className="nav">
                         <a href="/">Trang chủ</a>
-                        <a href="#">Dịch vụ</a>
+                        <a href="/services">Dịch vụ</a>
                         <a href="#">Đối tác vệ sinh</a>
                         <a href="#">Về chúng tôi</a>
                         <a href="#">Hỗ trợ</a>
                     </nav>
 
                     <div className="header-actions">
-                        <Link to="/login" className="login-btn">Đăng nhập</Link>
-                        <Link to="/register" className="register-btn">Đăng ký</Link>
-                        <Link to="#" className="service-btn">Đặt dịch vụ</Link>
+                        {user ? (
+                            <Link to="/profile" className="user-btn">
+                                <FontAwesomeIcon icon={faUser} />
+                                <span>{user.fullName}</span>
+                            </Link>
+                        ) : (
+                            <>
+                                <Link to="/login" className="login-btn">
+                                    Đăng nhập
+                                </Link>
+
+                                <Link to="/register" className="register-btn">
+                                    Đăng ký
+                                </Link>
+                            </>
+                        )}
+                        <button className="service-btn">
+                            Đặt dịch vụ
+                        </button>
                     </div>
                 </div>
             </header>

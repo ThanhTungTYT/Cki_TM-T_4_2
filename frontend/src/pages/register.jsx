@@ -80,16 +80,24 @@ function Register() {
 
                     <nav className="nav">
                         <a href="/">Trang chủ</a>
-                        <a href="#">Dịch vụ</a>
+                        <a href="/sevices">Dịch vụ</a>
                         <a href="#">Đối tác vệ sinh</a>
                         <a href="#">Về chúng tôi</a>
                         <a href="#">Hỗ trợ</a>
                     </nav>
 
                     <div className="header-actions">
-                        <button className="login-btn">Đăng nhập</button>
-                        <button className="register-btn">Đăng ký</button>
-                        <button className="service-btn">Đặt dịch vụ</button>
+                        <Link to="/login" className="login-btn">
+                            Đăng nhập
+                        </Link>
+
+                        <Link to="/register" className="register-btn">
+                            Đăng ký
+                        </Link>
+
+                        <button className="service-btn">
+                            Đặt dịch vụ
+                        </button>
                     </div>
                 </div>
             </header>

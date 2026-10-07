@@ -12,6 +12,7 @@ import org.ckitmdt.backend.service.AuthService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
+import org.ckitmdt.backend.dto.GoogleLoginRequest;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -36,6 +37,15 @@ public class AuthController {
     ) {
         return ResponseEntity.ok(
                 authService.login(request)
+        );
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<AuthResponse> googleLogin(
+            @RequestBody GoogleLoginRequest request
+    ) {
+        return ResponseEntity.ok(
+                authService.googleLogin(request)
         );
     }
 
