@@ -73,8 +73,6 @@ const services = [
 function Services() {
     return (
         <div className="services-page">
-
-            {/* Header */}
             <header className="services-header">
                 <div className="services-header-inner">
 
@@ -84,7 +82,7 @@ function Services() {
                     </div>
 
                     <nav className="nav">
-                        <a href="#">Trang chủ</a>
+                        <a href="/">Trang chủ</a>
                         <a href="#" className="active">Dịch vụ</a>
                         <a href="#">Đối tác vệ sinh</a>
                         <a href="#">Về chúng tôi</a>
@@ -96,35 +94,24 @@ function Services() {
                         <button className="register-btn">Đăng ký</button>
                         <button className="service-btn">Đặt dịch vụ</button>
                     </div>
-
                 </div>
             </header>
-
-            {/* Breadcrumb */}
             <div className="breadcrumb">
                 Trang chủ <span>›</span> <strong>Dịch vụ</strong>
             </div>
-
-            {/* Main */}
             <main className="services-container">
-
-                {/* Sidebar */}
                 <aside className="filter-sidebar">
-
                     <div className="filter-title">
                         <h3>Bộ lọc tìm kiếm</h3>
                         <button>Xóa tất cả</button>
                     </div>
-
                     <div className="filter-section">
                         <h4>LOẠI DỊCH VỤ</h4>
-
                         <label>
                             <input type="checkbox" />
                             Vệ sinh nhà ở
                             <span>(12)</span>
                         </label>
-
                         <label>
                             <input type="checkbox" />
                             Vệ sinh văn phòng

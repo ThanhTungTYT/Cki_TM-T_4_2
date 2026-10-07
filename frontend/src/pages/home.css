@@ -94,7 +94,8 @@ a {
 .header-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+    flex-shrink: 0;
 }
 
 .login-btn,
@@ -102,36 +103,45 @@ a {
 .service-btn {
     height: 42px;
     padding: 0 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
     border-radius: 9px;
+    font-family: inherit;
     font-size: 14px;
     font-weight: 700;
-    transition: 0.2s;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    margin: 0;
+    cursor: pointer;
 }
 
 .login-btn {
-    background: transparent;
-    color: #15966f;
-    border: 1px solid #15966f;
+    color: #159a75;
+    background: white;
+    border: 1px solid #159a75;
+}
+
+.register-btn {
+    color: #159a75;
+    background: white;
+    border: 1px solid #d8e5e1;
+}
+
+.service-btn {
+    color: white;
+    background: #159a75;
+    border: 1px solid #159a75;
 }
 
 .login-btn:hover {
     background: #eaf9f3;
 }
 
-.register-btn {
-    background: #ffffff;
-    color: #15966f;
-    border: 1px solid #d5e9e2;
-}
-
 .register-btn:hover {
     background: #f3faf7;
-}
-
-.service-btn {
-    background: #15966f;
-    color: #ffffff;
-    box-shadow: 0 5px 14px rgba(21, 150, 111, 0.2);
 }
 
 .service-btn:hover {
