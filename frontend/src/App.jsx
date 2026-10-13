@@ -2,7 +2,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Home from "./pages/home";
 import Login from "./pages/login";
 import Register from "./pages/register";
-import Services from "./pages/services"
+import Services from "./pages/services";
+import Provider from "./pages/provider";
 
 function App() {
     return (
@@ -19,6 +20,9 @@ function App() {
 
                 {/* Trang Dịch vụ */}
                 <Route path="/services" element={<Services />} />
+
+                {/* Trang chi tiết nhà cung cấp */}
+                <Route path="/provider/:id" element={<Provider />} />
             </Routes>
         </BrowserRouter>
     );
