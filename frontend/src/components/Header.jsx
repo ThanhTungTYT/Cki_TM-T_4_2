@@ -20,7 +20,7 @@ function Header() {
                 <nav className="nav">
                     <Link to="/">Trang chủ</Link>
                     <Link to="/services">Dịch vụ</Link>
-                    <a href="#">Đối tác vệ sinh</a>
+                    <Link to="/provider/1">Đối tác vệ sinh</Link>
                     <a href="#">Về chúng tôi</a>
                     <a href="#">Hỗ trợ</a>
                 </nav>
