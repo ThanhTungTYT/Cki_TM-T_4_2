@@ -1,4 +1,4 @@
-package org.ckitmdt.backend.controller;
+package org.ckitmdt.backend.controller.auth;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -1,9 +1,9 @@
-package org.ckitmdt.backend.service;
+package org.ckitmdt.backend.service.auth;
 
 import lombok.RequiredArgsConstructor;
-import org.ckitmdt.backend.dto.AuthResponse;
-import org.ckitmdt.backend.dto.LoginRequest;
-import org.ckitmdt.backend.dto.RegisterRequest;
+import org.ckitmdt.backend.dto.auth.AuthResponse;
+import org.ckitmdt.backend.dto.auth.LoginRequest;
+import org.ckitmdt.backend.dto.auth.RegisterRequest;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.ckitmdt.backend.security.JwtService;
@@ -13,7 +13,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
-import org.ckitmdt.backend.dto.GoogleLoginRequest;
+import org.ckitmdt.backend.dto.auth.GoogleLoginRequest;
 import org.springframework.beans.factory.annotation.Value;
 import java.util.Collections;
 

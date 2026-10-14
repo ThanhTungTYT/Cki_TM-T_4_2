@@ -1,18 +1,17 @@
-package org.ckitmdt.backend.controller;
+package org.ckitmdt.backend.controller.auth;
 
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.ckitmdt.backend.dto.AuthResponse;
-import org.ckitmdt.backend.dto.LoginRequest;
-import org.ckitmdt.backend.dto.RegisterRequest;
-import org.ckitmdt.backend.dto.UserResponse;
+import org.ckitmdt.backend.dto.auth.*;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.UserRepository;
-import org.ckitmdt.backend.service.AuthService;
+import org.ckitmdt.backend.service.auth.AuthService;
+import org.ckitmdt.backend.service.auth.RegistrationOtpService;
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
-import org.ckitmdt.backend.dto.GoogleLoginRequest;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -21,6 +20,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final UserRepository userRepository;
+    private final RegistrationOtpService registrationOtpService;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(
@@ -64,7 +64,26 @@ public class AuthController {
                 user.getRole(),
                 user.getEmailVerified()
         );
-
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/register/request-otp")
+    public ResponseEntity<?> requestRegisterOtp(@Valid @RequestBody RegisterRequest request, HttpSession session) {
+        registrationOtpService.requestOtp(request, session);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Đã gửi OTP đến email"));
+    }
+
+    @PostMapping("/register/verify-otp")
+    public ResponseEntity<?> verifyRegisterOtp(@Valid @RequestBody VerifyOtpRequest request, HttpSession session) {
+        registrationOtpService.verifyOtp(request.getOtp(), session);
+        return ResponseEntity.ok(Map.of("success", true, "message", "Đăng ký thành công"));
+    }
+
+    @PostMapping("/register/resend-otp")
+    public ResponseEntity<?> resendRegisterOtp(HttpSession session) {
+        registrationOtpService.resendOtp(session);
+        return ResponseEntity.ok(
+                Map.of("success", true, "message", "Đã gửi lại OTP")
+        );
     }
 }
