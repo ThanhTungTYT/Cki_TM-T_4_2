@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
     faTableColumns,
@@ -16,7 +16,14 @@ import './profile.css';
 
 function Profile() {
     const [activeTab, setActiveTab] = useState("profile");
-
+    const navigate = useNavigate();
+    const handleLogout = () => {
+        sessionStorage.removeItem("accessToken");
+        sessionStorage.removeItem("user");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+        navigate("/login", { replace: true });
+    };
     return (
         <div className="home">
             <Header />
@@ -40,8 +47,8 @@ function Profile() {
                             <li className="sidebar-item">
                                 <FontAwesomeIcon icon={faHeadset} /> Hỗ trợ & Khiếu nại
                             </li>
-                            <li className="sidebar-item logout">
-                                <FontAwesomeIcon icon={faRightFromBracket} /> Đăng xuất
+                            <li className="sidebar-item logout" onClick={handleLogout}>
+                                <FontAwesomeIcon icon={faRightFromBracket} />Đăng xuất
                             </li>
                         </ul>
                     </aside>

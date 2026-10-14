@@ -5,6 +5,7 @@ import Register from "./pages/register";
 import Services from "./pages/services";
 import Provider from "./pages/provider";
 import Profile from "./pages/Profile";
+import VerifyOtp from "./pages/verify-otp";
 
 
 function App() {
@@ -28,6 +29,8 @@ function App() {
 
                 {/* Trang Quản lý Hồ sơ cá nhân */}
                 <Route path="/profile" element={<Profile />} />
+
+                <Route path="/verify-otp" element={<VerifyOtp />} />
             </Routes>
         </BrowserRouter>
     );
