@@ -4,6 +4,8 @@ import Login from "./pages/login";
 import Register from "./pages/register";
 import Services from "./pages/services";
 import Provider from "./pages/provider";
+import Profile from "./pages/Profile";
+
 
 function App() {
     return (
@@ -23,6 +25,9 @@ function App() {
 
                 {/* Trang chi tiết nhà cung cấp */}
                 <Route path="/provider/:id" element={<Provider />} />
+
+                {/* Trang Quản lý Hồ sơ cá nhân */}
+                <Route path="/profile" element={<Profile />} />
             </Routes>
         </BrowserRouter>
     );
