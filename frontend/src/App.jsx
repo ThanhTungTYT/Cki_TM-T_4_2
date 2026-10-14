@@ -3,6 +3,7 @@ import Home from "./pages/home";
 import Login from "./pages/login";
 import Register from "./pages/register";
 import Services from "./pages/services";
+import ServiceDetail from "./pages/service-detail";
 import Provider from "./pages/provider";
 import Profile from "./pages/Profile";
 import VerifyOtp from "./pages/verify-otp";
@@ -23,6 +24,8 @@ function App() {
 
                 {/* Trang Dịch vụ */}
                 <Route path="/services" element={<Services />} />
+                {/* Trang chi tiết dịch vụ */}
+                <Route path="/service-detail/:id" element={<ServiceDetail />} />
 
                 {/* Trang chi tiết nhà cung cấp */}
                 <Route path="/provider/:id" element={<Provider />} />
