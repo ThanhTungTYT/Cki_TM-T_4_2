@@ -86,4 +86,14 @@ public class AuthController {
                 Map.of("success", true, "message", "Đã gửi lại OTP")
         );
     }
+    @PostMapping("/facebook")
+    public ResponseEntity<AuthResponse> facebookLogin(
+            @Valid @RequestBody FacebookLoginRequest request
+    ) {
+        AuthResponse response = authService.loginWithFacebook(
+                request.getAccessToken()
+        );
+
+        return ResponseEntity.ok(response);
+    }
 }

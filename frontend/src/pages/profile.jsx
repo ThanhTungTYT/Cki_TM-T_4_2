@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -24,10 +24,162 @@ function Profile() {
         localStorage.removeItem("user");
         navigate("/login", { replace: true });
     };
+
+    const [profile, setProfile] = useState({
+        fullName: "",
+        email: "",
+        phone: "",
+        dateOfBirth: "",
+        gender: ""
+    });
+
+    const [originalProfile, setOriginalProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState("");
+    const [error, setError] = useState("");
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+
+        setProfile((prev) => ({
+            ...prev,
+            [name]: value
+        }));
+    };
+
+    useEffect(() => {
+        console.log("Profile useEffect đã chạy");
+        const fetchProfile = async () => {
+            const token =
+                sessionStorage.getItem("accessToken") ||
+                localStorage.getItem("accessToken");
+
+            console.log("Có JWT:", Boolean(token));
+
+            if (!token) {
+                navigate("/login", { replace: true });
+                return;
+            }
+
+            try {
+                const response = await fetch(
+                    "http://localhost:8080/api/users/me",
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    }
+                );
+
+                if (response.status === 401) {
+                    navigate("/login", { replace: true });
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(
+                        "Không thể tải thông tin cá nhân"
+                    );
+                }
+
+                const data = await response.json();
+
+                const userProfile = {
+                    fullName: data.fullName || "",
+                    email: data.email || "",
+                    phone: data.phone || "",
+                    dateOfBirth: data.dateOfBirth || "",
+                    gender: data.gender || ""
+                };
+
+                setProfile(userProfile);
+                setOriginalProfile(userProfile);
+
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                console.log("Hoàn tất tải profile");
+                setLoading(false);
+            }
+        };
+        fetchProfile();
+    }, [navigate]);
+    const handleSave = async () => {
+        setMessage("");
+        setError("");
+        if (!profile.fullName.trim()) {
+            setError("Vui lòng nhập họ và tên");
+            return;
+        }
+        setSaving(true);
+        try {
+            const token = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
+            const response = await fetch(
+                "http://localhost:8080/api/users/me",
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        fullName: profile.fullName,
+                        phone: profile.phone,
+                        dateOfBirth: profile.dateOfBirth || null,
+                        gender: profile.gender
+                    })
+                }
+            );
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+
+                throw new Error(
+                    data.message ||
+                    data.detail ||
+                    "Cập nhật thông tin thất bại"
+                );
+            }
+            const data = await response.json();
+            const updatedProfile = {
+                fullName: data.fullName || "",
+                email: data.email || "",
+                phone: data.phone || "",
+                dateOfBirth: data.dateOfBirth || "",
+                gender: data.gender || ""
+            };
+            setProfile(updatedProfile);
+            setOriginalProfile(updatedProfile);
+            const storage = sessionStorage.getItem("user")
+                ? sessionStorage
+                : localStorage;
+            const currentUser = JSON.parse(
+                storage.getItem("user") || "{}"
+            );
+            storage.setItem(
+                "user",
+                JSON.stringify({
+                    ...currentUser,
+                    fullName: data.fullName
+                })
+            );
+            setMessage("Cập nhật thông tin thành công!");
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+    const handleCancel = () => {
+        if (originalProfile) {
+            setProfile({ ...originalProfile });
+        }
+        setMessage("");
+        setError("");
+    };
     return (
         <div className="home">
             <Header />
-
             <main className="profile-main">
                 <div className="profile-container">
                     <aside className="profile-sidebar">
@@ -80,26 +232,25 @@ function Profile() {
                                 <div className="form-grid-2">
                                     <div className="form-group">
                                         <label>Họ và tên</label>
-                                        <input type="text" />
+                                        <input type="text" name="fullName" value={profile.fullName} onChange={handleChange}/>
                                     </div>
                                     <div className="form-group">
                                         <label>Email</label>
                                         <div className="input-with-badge">
-                                            <input type="email" />
-                                            <span className="verified-tag">Đã xác minh</span>
+                                            <input type="email" name="email" value={profile.email} readOnly/> <span className="verified-tag">Đã xác minh</span>
                                         </div>
                                     </div>
                                     <div className="form-group">
                                         <label>Số điện thoại</label>
-                                        <input type="text" />
+                                        <input type="tel" name="phone" value={profile.phone} onChange={handleChange}/>
                                     </div>
                                     <div className="form-group">
                                         <label>Ngày sinh</label>
-                                        <input type="text" />
+                                        <input type="date" name="dateOfBirth" value={profile.dateOfBirth} onChange={handleChange}/>
                                     </div>
                                     <div className="form-group">
                                         <label>Giới tính</label>
-                                        <select>
+                                        <select name="gender" value={profile.gender} onChange={handleChange}>
                                             <option value="">Chọn giới tính</option>
                                             <option value="FEMALE">Nữ</option>
                                             <option value="MALE">Nam</option>
@@ -141,14 +292,28 @@ function Profile() {
                             </div>
                         </div>
 
+
                         <div className="profile-form-actions">
-                            <button className="btn-cancel">Hủy bỏ</button>
-                            <button className="btn-save">Lưu thay đổi</button>
+                            {error && (
+                                <p style={{ color: "red" }}>
+                                    {error}
+                                </p>
+                            )}
+                            {message && (
+                                <p style={{ color: "green" }}>
+                                    {message}
+                                </p>
+                            )}
+                            <button type="button" className="btn-cancel" onClick={handleCancel} disabled={saving || loading}>
+                                Hủy bỏ
+                            </button>
+                            <button type="button" className="btn-save" onClick={handleSave} disabled={saving || loading}>
+                                {saving ? "Đang lưu..." : "Lưu thay đổi"}
+                            </button>
                         </div>
                     </div>
                 </div>
             </main>
-
             <Footer />
         </div>
     );

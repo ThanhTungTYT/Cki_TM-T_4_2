@@ -2,6 +2,8 @@ package org.ckitmdt.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -49,6 +51,15 @@ public class User {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "facebook_id", unique = true, length = 100)
+    private String facebookId;
+
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    @Column(name = "gender", length = 10)
+    private String gender;
 
     @PrePersist
     protected void onCreate() {

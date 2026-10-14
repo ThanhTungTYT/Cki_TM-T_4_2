@@ -13,7 +13,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
 import java.util.List;
 
 @Configuration
@@ -42,10 +41,12 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/register",
                                 "/api/auth/google",
+                                "/api/auth/facebook",
                                 "/api/auth/register/request-otp",
                                 "/api/auth/register/verify-otp",
                                 "/api/auth/register/resend-otp"
                         ).permitAll()
+                        .requestMatchers("/api/users/**").authenticated()
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
                         .anyRequest()
