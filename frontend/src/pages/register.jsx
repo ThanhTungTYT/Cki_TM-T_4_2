@@ -34,12 +34,9 @@ function Register() {
         setLoading(true);
         try {
             const response = await fetch(
-                "http://localhost:8080/api/auth/register",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
+                "http://localhost:8080/api/auth/register/request-otp",
+                {method: "POST", headers: {"Content-Type": "application/json"},
+                    credentials: "include",
                     body: JSON.stringify({
                         fullName: fullName,
                         email: email,
@@ -58,10 +55,9 @@ function Register() {
                     data.message || `Đăng ký thất bại (${response.status})`
                 );
             }
-            setMessage("Đăng ký thành công");
-            setTimeout(() => {
-                navigate("/login");
-            }, 1000);
+            navigate("/verify-otp", {
+                state: {email: email}
+            });
         } catch (error) {
             setMessage(error.message);
         } finally {
@@ -118,7 +114,7 @@ function Register() {
                             </label>
                         </div>
                         <button type="submit" className="register-submit" disabled={loading}>
-                            {loading ? "Đang đăng ký..." : "Đăng ký"}
+                            {loading ? "Đang gửi OTP..." : "Đăng ký"}
                         </button>
                         {message && (
                             <p className="auth-message">

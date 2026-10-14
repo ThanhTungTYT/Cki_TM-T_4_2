@@ -1,4 +1,4 @@
-package org.ckitmdt.backend.dto;
+package org.ckitmdt.backend.dto.auth;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
