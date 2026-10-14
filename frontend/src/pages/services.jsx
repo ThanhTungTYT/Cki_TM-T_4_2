@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
@@ -100,6 +101,7 @@ const services = [
 ]
 
 function Services() {
+    const navigate = useNavigate();
     const dispatch = useCartDispatch();
     const [modalService, setModalService] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -259,13 +261,21 @@ function Services() {
                         {services.map((service) => (
                             <div className="service-card" key={service.id}>
 
-                                <div className="service-image">
+                                <div
+                                    className="service-image"
+                                    onClick={() => navigate(`/service-detail/${service.id}`)}
+                                    style={{ cursor: 'pointer' }}
+                                >
                                     <div>ẢNH DỊCH VỤ</div>
                                 </div>
-
                                 <div className="service-content">
 
-                                    <h3>{service.name}</h3>
+                                    <h3
+                                        className="service-detail-link"
+                                        onClick={() => navigate(`/service-detail/${service.id}`)}
+                                    >
+                                        {service.name}
+                                    </h3>
 
                                     <p className="provider">
                                         Bởi: {service.provider}
