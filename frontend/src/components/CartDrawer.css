@@ -157,6 +157,23 @@
     width: fit-content;
 }
 
+.cart-item-schedule {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: #4b5563;
+    background: #f1f5f9;
+    padding: 3px 8px;
+    border-radius: 6px;
+    width: fit-content;
+}
+
+.cart-item-schedule svg {
+    color: #2563eb;
+    font-size: 11px;
+}
+
 .cart-item-price {
     color: #2563eb;
     font-size: 14px;

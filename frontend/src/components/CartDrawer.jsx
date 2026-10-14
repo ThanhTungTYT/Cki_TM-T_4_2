@@ -1,5 +1,5 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faXmark, faTrash, faPlus, faMinus, faCartShopping } from '@fortawesome/free-solid-svg-icons';
+import { faXmark, faTrash, faPlus, faMinus, faCartShopping, faCalendarDays } from '@fortawesome/free-solid-svg-icons';
 import { useCart, useCartDispatch } from '../context/CartContext';
 import './CartDrawer.css';
 
@@ -46,6 +46,11 @@ function CartDrawer({ isOpen, onClose }) {
                                     <p className="cart-item-name">{item.serviceName}</p>
                                     {item.packageName && (
                                         <span className="cart-item-package">{item.packageName}</span>
+                                    )}
+                                    {item.scheduledDate && (
+                                        <span className="cart-item-schedule">
+                                            <FontAwesomeIcon icon={faCalendarDays} /> {item.scheduledDate} {item.scheduledTime && `• ${item.scheduledTime}`}
+                                        </span>
                                     )}
                                     <strong className="cart-item-price">
                                         {formatPrice(item.estimatedPrice)}

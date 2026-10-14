@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
     faMagnifyingGlass,
     faStar,
-    faLocationDot
+    faLocationDot,
+    faCartPlus
 } from '@fortawesome/free-solid-svg-icons'
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import ServicePackageModal from '../components/ServicePackageModal';
+import { useCartDispatch } from '../context/CartContext';
 import './services.css'
 
 const services = [
@@ -17,7 +21,13 @@ const services = [
         reviews: 120,
         location: 'Quận 1, HCM',
         price: '120.000đ/giờ',
-        type: 'Vệ sinh nhà ở'
+        basePrice: 120000,
+        type: 'Vệ sinh nhà ở',
+        packages: [
+            { id: 101, name: 'Gói tiêu chuẩn 2 giờ', durationMinutes: 120, employeeCount: 1, minArea: 30, maxArea: 55, price: 150000 },
+            { id: 102, name: 'Gói chuyên sâu 3.5 giờ', durationMinutes: 210, employeeCount: 1, minArea: 55, maxArea: 85, price: 250000 },
+            { id: 103, name: 'Gói đại gia đình 4 giờ (2 NV)', durationMinutes: 240, employeeCount: 2, minArea: 85, maxArea: 130, price: 420000 }
+        ]
     },
     {
         id: 2,
@@ -27,7 +37,13 @@ const services = [
         reviews: 850,
         location: 'Quận 7, HCM',
         price: '1.200.000đ/lần',
-        type: 'Tổng vệ sinh'
+        basePrice: 1200000,
+        type: 'Tổng vệ sinh',
+        packages: [
+            { id: 201, name: 'Căn hộ dưới 70m²', durationMinutes: 240, employeeCount: 2, minArea: 40, maxArea: 70, price: 1200000 },
+            { id: 202, name: 'Căn hộ 70 - 100m²', durationMinutes: 300, employeeCount: 3, minArea: 70, maxArea: 100, price: 1650000 },
+            { id: 203, name: 'Nhà phố / Biệt thự > 100m²', durationMinutes: 360, employeeCount: 4, minArea: 100, maxArea: 200, price: 2400000 }
+        ]
     },
     {
         id: 3,
@@ -37,7 +53,12 @@ const services = [
         reviews: 620,
         location: 'Quận 3, HCM',
         price: '180.000đ/lần',
-        type: 'Vệ sinh máy lạnh'
+        basePrice: 180000,
+        type: 'Vệ sinh máy lạnh',
+        packages: [
+            { id: 301, name: 'Vệ sinh máy treo tường tiêu chuẩn', durationMinutes: 60, employeeCount: 1, price: 180000 },
+            { id: 302, name: 'Vệ sinh + Nạp ga R32 / R410A', durationMinutes: 90, employeeCount: 1, price: 320000 }
+        ]
     },
     {
         id: 4,
@@ -47,7 +68,12 @@ const services = [
         reviews: 340,
         location: 'Bình Thạnh, HCM',
         price: '300.000đ/lần',
-        type: 'Vệ sinh sofa/nệm'
+        basePrice: 300000,
+        type: 'Vệ sinh sofa/nệm',
+        packages: [
+            { id: 401, name: 'Sofa đơn / Sofa băng 2 chỗ', durationMinutes: 60, employeeCount: 1, price: 300000 },
+            { id: 402, name: 'Sofa góc L / Sofa giường', durationMinutes: 120, employeeCount: 2, price: 480000 }
+        ]
     },
     {
         id: 5,
@@ -57,6 +83,7 @@ const services = [
         reviews: 210,
         location: 'Thủ Đức, HCM',
         price: '400.000đ/lần',
+        basePrice: 400000,
         type: 'Vệ sinh văn phòng'
     },
     {
@@ -67,11 +94,25 @@ const services = [
         reviews: 95,
         location: 'Quận 2, HCM',
         price: '1.500.000đ/lần',
+        basePrice: 1500000,
         type: 'Vệ sinh sau xây dựng'
     }
 ]
 
 function Services() {
+    const dispatch = useCartDispatch();
+    const [modalService, setModalService] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const handleOpenModal = (service) => {
+        setModalService(service);
+        setIsModalOpen(true);
+    };
+
+    const handleConfirmAdd = (item) => {
+        dispatch({ type: 'ADD_ITEM', payload: item });
+    };
+
     return (
         <div className="services-page">
             <Header />
@@ -245,14 +286,24 @@ function Services() {
                                     </div>
 
                                     <div className="service-bottom">
-
                                         <div>
                                             <small>Mức phí</small>
                                             <strong>{service.price}</strong>
                                         </div>
 
-                                        <button>Đặt ngay</button>
-
+                                        <div className="service-card-actions">
+                                            <button
+                                                type="button"
+                                                className="btn-add-cart"
+                                                onClick={() => handleOpenModal(service)}
+                                                title="Chọn gói & thêm vào giỏ hàng"
+                                            >
+                                                <FontAwesomeIcon icon={faCartPlus} /> Thêm giỏ
+                                            </button>
+                                            <button type="button" className="btn-book">
+                                                Đặt ngay
+                                            </button>
+                                        </div>
                                     </div>
 
                                 </div>
@@ -265,6 +316,12 @@ function Services() {
 
             </main>
             <Footer />
+            <ServicePackageModal
+                service={modalService}
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onConfirm={handleConfirmAdd}
+            />
         </div>
     )
 }
