@@ -30,6 +30,10 @@ public class CartItem {
     @JoinColumn(name = "package_id")
     private ServicePackage servicePackage;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "partner_id")
+    private Partner partner;
+
     private Integer quantity;
 
     @Column(name = "scheduled_start")

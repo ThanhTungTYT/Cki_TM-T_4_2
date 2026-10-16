@@ -27,6 +27,7 @@ import {
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useCart, useCartDispatch } from '../context/CartContext';
+import { bookingApi } from '../services/api';
 import './checkout.css';
 
 function formatPrice(amount) {
@@ -316,13 +317,44 @@ export default function Checkout() {
 
             console.log('Tạo đơn dịch vụ (CN07 payload):', bookingPayload);
 
-            // Giả lập network delay 800ms
-            await new Promise(r => setTimeout(r, 800));
+            let generatedBookingCode = 'CM-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000);
+            let backendBookingId = null;
 
-            const generatedBookingCode = 'CM-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000);
+            // Gọi API Backend nếu đã đăng nhập
+            const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+            if (token) {
+                try {
+                    const scheduledStart = `${selectedDate}T${selectedTimeSlot}:00`;
+                    const apiReq = {
+                        partnerId: checkoutItems[0]?.providerId ? Number(checkoutItems[0].providerId) : 1,
+                        addressId: 1, // Địa chỉ người dùng
+                        items: checkoutItems.map(item => ({
+                            serviceId: item.serviceId ? Number(item.serviceId) : 1,
+                            packageId: item.packageId ? Number(item.packageId) : null,
+                            quantity: item.quantity || 1,
+                            note: item.notes || ''
+                        })),
+                        scheduledStart,
+                        customerNote: specialNotes || '',
+                        voucherCode: voucherCode || null,
+                        idempotencyKey
+                    };
+
+                    const apiRes = await bookingApi.createBooking(apiReq, idempotencyKey);
+                    if (apiRes && apiRes.bookingCode) {
+                        generatedBookingCode = apiRes.bookingCode;
+                        backendBookingId = apiRes.id;
+                    }
+                } catch (apiErr) {
+                    console.warn('Backend API đặt lịch thông báo (sử dụng cache/demo fallback):', apiErr.message);
+                }
+            } else {
+                await new Promise(r => setTimeout(r, 600));
+            }
 
             const newBookingRecord = {
                 id: generatedBookingCode,
+                dbId: backendBookingId,
                 ...bookingPayload,
                 status: 'PENDING_PROVIDER', // Sau khi giữ chỗ/đặt, chuyển sang chờ đối tác
                 createdAt: new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),

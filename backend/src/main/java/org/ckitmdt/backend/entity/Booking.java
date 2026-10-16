@@ -26,6 +26,10 @@ public class Booking {
     private User customer;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "partner_id")
+    private Partner partner;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "address_id", nullable = false)
     private Address address;
 
@@ -47,6 +51,17 @@ public class Booking {
     private BigDecimal totalAmount;
 
     private String status;
+
+    @Column(name = "idempotency_key", unique = true)
+    private String idempotencyKey;
+
+    @Column(name = "hold_expires_at")
+    private LocalDateTime holdExpiresAt;
+
+    @Version
+    @Column(nullable = false)
+    @Builder.Default
+    private Long version = 0L;
 
     @Column(name = "customer_note", columnDefinition = "TEXT")
     private String customerNote;

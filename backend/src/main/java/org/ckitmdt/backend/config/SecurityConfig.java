@@ -44,7 +44,8 @@ public class SecurityConfig {
                                 "/api/auth/facebook",
                                 "/api/auth/register/request-otp",
                                 "/api/auth/register/verify-otp",
-                                "/api/auth/register/resend-otp"
+                                "/api/auth/register/resend-otp",
+                                "/api/bookings/quote"
                         ).permitAll()
                         .requestMatchers("/api/users/**").authenticated()
                         .requestMatchers("/api/admin/**")
