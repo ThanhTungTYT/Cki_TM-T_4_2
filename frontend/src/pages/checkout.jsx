@@ -21,7 +21,8 @@ import {
     faHourglassHalf,
     faCircleExclamation,
     faMapPin,
-    faCrosshairs
+    faCrosshairs,
+    faRoute
 } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -64,20 +65,26 @@ export default function Checkout() {
     const dispatch = useCartDispatch();
 
     // 1. Lọc các item thuộc về Provider được chọn
-    const activeProviderId = providerIdParam ? Number(providerIdParam) : null;
+    const activeProviderId = providerIdParam ? String(providerIdParam) : null;
     const checkoutItems = useMemo(() => {
         if (!cartItems || cartItems.length === 0) return [];
         if (activeProviderId) {
-            const matched = cartItems.filter(i => (i.providerId || 1) === activeProviderId);
+            const matched = cartItems.filter(i => String(i.providerId || 1) === activeProviderId);
             if (matched.length > 0) return matched;
         }
         // Nếu không có param hoặc không khớp, lấy nhóm provider đầu tiên
-        const firstPId = cartItems[0]?.providerId || 1;
-        return cartItems.filter(i => (i.providerId || 1) === firstPId);
+        const firstPId = String(cartItems[0]?.providerId || 1);
+        return cartItems.filter(i => String(i.providerId || 1) === firstPId);
     }, [cartItems, activeProviderId]);
 
     const currentProviderName = useMemo(() => {
-        if (providerNameParam) return decodeURIComponent(providerNameParam);
+        if (providerNameParam) {
+            try {
+                return decodeURIComponent(providerNameParam);
+            } catch {
+                return providerNameParam;
+            }
+        }
         if (checkoutItems.length > 0) return checkoutItems[0].providerName || 'Đơn vị vệ sinh CleanMate';
         return 'Đơn vị vệ sinh CleanMate';
     }, [providerNameParam, checkoutItems]);
@@ -120,12 +127,21 @@ export default function Checkout() {
     }, []);
 
     const [selectedDate, setSelectedDate] = useState(() => {
-        return checkoutItems[0]?.date || tomorrowStr;
+        return checkoutItems[0]?.scheduledDate || checkoutItems[0]?.date || tomorrowStr;
     });
 
     const [selectedTimeSlot, setSelectedTimeSlot] = useState(() => {
-        return checkoutItems[0]?.time || '08:00';
+        return checkoutItems[0]?.scheduledTime || checkoutItems[0]?.time || '08:00';
     });
+
+    useEffect(() => {
+        if (checkoutItems.length > 0) {
+            const d = checkoutItems[0]?.scheduledDate || checkoutItems[0]?.date;
+            const t = checkoutItems[0]?.scheduledTime || checkoutItems[0]?.time;
+            if (d) setSelectedDate(d);
+            if (t) setSelectedTimeSlot(t);
+        }
+    }, [checkoutItems]);
 
     // 4. Tính toán thời lượng & giờ kết thúc dự kiến
     const totalDurationHours = useMemo(() => {
@@ -134,9 +150,13 @@ export default function Checkout() {
     }, [checkoutItems]);
 
     const calculatedEndTime = useMemo(() => {
-        if (!selectedTimeSlot) return '';
+        if (!selectedTimeSlot || typeof selectedTimeSlot !== 'string' || !selectedTimeSlot.includes(':')) {
+            return '11:00';
+        }
         const [h, m] = selectedTimeSlot.split(':').map(Number);
-        const totalMinutes = h * 60 + m + Math.round(totalDurationHours * 60);
+        const validH = isNaN(h) ? 8 : h;
+        const validM = isNaN(m) ? 0 : m;
+        const totalMinutes = validH * 60 + validM + Math.round((totalDurationHours || 3) * 60);
         const endH = Math.floor(totalMinutes / 60) % 24;
         const endM = totalMinutes % 60;
         return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
@@ -301,6 +321,28 @@ export default function Checkout() {
 
             const generatedBookingCode = 'CM-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000);
 
+            const newBookingRecord = {
+                id: generatedBookingCode,
+                ...bookingPayload,
+                status: 'PENDING_PROVIDER', // Sau khi giữ chỗ/đặt, chuyển sang chờ đối tác
+                createdAt: new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                history: [
+                    {
+                        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date().toLocaleDateString('vi-VN'),
+                        actor: 'Khách hàng',
+                        text: 'Tạo đơn đặt lịch và giữ chỗ thành công.'
+                    }
+                ]
+            };
+
+            // Lưu vào danh sách đơn hàng cho CN17 /customer/bookings
+            try {
+                const prevBookings = JSON.parse(localStorage.getItem('cleanmate_bookings') || '[]');
+                localStorage.setItem('cleanmate_bookings', JSON.stringify([newBookingRecord, ...prevBookings]));
+            } catch {
+                // ignore
+            }
+
             setBookingSuccessData({
                 bookingCode: generatedBookingCode,
                 ...bookingPayload
@@ -334,6 +376,33 @@ export default function Checkout() {
                         <Link to="/cart" className="btn-back-cart">
                             <FontAwesomeIcon icon={faArrowLeft} /> Xem giỏ hàng
                         </Link>
+                        <button
+                            type="button"
+                            className="btn-back-cart"
+                            style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe', cursor: 'pointer' }}
+                            onClick={() => {
+                                dispatch({
+                                    type: 'ADD_ITEM',
+                                    payload: {
+                                        serviceId: 1,
+                                        serviceName: 'Dịch vụ dọn dẹp nhà tiêu chuẩn',
+                                        providerId: 1,
+                                        providerName: 'Công ty TNHH Vệ sinh CleanHome Pro',
+                                        packageId: 2,
+                                        packageName: 'Chuyên sâu (3-4 giờ)',
+                                        quantity: 1,
+                                        unitPrice: 350000,
+                                        estimatedPrice: 350000,
+                                        durationHours: 3,
+                                        scheduledDate: '2026-10-17',
+                                        scheduledTime: '08:30',
+                                        note: 'Lau dọn phòng khách và 2 phòng tắm'
+                                    }
+                                });
+                            }}
+                        >
+                            <FontAwesomeIcon icon={faBroom} /> Nạp dịch vụ mẫu thử nghiệm
+                        </button>
                         <Link to="/services" className="btn-explore">
                             Khám phá dịch vụ CleanMate
                         </Link>
@@ -377,23 +446,23 @@ export default function Checkout() {
                         <div className="info-grid">
                             <div className="info-item">
                                 <span className="label">Đơn vị cung cấp:</span>
-                                <strong>{bookingSuccessData.providerName}</strong>
+                                <strong>{bookingSuccessData.providerName || 'Đơn vị vệ sinh CleanMate'}</strong>
                             </div>
                             <div className="info-item">
                                 <span className="label">Khách hàng:</span>
-                                <strong>{bookingSuccessData.customer.fullName} - {bookingSuccessData.customer.phone}</strong>
+                                <strong>{bookingSuccessData.customer?.fullName || 'Khách hàng'} - {bookingSuccessData.customer?.phone || ''}</strong>
                             </div>
                             <div className="info-item">
                                 <span className="label">Địa điểm thực hiện:</span>
-                                <strong>{bookingSuccessData.address.formattedAddress}</strong>
+                                <strong>{bookingSuccessData.address?.formattedAddress || 'Địa chỉ thực hiện'}</strong>
                             </div>
                             <div className="info-item">
                                 <span className="label">Tọa độ ghim:</span>
-                                <code>Lat: {bookingSuccessData.address.lat}, Lng: {bookingSuccessData.address.lng}</code>
+                                <code>Lat: {bookingSuccessData.address?.lat || 10.7769}, Lng: {bookingSuccessData.address?.lng || 106.7009}</code>
                             </div>
                             <div className="info-item">
                                 <span className="label">Lịch thực hiện:</span>
-                                <strong>{bookingSuccessData.schedule.date} ({bookingSuccessData.schedule.startTime} - {bookingSuccessData.schedule.endTime})</strong>
+                                <strong>{bookingSuccessData.schedule?.date || 'Hôm nay'} ({bookingSuccessData.schedule?.startTime || '08:00'} - {bookingSuccessData.schedule?.endTime || '11:00'})</strong>
                             </div>
                             <div className="info-item">
                                 <span className="label">Phương thức thanh toán:</span>
@@ -406,19 +475,19 @@ export default function Checkout() {
                         </div>
 
                         <div className="success-items-list">
-                            <h4>Dịch vụ đã đặt ({bookingSuccessData.items.length})</h4>
-                            {bookingSuccessData.items.map((it, idx) => (
+                            <h4>Dịch vụ đã đặt ({(bookingSuccessData.items || []).length})</h4>
+                            {(bookingSuccessData.items || []).map((it, idx) => (
                                 <div key={idx} className="success-item-row">
                                     <div>
                                         <strong>{it.serviceName}</strong>
                                         <span className="sub-pkg">Gói: {it.packageName} (x{it.quantity})</span>
                                     </div>
-                                    <strong className="item-price">{formatPrice(it.estimatedPrice)}</strong>
+                                    <strong className="item-price">{formatPrice(it.estimatedPrice || it.unitPrice || 0)}</strong>
                                 </div>
                             ))}
                             <div className="success-total-row">
                                 <span>Tổng thanh toán:</span>
-                                <span className="total-highlight">{formatPrice(bookingSuccessData.pricing.totalAmount)}</span>
+                                <span className="total-highlight">{formatPrice(bookingSuccessData.pricing?.totalAmount || 0)}</span>
                             </div>
                         </div>
 
@@ -429,17 +498,17 @@ export default function Checkout() {
                                     className="btn-pay-vnpay"
                                     onClick={() => alert(`Chuyển tiếp sang Cổng VNPAY (CN08 do Tùng phụ trách) cho đơn #${bookingSuccessData.bookingCode}`)}
                                 >
-                                    <FontAwesomeIcon icon={faQrcode} /> Thanh toán VNPAY ngay ({formatPrice(bookingSuccessData.pricing.totalAmount)})
+                                    <FontAwesomeIcon icon={faQrcode} /> Thanh toán VNPAY ngay ({formatPrice(bookingSuccessData.pricing?.totalAmount || 0)})
                                 </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    className="btn-pay-vnpay"
-                                    onClick={() => navigate('/services')}
-                                >
-                                    <FontAwesomeIcon icon={faCircleCheck} /> Hoàn tất & Quay về trang dịch vụ
-                                </button>
-                            )}
+                            ) : null}
+
+                            <Link
+                                to={`/customer/bookings?id=${bookingSuccessData.bookingCode}`}
+                                className="btn-pay-vnpay"
+                                style={{ background: '#2563eb', textDecoration: 'none' }}
+                            >
+                                <FontAwesomeIcon icon={faRoute} /> Xem tiến độ đơn hàng (CN17)
+                            </Link>
 
                             <Link to="/services" className="btn-secondary-link">
                                 Khám phá thêm dịch vụ khác

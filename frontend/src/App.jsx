@@ -9,6 +9,7 @@ import Profile from "./pages/Profile";
 import VerifyOtp from "./pages/verify-otp";
 import Cart from "./pages/cart";
 import Checkout from "./pages/checkout";
+import CustomerBookings from "./pages/customer-bookings";
 
 
 function App() {
@@ -34,6 +35,9 @@ function App() {
 
                 {/* Trang Đặt lịch & Xác nhận (CN07) */}
                 <Route path="/checkout" element={<Checkout />} />
+
+                {/* Trang Theo dõi đơn & State Machine (CN17) */}
+                <Route path="/customer/bookings" element={<CustomerBookings />} />
 
                 {/* Trang chi tiết nhà cung cấp */}
                 <Route path="/provider/:id" element={<Provider />} />

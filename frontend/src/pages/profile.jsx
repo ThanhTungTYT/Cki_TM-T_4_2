@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
     faTableColumns,
@@ -12,10 +12,15 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import CustomerBookingsView from '../components/CustomerBookingsView';
 import './profile.css';
 
 function Profile() {
-    const [activeTab, setActiveTab] = useState("profile");
+    const [searchParams, setSearchParams] = useSearchParams();
+    const tabParam = searchParams.get("tab");
+    const [activeTab, setActiveTab] = useState(
+        tabParam === "orders" || tabParam === "history" ? "orders" : "profile"
+    );
     const navigate = useNavigate();
     const handleLogout = () => {
         sessionStorage.removeItem("accessToken");
@@ -184,17 +189,23 @@ function Profile() {
                 <div className="profile-container">
                     <aside className="profile-sidebar">
                         <ul className="sidebar-menu">
-                            <li className="sidebar-item">
-                                <FontAwesomeIcon icon={faTableColumns} /> Tổng quan
+                            <li
+                                className={`sidebar-item ${activeTab === 'profile' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('profile')}
+                            >
+                                <FontAwesomeIcon icon={faUser} /> Hồ sơ cá nhân
                             </li>
-                            <li className="sidebar-item">
+                            <li
+                                className="sidebar-item"
+                                onClick={() => navigate('/customer/bookings')}
+                            >
                                 <FontAwesomeIcon icon={faBoxArchive} /> Đơn hàng của tôi
                             </li>
-                            <li className="sidebar-item">
+                            <li
+                                className="sidebar-item"
+                                onClick={() => navigate('/customer/bookings')}
+                            >
                                 <FontAwesomeIcon icon={faClockRotateLeft} /> Lịch sử đơn hàng
-                            </li>
-                            <li className={`sidebar-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>
-                                <FontAwesomeIcon icon={faUser} /> Hồ sơ cá nhân
                             </li>
                             <li className="sidebar-item">
                                 <FontAwesomeIcon icon={faHeadset} /> Hỗ trợ & Khiếu nại
@@ -206,10 +217,14 @@ function Profile() {
                     </aside>
 
                     <div className="profile-content">
-                        <div className="profile-header-title">
-                            <h2>Hồ sơ cá nhân</h2>
-                            <p>Quản lý thông tin tài khoản, địa chỉ lưu trữ, cấu hình bảo mật và tùy chọn nhận thông báo của bạn.</p>
-                        </div>
+                        {activeTab === 'orders' || activeTab === 'history' ? (
+                            <CustomerBookingsView />
+                        ) : (
+                            <>
+                                <div className="profile-header-title">
+                                    <h2>Hồ sơ cá nhân</h2>
+                                    <p>Quản lý thông tin tài khoản, địa chỉ lưu trữ, cấu hình bảo mật và tùy chọn nhận thông báo của bạn.</p>
+                                </div>
 
                         <div className="profile-grid-top">
                             <div className="profile-card">
@@ -311,10 +326,12 @@ function Profile() {
                                 {saving ? "Đang lưu..." : "Lưu thay đổi"}
                             </button>
                         </div>
-                    </div>
+                    </>
+                    )}
                 </div>
-            </main>
-            <Footer />
+            </div>
+        </main>
+        <Footer />
         </div>
     );
 }
