@@ -7,6 +7,7 @@ import ServiceDetail from "./pages/service-detail";
 import Provider from "./pages/provider";
 import Profile from "./pages/Profile";
 import VerifyOtp from "./pages/verify-otp";
+import Cart from "./pages/cart";
 
 
 function App() {
@@ -26,6 +27,9 @@ function App() {
                 <Route path="/services" element={<Services />} />
                 {/* Trang chi tiết dịch vụ */}
                 <Route path="/service-detail/:id" element={<ServiceDetail />} />
+
+                {/* Trang Giỏ dịch vụ */}
+                <Route path="/cart" element={<Cart />} />
 
                 {/* Trang chi tiết nhà cung cấp */}
                 <Route path="/provider/:id" element={<Provider />} />
