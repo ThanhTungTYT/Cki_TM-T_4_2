@@ -20,6 +20,7 @@ import {
     faCheck,
     faSliders
 } from '@fortawesome/free-solid-svg-icons';
+import { bookingApi } from '../services/api';
 import './CustomerBookingsView.css';
 
 function formatPrice(amount) {
@@ -318,6 +319,85 @@ export default function CustomerBookingsView() {
         localStorage.setItem('cleanmate_bookings', JSON.stringify(bookings));
     }, [bookings]);
 
+    // Đồng bộ đơn hàng từ Backend API nếu đã đăng nhập
+    useEffect(() => {
+        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+        if (!token) return;
+
+        bookingApi.getMyBookings()
+            .then(apiBookings => {
+                if (Array.isArray(apiBookings) && apiBookings.length > 0) {
+                    const mapped = apiBookings.map(b => ({
+                        id: b.bookingCode || `CM-${b.id}`,
+                        dbId: b.id,
+                        version: b.version,
+                        providerId: b.partnerId || 1,
+                        providerName: b.partnerName || 'CleanMate Partner',
+                        providerPhone: '0908 123 456',
+                        status: b.status,
+                        createdAt: b.createdAt ? new Date(b.createdAt).toLocaleString('vi-VN') : '',
+                        customer: {
+                            fullName: b.customerName || '',
+                            phone: b.customerPhone || ''
+                        },
+                        address: {
+                            formattedAddress: b.fullAddress || '',
+                            lat: b.latitude ? Number(b.latitude) : 10.7952,
+                            lng: b.longitude ? Number(b.longitude) : 106.7218
+                        },
+                        cleaner: {
+                            name: 'Kỹ thuật viên CleanMate',
+                            phone: '0978 999 888',
+                            rating: 4.9,
+                            completedJobs: 142
+                        },
+                        schedule: {
+                            date: b.scheduledStart ? b.scheduledStart.split('T')[0] : '',
+                            startTime: b.scheduledStart ? b.scheduledStart.split('T')[1]?.substring(0, 5) : '08:00',
+                            endTime: b.scheduledEnd ? b.scheduledEnd.split('T')[1]?.substring(0, 5) : '11:00',
+                            durationHours: 3
+                        },
+                        items: (b.items || []).map(it => ({
+                            serviceName: it.serviceName,
+                            packageName: it.packageName || '',
+                            quantity: it.quantity,
+                            unitPrice: it.unitPrice,
+                            estimatedPrice: it.totalPrice,
+                            notes: it.note || ''
+                        })),
+                        pricing: {
+                            subtotal: b.subtotal,
+                            discount: b.discountAmount,
+                            totalAmount: b.totalAmount
+                        },
+                        paymentMethod: 'VNPAY',
+                        history: (b.statusHistory && b.statusHistory.length > 0)
+                            ? b.statusHistory.map(h => ({
+                                time: h.createdAt ? new Date(h.createdAt).toLocaleString('vi-VN') : '',
+                                actor: h.changedByName || 'Hệ thống',
+                                text: h.note || `${h.oldStatus || ''} -> ${h.newStatus}`
+                            }))
+                            : [
+                                {
+                                    time: b.createdAt ? new Date(b.createdAt).toLocaleString('vi-VN') : '',
+                                    actor: 'Hệ thống',
+                                    text: 'Khởi tạo đơn đặt dịch vụ'
+                                }
+                            ]
+                    }));
+
+                    setBookings(prev => {
+                        const apiIds = new Set(mapped.map(m => m.id));
+                        const remaining = prev.filter(p => !apiIds.has(p.id));
+                        return [...mapped, ...remaining];
+                    });
+                }
+            })
+            .catch(err => {
+                console.log('Chưa kết nối API đơn hàng hoặc dùng chế độ demo:', err.message);
+            });
+    }, []);
+
     const [filterTab, setFilterTab] = useState('ALL');
 
     const [selectedBookingId, setSelectedBookingId] = useState(() => {
@@ -354,7 +434,21 @@ export default function CustomerBookingsView() {
     const [ratingComment, setRatingComment] = useState('');
     const [actionFeedback, setActionFeedback] = useState('');
 
-    const handleCustomerAcceptCompletion = (bookingId) => {
+    const handleCustomerAcceptCompletion = async (bookingId) => {
+        const targetBooking = bookings.find(b => b.id === bookingId);
+        if (targetBooking && targetBooking.dbId) {
+            try {
+                await bookingApi.executeAction(
+                    targetBooking.dbId,
+                    'CUSTOMER_ACCEPT',
+                    'Khách hàng đã trực tiếp kiểm tra, nghiệm thu đạt chuẩn và xác nhận hoàn tất dịch vụ.',
+                    targetBooking.version
+                );
+            } catch (err) {
+                console.warn('API executeAction thông báo:', err.message);
+            }
+        }
+
         const now = new Date();
         const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
@@ -367,7 +461,7 @@ export default function CustomerBookingsView() {
                     ...b.history,
                     {
                         time: timeStr,
-                        actor: 'Khách hàng',
+                        actor: 'Khách hàng (Nghiệm thu)',
                         text: 'Khách hàng đã trực tiếp kiểm tra, nghiệm thu đạt chuẩn và xác nhận hoàn tất dịch vụ.'
                     }
                 ]

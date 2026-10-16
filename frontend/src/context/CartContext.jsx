@@ -1,4 +1,5 @@
 import { createContext, useContext, useReducer, useEffect, useMemo } from 'react';
+import { cartApi } from '../services/api';
 
 const CartContext = createContext(null);
 const CartDispatchContext = createContext(null);
@@ -65,6 +66,44 @@ export function CartProvider({ children }) {
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cartItems));
     }, [cartItems]);
+
+    // Đồng bộ giỏ hàng từ server khi người dùng đã đăng nhập
+    useEffect(() => {
+        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+        if (!token) return;
+
+        cartApi.getCart()
+            .then(res => {
+                if (res && res.groups && res.groups.length > 0) {
+                    const apiItems = [];
+                    res.groups.forEach(g => {
+                        (g.items || []).forEach(it => {
+                            apiItems.push({
+                                id: it.id,
+                                serviceId: it.serviceId,
+                                serviceName: it.serviceName,
+                                packageId: it.packageId,
+                                packageName: it.packageName,
+                                providerId: it.partnerId || 1,
+                                providerName: it.partnerName || g.partnerName || 'CleanMate Partner',
+                                quantity: it.quantity,
+                                unitPrice: it.unitPrice,
+                                estimatedPrice: it.estimatedPrice,
+                                scheduledDate: it.scheduledStart ? it.scheduledStart.split('T')[0] : '',
+                                scheduledTime: it.scheduledStart ? it.scheduledStart.split('T')[1]?.substring(0, 5) : '',
+                                notes: it.note || ''
+                            });
+                        });
+                    });
+                    if (apiItems.length > 0) {
+                        dispatch({ type: 'LOAD_CART', payload: apiItems });
+                    }
+                }
+            })
+            .catch(err => {
+                console.log('Chưa kết nối API giỏ hàng hoặc dùng giỏ hàng cục bộ:', err.message);
+            });
+    }, []);
 
     return (
         <CartContext.Provider value={cartItems}>
