@@ -61,6 +61,8 @@ function ServicePackageModal({ service, isOpen, onClose, onConfirm }) {
         onConfirm({
             serviceId: service.id,
             serviceName: service.name,
+            providerId: service.providerId || service.id,
+            providerName: service.provider || 'Công ty TNHH Vệ sinh CleanPro',
             packageId: selectedPackage ? selectedPackage.id : null,
             packageName: selectedPackage ? selectedPackage.name : null,
             quantity: quantity,

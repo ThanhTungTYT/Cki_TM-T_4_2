@@ -35,6 +35,9 @@ function cartReducer(state, action) {
         case 'REMOVE_ITEM':
             return state.filter(i => i.id !== action.payload);
 
+        case 'REMOVE_PROVIDER_ITEMS':
+            return state.filter(i => (i.providerId || 1) !== action.payload);
+
         case 'CLEAR_CART':
             return [];
 
@@ -43,19 +46,21 @@ function cartReducer(state, action) {
     }
 }
 
-export function CartProvider({ children }) {
-    const [cartItems, dispatch] = useReducer(cartReducer, []);
-
-    useEffect(() => {
+function getInitialCart() {
+    try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
-            try {
-                dispatch({ type: 'LOAD_CART', payload: JSON.parse(saved) });
-            } catch (err) {
-                console.error('Failed to parse cart from localStorage:', err);
-            }
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) return parsed;
         }
-    }, []);
+    } catch (err) {
+        console.error('Failed to parse cart from localStorage:', err);
+    }
+    return [];
+}
+
+export function CartProvider({ children }) {
+    const [cartItems, dispatch] = useReducer(cartReducer, [], getInitialCart);
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cartItems));

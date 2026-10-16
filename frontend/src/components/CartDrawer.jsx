@@ -1,5 +1,6 @@
+import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faXmark, faTrash, faPlus, faMinus, faCartShopping, faCalendarDays } from '@fortawesome/free-solid-svg-icons';
+import { faXmark, faTrash, faPlus, faMinus, faCartShopping, faCalendarDays, faBuilding } from '@fortawesome/free-solid-svg-icons';
 import { useCart, useCartDispatch } from '../context/CartContext';
 import './CartDrawer.css';
 
@@ -10,6 +11,7 @@ function formatPrice(amount) {
 function CartDrawer({ isOpen, onClose }) {
     const { cartItems, subtotal, totalItems } = useCart();
     const dispatch = useCartDispatch();
+    const navigate = useNavigate();
 
     const updateQty = (item, delta) => {
         const next = item.quantity + delta;
@@ -44,6 +46,11 @@ function CartDrawer({ isOpen, onClose }) {
                             <div className="cart-item" key={item.id}>
                                 <div className="cart-item-info">
                                     <p className="cart-item-name">{item.serviceName}</p>
+                                    {item.providerName && (
+                                        <span className="cart-item-provider">
+                                            <FontAwesomeIcon icon={faBuilding} /> {item.providerName}
+                                        </span>
+                                    )}
                                     {item.packageName && (
                                         <span className="cart-item-package">{item.packageName}</span>
                                     )}
@@ -85,8 +92,23 @@ function CartDrawer({ isOpen, onClose }) {
                             <span>Tạm tính</span>
                             <strong>{formatPrice(subtotal)}</strong>
                         </div>
-                        <button className="cart-book-btn" onClick={onClose}>
-                            Đặt lịch ngay
+                        <button
+                            className="cart-view-full-btn"
+                            onClick={() => {
+                                onClose();
+                                navigate('/cart');
+                            }}
+                        >
+                            Xem giỏ hàng chi tiết
+                        </button>
+                        <button
+                            className="cart-book-btn"
+                            onClick={() => {
+                                onClose();
+                                navigate('/cart');
+                            }}
+                        >
+                            Tiến hành đặt lịch
                         </button>
                         <button
                             className="cart-clear-btn"
