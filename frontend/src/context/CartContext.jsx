@@ -35,6 +35,9 @@ function cartReducer(state, action) {
         case 'REMOVE_ITEM':
             return state.filter(i => i.id !== action.payload);
 
+        case 'REMOVE_PROVIDER_ITEMS':
+            return state.filter(i => (i.providerId || 1) !== action.payload);
+
         case 'CLEAR_CART':
             return [];
 

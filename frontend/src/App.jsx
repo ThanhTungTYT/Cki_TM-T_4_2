@@ -8,6 +8,7 @@ import Provider from "./pages/provider";
 import Profile from "./pages/Profile";
 import VerifyOtp from "./pages/verify-otp";
 import Cart from "./pages/cart";
+import Checkout from "./pages/checkout";
 
 
 function App() {
@@ -30,6 +31,9 @@ function App() {
 
                 {/* Trang Giỏ dịch vụ */}
                 <Route path="/cart" element={<Cart />} />
+
+                {/* Trang Đặt lịch & Xác nhận (CN07) */}
+                <Route path="/checkout" element={<Checkout />} />
 
                 {/* Trang chi tiết nhà cung cấp */}
                 <Route path="/provider/:id" element={<Provider />} />
