@@ -1,0 +1,547 @@
+
+/* ============================
+   ADMIN SERVICES - CLEANMATE
+============================ */
+
+.admin-services {
+    width: 100%;
+    min-width: 0;
+    padding: 28px;
+    color: #1e385c;
+    background: #f5f7fb;
+    min-height: 100%;
+    font-family: Arial, Helvetica, sans-serif;
+    box-sizing: border-box;
+}
+
+.admin-services *,
+.admin-services *::before,
+.admin-services *::after {
+    box-sizing: border-box;
+}
+
+/* ===== HEADER ===== */
+
+.services-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 26px;
+}
+
+.services-heading h1 {
+    margin: 0 0 8px;
+    color: #1e385c;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.services-heading p {
+    margin: 0;
+    color: #8290a5;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.service-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border: none;
+    border-radius: 9px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.service-add-btn:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+/* ===== STATISTICS ===== */
+
+.service-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+    margin-bottom: 26px;
+}
+
+.service-stat-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 125px;
+    padding: 22px;
+    overflow: hidden;
+    border: 1px solid #e8edf5;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(30, 56, 92, 0.035);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.service-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 7px 20px rgba(30, 56, 92, 0.07);
+}
+
+.service-stat-card span {
+    color: #8290a5;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.service-stat-card strong {
+    color: #1e385c;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+/* ===== MAIN CONTENT ===== */
+
+.service-content {
+    overflow: hidden;
+    border: 1px solid #e8edf5;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(30, 56, 92, 0.035);
+}
+
+/* ===== SEARCH AND FILTER ===== */
+
+.service-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 210px 190px;
+    gap: 14px;
+    padding: 22px;
+    border-bottom: 1px solid #e8edf5;
+}
+
+.service-toolbar input,
+.service-toolbar select {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    padding: 0 13px;
+    outline: none;
+    border: 1px solid #dce4ef;
+    border-radius: 8px;
+    background: #fff;
+    color: #1e385c;
+    font-family: inherit;
+    font-size: 13px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.service-toolbar input::placeholder {
+    color: #a0aabc;
+}
+
+.service-toolbar input:focus,
+.service-toolbar select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* ===== TABLE ===== */
+
+.service-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.service-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.service-table thead {
+    background: #f8faff;
+}
+
+.service-table th {
+    padding: 16px 18px;
+    border-bottom: 1px solid #e8edf5;
+    color: #8290a5;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+}
+
+.service-table td {
+    padding: 17px 18px;
+    border-bottom: 1px solid #edf1f7;
+    color: #5b6b82;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+.service-table tbody tr {
+    transition: background 0.2s;
+}
+
+.service-table tbody tr:hover {
+    background: #f8faff;
+}
+
+.service-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.service-table .service-name {
+    color: #1e385c;
+    font-weight: 600;
+}
+
+/* ===== STATUS BADGES ===== */
+
+.service-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.status-active {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-stopped {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* ===== ACTION BUTTONS ===== */
+
+.service-actions {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.service-actions button {
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.service-edit-btn {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.service-edit-btn:hover {
+    background: #dbeafe;
+}
+
+.service-status-btn {
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.service-status-btn:hover {
+    background: #dcfce7;
+}
+
+.service-delete-btn {
+    background: #fff1f2;
+    color: #e11d48;
+}
+
+.service-delete-btn:hover {
+    background: #ffe4e6;
+}
+
+/* ===== EMPTY STATE ===== */
+
+.service-table .service-empty {
+    padding: 45px 20px;
+    color: #8290a5;
+    text-align: center;
+    font-size: 14px;
+}
+
+/* ===== TABLE FOOTER ===== */
+
+.service-table-footer {
+    padding: 17px 22px;
+    border-top: 1px solid #e8edf5;
+    color: #8290a5;
+    font-size: 13px;
+}
+
+/* ===== MODAL ===== */
+
+.service-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(3px);
+}
+
+.service-modal {
+    width: 100%;
+    max-width: 540px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+    animation: serviceModalIn 0.2s ease-out;
+}
+
+@keyframes serviceModalIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.service-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 22px 24px;
+    border-bottom: 1px solid #e8edf5;
+}
+
+.service-modal-header h2 {
+    margin: 0;
+    color: #1e385c;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.service-modal-header > button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 8px;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 25px;
+    cursor: pointer;
+}
+
+.service-modal-header > button:hover {
+    background: #e2e8f0;
+}
+
+.service-modal form {
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+}
+
+.service-modal form label {
+    margin-bottom: 8px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.service-modal form input,
+.service-modal form select {
+    width: 100%;
+    height: 44px;
+    margin-bottom: 18px;
+    padding: 0 13px;
+    outline: none;
+    border: 1px solid #dce4ef;
+    border-radius: 8px;
+    background: #fff;
+    color: #1e385c;
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.service-modal form input:focus,
+.service-modal form select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.service-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 5px;
+    padding-top: 18px;
+    border-top: 1px solid #e8edf5;
+}
+
+.service-modal-actions button {
+    min-height: 42px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.service-cancel-btn {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.service-cancel-btn:hover {
+    background: #e2e8f0;
+}
+
+.service-save-btn {
+    background: #2563eb;
+    color: #fff;
+}
+
+.service-save-btn:hover {
+    background: #1d4ed8;
+}
+
+/* ===== RESPONSIVE TABLET ===== */
+
+@media (max-width: 1100px) {
+    .service-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .service-toolbar {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .service-toolbar input {
+        grid-column: 1 / -1;
+    }
+}
+
+/* ===== RESPONSIVE MOBILE ===== */
+
+@media (max-width: 640px) {
+    .admin-services {
+        padding: 16px;
+    }
+
+    .services-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .services-heading h1 {
+        font-size: 23px;
+    }
+
+    .service-add-btn {
+        width: 100%;
+    }
+
+    .service-stats {
+        gap: 12px;
+    }
+
+    .service-stat-card {
+        min-height: 105px;
+        padding: 16px;
+        gap: 12px;
+    }
+
+    .service-stat-card span {
+        font-size: 12px;
+    }
+
+    .service-stat-card strong {
+        font-size: 25px;
+    }
+
+    .service-toolbar {
+        grid-template-columns: 1fr;
+        padding: 16px;
+        gap: 10px;
+    }
+
+    .service-toolbar input {
+        grid-column: auto;
+    }
+
+    .service-table th,
+    .service-table td {
+        padding: 13px 14px;
+    }
+
+    .service-table-footer {
+        padding: 15px 16px;
+    }
+
+    .service-modal-overlay {
+        align-items: flex-start;
+        padding: 12px;
+    }
+
+    .service-modal {
+        margin: auto 0;
+        max-height: calc(100vh - 24px);
+    }
+
+    .service-modal-header,
+    .service-modal form {
+        padding: 18px;
+    }
+
+    .service-modal-header h2 {
+        font-size: 18px;
+    }
+
+    .service-modal-actions button {
+        flex: 1;
+        padding: 0 12px;
+    }
+}
