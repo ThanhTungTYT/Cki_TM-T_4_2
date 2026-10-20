@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -20,38 +20,6 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import './AdminDashboard.css';
 
-const chartData = {
-    '7': [
-        { label: 'T2', value: 3200000 },
-        { label: 'T3', value: 4500000 },
-        { label: 'T4', value: 2800000 },
-        { label: 'T5', value: 6200000 },
-        { label: 'T6', value: 5100000 },
-        { label: 'T7', value: 7800000 },
-        { label: 'CN', value: 6500000 },
-    ],
-    '30': [
-        { label: 'Tuần 1', value: 18500000 },
-        { label: 'Tuần 2', value: 24000000 },
-        { label: 'Tuần 3', value: 21000000 },
-        { label: 'Tuần 4', value: 31500000 },
-    ],
-    '365': [
-        { label: 'T1', value: 42000000 },
-        { label: 'T2', value: 48000000 },
-        { label: 'T3', value: 39000000 },
-        { label: 'T4', value: 55000000 },
-        { label: 'T5', value: 61000000 },
-        { label: 'T6', value: 58000000 },
-        { label: 'T7', value: 72000000 },
-        { label: 'T8', value: 68000000 },
-        { label: 'T9', value: 79000000 },
-        { label: 'T10', value: 85000000 },
-        { label: 'T11', value: 76000000 },
-        { label: 'T12', value: 92000000 },
-    ],
-};
-
 const orderStats = [
     { label: 'Hoàn thành', value: 58, color: '#16a34a', count: 145 },
     { label: 'Đang xử lý', value: 25, color: '#3b82f6', count: 63 },
@@ -66,19 +34,33 @@ const formatMoney = (value) =>
         maximumFractionDigits: 0,
     }).format(value);
 
+
 function AdminDashboard() {
     const location = useLocation();
+
     const [period, setPeriod] = useState('7');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
     const [appliedRange, setAppliedRange] = useState('7');
 
-    const currentData = chartData[appliedRange] || chartData['7'];
-    const maxValue = Math.max(...currentData.map((item) => item.value));
+    const [chartData, setChartData] = useState([]);
+    const [totalServiceValue, setTotalServiceValue] = useState(0);
+    const [totalOrders, setTotalOrders] = useState(0);
+    const [loadingStatistics, setLoadingStatistics] = useState(false);
+    const [statisticsError, setStatisticsError] = useState('');
 
-    const totalOrders = orderStats.reduce((sum, item) => sum + item.count, 0);
+    const maxValue = Math.max(
+        1,
+        ...chartData.map((item) => Number(item.value) || 0)
+    );
+
+    const pieTotalOrders = orderStats.reduce(
+        (sum, item) => sum + item.count,
+        0
+    );
+
     const pieBackground = orderStats.reduce(
-        (result, item, index) => {
+        (result, item) => {
             const previous = result.total;
             const next = previous + item.value;
             result.parts.push(`${item.color} ${previous}% ${next}%`);
@@ -88,8 +70,116 @@ function AdminDashboard() {
         { parts: [], total: 0 }
     ).parts.join(', ');
 
+    useEffect(() => {
+        let cancelled = false;
+
+        async function fetchStatistics() {
+            setLoadingStatistics(true);
+            setStatisticsError('');
+
+            try {
+                const params = new URLSearchParams();
+
+                if (appliedRange === 'custom') {
+                    if (!fromDate || !toDate) {
+                        setStatisticsError(
+                            'Vui lòng chọn cả ngày bắt đầu và ngày kết thúc.'
+                        );
+                        setChartData([]);
+                        setTotalServiceValue(0);
+                        setTotalOrders(0);
+                        return;
+                    }
+
+                    if (fromDate > toDate) {
+                        setStatisticsError(
+                            'Ngày bắt đầu không được sau ngày kết thúc.'
+                        );
+                        setChartData([]);
+                        setTotalServiceValue(0);
+                        setTotalOrders(0);
+                        return;
+                    }
+
+                    params.set('fromDate', fromDate);
+                    params.set('toDate', toDate);
+                } else {
+                    params.set('period', appliedRange);
+                }
+
+                const token =
+                    localStorage.getItem('token') ||
+                    localStorage.getItem('accessToken');
+
+                const response = await fetch(
+                    `/api/admin/statistics?${params.toString()}`,
+                    {
+                        method: 'GET',
+                        headers: {
+                            Accept: 'application/json',
+                            ...(token
+                                ? { Authorization: `Bearer ${token}` }
+                                : {}),
+                        },
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error(
+                        response.status === 401 || response.status === 403
+                            ? 'Bạn cần đăng nhập bằng tài khoản có quyền Admin.'
+                            : `Không lấy được thống kê (HTTP ${response.status}).`
+                    );
+                }
+
+                const data = await response.json();
+
+                if (cancelled) return;
+
+                setChartData(
+                    Array.isArray(data.chartData) ? data.chartData : []
+                );
+                setTotalServiceValue(
+                    Number(data.totalServiceValue) || 0
+                );
+                setTotalOrders(Number(data.totalOrders) || 0);
+            } catch (error) {
+                if (cancelled) return;
+
+                setStatisticsError(
+                    error.message ||
+                    'Không thể kết nối tới máy chủ thống kê.'
+                );
+                setChartData([]);
+                setTotalServiceValue(0);
+                setTotalOrders(0);
+            } finally {
+                if (!cancelled) {
+                    setLoadingStatistics(false);
+                }
+            }
+        }
+
+        fetchStatistics();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [appliedRange, fromDate, toDate]);
+
     const handleApplyFilter = () => {
-        setAppliedRange(period);
+        if (fromDate || toDate) {
+            setAppliedRange('custom');
+        } else {
+            setAppliedRange(period);
+        }
+    };
+
+    const handlePeriodChange = (value) => {
+        setPeriod(value);
+        setFromDate('');
+        setToDate('');
+        setAppliedRange(value);
     };
 
     return (
@@ -215,8 +305,8 @@ function AdminDashboard() {
                             <span className="summary-tag">+12,5%</span>
                         </div>
                         <p>Tổng giá trị dịch vụ</p>
-                        <h2>128.500.000đ</h2>
-                        <span className="summary-note">So với kỳ trước</span>
+                        <h2>{formatMoney(totalServiceValue)}</h2>
+                        <span className="summary-note">Trong kỳ thống kê</span>
                     </div>
 
                     <div className="admin-summary-card">
@@ -239,7 +329,7 @@ function AdminDashboard() {
                             <span className="summary-tag">+6,4%</span>
                         </div>
                         <p>Tổng số đơn hàng</p>
-                        <h2>250</h2>
+                        <h2>{totalOrders}</h2>
                         <span className="summary-note">Trong kỳ thống kê</span>
                     </div>
 
@@ -273,7 +363,7 @@ function AdminDashboard() {
                                 <span>Khoảng thời gian</span>
                                 <select
                                     value={period}
-                                    onChange={(event) => setPeriod(event.target.value)}
+                                    onChange={(event) => handlePeriodChange(event.target.value)}
                                 >
                                     <option value="7">7 ngày gần nhất</option>
                                     <option value="30">30 ngày gần nhất</option>
@@ -312,11 +402,20 @@ function AdminDashboard() {
                             <div>
                                 <span>Tổng giá trị trong biểu đồ</span>
                                 <strong>
-                                    {formatMoney(
-                                        currentData.reduce((sum, item) => sum + item.value, 0)
-                                    )}
+                                    {formatMoney(totalServiceValue)}
                                 </strong>
                             </div>
+                            {loadingStatistics && (
+                                <p className="statistics-message">
+                                    Đang tải dữ liệu thống kê...
+                                </p>
+                            )}
+
+                            {statisticsError && (
+                                <p className="statistics-error">
+                                    {statisticsError}
+                                </p>
+                            )}
                             <span className="revenue-legend">
                                 <i />
                                 Giá trị dịch vụ
@@ -340,8 +439,8 @@ function AdminDashboard() {
                                     <i />
                                 </div>
                                 <div className="bar-list">
-                                    {currentData.map((item) => (
-                                        <div className="bar-column" key={item.label}>
+                                    {chartData.map((item, index) => (
+                                        <div className="bar-column" key={`${item.label}-${index}`}>
                                             <div className="bar-value">
                                                 {formatMoney(item.value)}
                                             </div>
@@ -349,7 +448,7 @@ function AdminDashboard() {
                                                 <div
                                                     className="bar"
                                                     style={{
-                                                        height: `${(item.value / maxValue) * 100}%`,
+                                                        height: `${((Number(item.value) || 0) / maxValue) * 100}%`,
                                                     }}
                                                 />
                                             </div>
@@ -381,7 +480,7 @@ function AdminDashboard() {
                             >
                                 <div className="pie-chart-center">
                                     <span>Tổng đơn</span>
-                                    <strong>{totalOrders}</strong>
+                                    <strong>{pieTotalOrders}</strong>
                                 </div>
                             </div>
                         </div>
