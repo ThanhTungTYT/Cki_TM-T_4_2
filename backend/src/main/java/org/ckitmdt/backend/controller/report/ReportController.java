@@ -85,8 +85,9 @@ public class ReportController {
                             && booking.getPartner().getUser().getId()
                             .equals(reporter.getId());
 
-            boolean staff = Set.of("ADMIN", "STAFF")
-                    .contains(upper(reporter.getRole()));
+            boolean staff = Set.of(
+                    "ADMIN", "STAFF", "ROLE_ADMIN", "ROLE_STAFF"
+            ).contains(upper(reporter.getRole()));
 
             if (!customer && !provider && !staff) {
                 throw new ResponseStatusException(
@@ -184,5 +185,101 @@ public class ReportController {
     private String upper(String value) {
         return value == null
                 ? "" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * CN20: Admin/Staff xem danh sách báo cáo mới nhất.
+     * GET /api/reports/admin
+     */
+    @GetMapping("/admin")
+    public List<Map<String, Object>> getAllReports(Authentication auth) {
+        requireStaff(auth);
+
+        return reportRepository.findTop200ByOrderByCreatedAtDesc()
+                .stream()
+                .map(this::row)
+                .toList();
+    }
+
+    /**
+     * CN20: Admin/Staff cập nhật trạng thái và kết quả xử lý.
+     * PUT /api/reports/{id}/status
+     */
+    @PutMapping("/{id}/status")
+    public Map<String, Object> updateReportStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
+
+        User operator = requireStaff(auth);
+
+        ReportTicket report = reportRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy báo cáo."
+                ));
+
+        String status = upper(text(body.get("status")));
+        String resolution = text(body.get("resolution"));
+
+        Set<String> allowedStatuses = Set.of(
+                "OPEN",
+                "IN_PROGRESS",
+                "RESOLVED",
+                "REJECTED"
+        );
+
+        if (!allowedStatuses.contains(status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trạng thái không hợp lệ."
+            );
+        }
+
+        if (("RESOLVED".equals(status) || "REJECTED".equals(status))
+                && resolution.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vui lòng nhập kết quả xử lý trước khi đóng báo cáo."
+            );
+        }
+
+        String currentStatus = upper(report.getStatus());
+
+        if ("RESOLVED".equals(currentStatus)
+                || "REJECTED".equals(currentStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Báo cáo đã kết thúc xử lý, không thể cập nhật."
+            );
+        }
+
+        report.setStatus(status);
+        report.setResolution(
+                resolution.isBlank() ? null : resolution
+        );
+        report.setHandledBy(operator.getEmail());
+        report.setUpdatedAt(LocalDateTime.now());
+
+        return row(reportRepository.save(report));
+    }
+
+    /**
+     * Chỉ ADMIN hoặc STAFF được quản lý báo cáo.
+     */
+    private User requireStaff(Authentication auth) {
+        User user = currentUser(auth);
+        String role = upper(user.getRole());
+
+        if (!Set.of(
+                "ADMIN", "STAFF", "ROLE_ADMIN", "ROLE_STAFF"
+        ).contains(role)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Bạn không có quyền xử lý báo cáo."
+            );
+        }
+
+        return user;
     }
 }
