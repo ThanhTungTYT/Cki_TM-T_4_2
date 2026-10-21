@@ -17,6 +17,7 @@ import AdminProviders from "./pages/admin/AdminProviders";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminTransactions from "./pages/admin/AdminTransactions";
 import AdminReports from "./pages/admin/AdminReports";
+import ForgotPassword from "./pages/forgot-password";
 
 function App() {
     return (
@@ -65,7 +66,10 @@ function App() {
                 {/* Trang Quản lý Hồ sơ cá nhân */}
                 <Route path="/profile" element={<Profile />} />
 
-                <Route path="/verify-otp" element={<VerifyOtp />} /></Routes>
+                <Route path="/verify-otp" element={<VerifyOtp />} />
+
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+            </Routes>
         </BrowserRouter>
     );
 }

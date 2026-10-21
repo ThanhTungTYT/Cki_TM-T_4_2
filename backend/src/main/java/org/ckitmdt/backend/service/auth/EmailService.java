@@ -33,4 +33,24 @@ public class EmailService {
 
         mailSender.send(message);
     }
+
+    public void sendTemporaryPassword(String email, String temporaryPassword) {
+        SimpleMailMessage message = new SimpleMailMessage();
+
+        message.setFrom(senderEmail);
+        message.setTo(email);
+        message.setSubject("CleanMate - Khoi phuc mat khau");
+
+        message.setText(
+                "Xin chao!\n\n"
+                        + "Mat khau tam thoi cua ban la: "
+                        + temporaryPassword
+                        + "\n\nMat khau nay co hieu luc trong 10 phut."
+                        + "\nVui long nhap mat khau tam thoi de xac thuc,"
+                        + " sau do dat mat khau moi."
+                        + "\n\nKhong chia se mat khau nay voi bat ky ai."
+        );
+
+        mailSender.send(message);
+    }
 }
