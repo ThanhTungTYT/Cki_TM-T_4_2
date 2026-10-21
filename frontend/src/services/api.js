@@ -1,137 +1,73 @@
-const BASE_URL = 'http://localhost:8080/api';
 
-function getAuthHeaders(extraHeaders = {}) {
-    const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
-    const headers = {
-        'Content-Type': 'application/json',
-        ...extraHeaders
-    };
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-}
+export const refundApi = {
+    // Khách hàng gửi yêu cầu hoàn tiền
+    async requestRefund(bookingId, reason) {
+        const res = await fetch(
+            `${BASE_URL}/refunds/bookings/${bookingId}/request`,
+            {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ reason })
+            }
+        );
 
-export const cartApi = {
-    async getCart() {
-        const res = await fetch(`${BASE_URL}/cart`, {
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            throw new Error(
+                data.message ||
+                data.detail ||
+                data.error ||
+                'Không thể gửi yêu cầu hoàn tiền.'
+            );
+        }
+
+        return data;
+    },
+
+    // Admin/Staff lấy danh sách yêu cầu hoàn tiền
+    async getAdminRefunds() {
+        const res = await fetch(`${BASE_URL}/refunds/admin`, {
             method: 'GET',
             headers: getAuthHeaders()
         });
-        if (!res.ok) throw new Error((await res.json()).message || 'Không thể lấy giỏ hàng');
-        return res.json();
-    },
 
-    async addToCart(itemData) {
-        const res = await fetch(`${BASE_URL}/cart/items`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(itemData)
-        });
-        if (!res.ok) throw new Error((await res.json()).message || 'Không thể thêm vào giỏ hàng');
-        return res.json();
-    },
+        const data = await res.json().catch(() => ({}));
 
-    async updateItem(itemId, updateData) {
-        const res = await fetch(`${BASE_URL}/cart/items/${itemId}`, {
-            method: 'PATCH',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(updateData)
-        });
-        if (!res.ok) throw new Error((await res.json()).message || 'Không thể cập nhật mục');
-        return res.json();
-    },
-
-    async removeItem(itemId) {
-        const res = await fetch(`${BASE_URL}/cart/items/${itemId}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders()
-        });
-        if (!res.ok) throw new Error((await res.json()).message || 'Không thể xóa mục');
-        return res.json();
-    },
-
-    async clearCart(partnerId = null) {
-        const url = partnerId ? `${BASE_URL}/cart?partnerId=${partnerId}` : `${BASE_URL}/cart`;
-        const res = await fetch(url, {
-            method: 'DELETE',
-            headers: getAuthHeaders()
-        });
-        if (!res.ok) throw new Error((await res.json()).message || 'Không thể làm sạch giỏ hàng');
-        return res.json();
-    }
-};
-
-export const bookingApi = {
-    async getQuote(quoteRequest) {
-        const res = await fetch(`${BASE_URL}/bookings/quote`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(quoteRequest)
-        });
         if (!res.ok) {
-            const err = await res.json().catch(() => ({ message: 'Không thể tính toán báo giá' }));
-            throw new Error(err.message || 'Không thể tính toán báo giá');
+            throw new Error(
+                data.message ||
+                data.detail ||
+                data.error ||
+                'Không thể tải danh sách yêu cầu hoàn tiền.'
+            );
         }
-        return res.json();
+
+        return Array.isArray(data) ? data : [];
     },
 
-    async createBooking(bookingRequest, idempotencyKey) {
-        const headers = getAuthHeaders();
-        if (idempotencyKey) {
-            headers['Idempotency-Key'] = idempotencyKey;
-        }
-        const res = await fetch(`${BASE_URL}/bookings`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(bookingRequest)
-        });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({ message: 'Đặt lịch không thành công' }));
-            throw new Error(err.message || 'Đặt lịch không thành công');
-        }
-        return res.json();
-    },
+    // Admin/Staff duyệt hoặc từ chối yêu cầu
+    async reviewRefund(id, payload) {
+        const res = await fetch(
+            `${BASE_URL}/refunds/${id}/review`,
+            {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload)
+            }
+        );
 
-    async getMyBookings() {
-        const res = await fetch(`${BASE_URL}/bookings/me`, {
-            method: 'GET',
-            headers: getAuthHeaders()
-        });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({ message: 'Không thể tải danh sách đơn hàng' }));
-            throw new Error(err.message || 'Không thể tải danh sách đơn hàng');
-        }
-        return res.json();
-    },
+        const data = await res.json().catch(() => ({}));
 
-    async getBooking(id) {
-        const res = await fetch(`${BASE_URL}/bookings/${id}`, {
-            method: 'GET',
-            headers: getAuthHeaders()
-        });
         if (!res.ok) {
-            const err = await res.json().catch(() => ({ message: 'Không thể tải thông tin đơn hàng' }));
-            throw new Error(err.message || 'Không thể tải thông tin đơn hàng');
+            throw new Error(
+                data.message ||
+                data.detail ||
+                data.error ||
+                'Không thể xử lý yêu cầu hoàn tiền.'
+            );
         }
-        return res.json();
-    },
 
-    async executeAction(id, action, note = '', version = null) {
-        const actionSlug = action.toLowerCase().replace(/_/g, '-');
-        const res = await fetch(`${BASE_URL}/bookings/${id}/actions/${actionSlug}`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({
-                action,
-                note,
-                version
-            })
-        });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({ message: 'Không thể thực hiện hành động này' }));
-            throw new Error(err.message || 'Không thể thực hiện hành động này');
-        }
-        return res.json();
+        return data;
     }
 };

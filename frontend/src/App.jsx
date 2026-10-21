@@ -18,6 +18,7 @@ import AdminOrders from "./pages/admin/AdminOrders";
 import AdminTransactions from "./pages/admin/AdminTransactions";
 import AdminReports from "./pages/admin/AdminReports";
 import ForgotPassword from "./pages/forgot-password";
+import AdminRefundManagement from './components/AdminRefundManagement';
 
 function App() {
     return (
@@ -69,6 +70,10 @@ function App() {
                 <Route path="/verify-otp" element={<VerifyOtp />} />
 
                 <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route
+                    path="/admin/refunds"
+                    element={<AdminRefundManagement />}
+                />
             </Routes>
         </BrowserRouter>
     );
