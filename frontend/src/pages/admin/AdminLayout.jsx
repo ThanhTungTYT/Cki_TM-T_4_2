@@ -1,4 +1,3 @@
-
 import { useLocation, Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -10,6 +9,7 @@ import {
     faTags,
     faCreditCard,
     faChartPie,
+    faMoneyBillTransfer,
     faArrowRightFromBracket,
 } from '@fortawesome/free-solid-svg-icons';
 import './AdminDashboard.css';
@@ -46,6 +46,11 @@ const menuItems = [
         icon: faCreditCard,
     },
     {
+        label: 'Quản lý hoàn tiền',
+        path: '/admin/refunds',
+        icon: faMoneyBillTransfer,
+    },
+    {
         label: 'Thống kê & báo cáo',
         path: '/admin/reports',
         icon: faChartPie,
@@ -69,14 +74,18 @@ function AdminLayout({ children }) {
                     </div>
                 </div>
 
-                <div className="admin-menu-title">MENU CHÍNH</div>
+                <div className="admin-menu-title">
+                    MENU CHÍNH
+                </div>
 
                 <nav className="admin-menu">
                     {menuItems.map((item) => {
                         const isActive =
                             location.pathname === item.path ||
                             (item.path !== '/admin' &&
-                                location.pathname.startsWith(`${item.path}/`));
+                                location.pathname.startsWith(
+                                    `${item.path}/`
+                                ));
 
                         return (
                             <Link
@@ -95,15 +104,23 @@ function AdminLayout({ children }) {
 
                 <div className="admin-sidebar-bottom">
                     <div className="admin-user">
-                        <div className="admin-avatar">AD</div>
+                        <div className="admin-avatar">
+                            AD
+                        </div>
+
                         <div className="admin-user-info">
                             <strong>Quản trị viên</strong>
                             <span>Administrator</span>
                         </div>
                     </div>
 
-                    <Link className="admin-menu-item logout" to="/login">
-                        <FontAwesomeIcon icon={faArrowRightFromBracket} />
+                    <Link
+                        className="admin-menu-item logout"
+                        to="/login"
+                    >
+                        <FontAwesomeIcon
+                            icon={faArrowRightFromBracket}
+                        />
                         <span>Đăng xuất</span>
                     </Link>
                 </div>
