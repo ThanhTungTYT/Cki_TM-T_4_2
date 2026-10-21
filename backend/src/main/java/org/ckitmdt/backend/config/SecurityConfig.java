@@ -51,7 +51,10 @@ public class SecurityConfig {
                                 "/api/auth/register/request-otp",
                                 "/api/auth/register/verify-otp",
                                 "/api/auth/register/resend-otp",
-                                "/api/bookings/quote"
+                                "/api/bookings/quote",
+                                "/api/auth/forgot-password",
+                                "/api/auth/verify-reset-password",
+                                "/api/auth/reset-password"
                         ).permitAll()
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")

@@ -228,7 +228,9 @@ function Login() {
                                 <input type="checkbox" />
                                 <span>Ghi nhớ đăng nhập</span>
                             </label>
-                            <a href="#">Quên mật khẩu?</a>
+                            <Link to="/forgot-password">
+                                Quên mật khẩu?
+                            </Link>
                         </div>
                         <button type="submit" className="login-submit" disabled={loading}>{loading ? "Đang đăng nhập..." : "Đăng nhập"}</button>
                         {message && (
