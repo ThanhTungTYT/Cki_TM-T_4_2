@@ -44,7 +44,7 @@ public class CartService {
     /**
      * Lấy toàn bộ giỏ hàng của người dùng, tự động phân nhóm theo Provider (CN06)
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public CartResponse getCart(String userEmail) {
         User user = getUserByEmail(userEmail);
         Cart cart = getOrCreateCart(user);

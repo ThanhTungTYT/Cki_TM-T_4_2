@@ -19,6 +19,7 @@ import AdminTransactions from "./pages/admin/AdminTransactions";
 import AdminReports from "./pages/admin/AdminReports";
 import ForgotPassword from "./pages/forgot-password";
 import AdminRefundManagement from './components/AdminRefundManagement';
+import PaymentResult from "./pages/PaymentResult";
 
 function App() {
     return (
@@ -73,6 +74,10 @@ function App() {
                 <Route
                     path="/admin/refunds"
                     element={<AdminRefundManagement />}
+                />
+                <Route
+                    path="/payment-result"
+                    element={<PaymentResult />}
                 />
             </Routes>
         </BrowserRouter>

@@ -28,6 +28,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useCart, useCartDispatch } from '../context/CartContext';
 import { bookingApi } from '../services/api';
+import { createVNPayPayment } from '../services/paymentService';
 import './checkout.css';
 
 function formatPrice(amount) {
@@ -203,6 +204,7 @@ export default function Checkout() {
 
     // 9. Trạng thái đặt đơn & Chống lặp (Idempotency)
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isPaying, setIsPaying] = useState(false);
     const [bookingSuccessData, setBookingSuccessData] = useState(null);
     const [errorMessage, setErrorMessage] = useState('');
     const [idempotencyKey] = useState(() => 'IDEM-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
@@ -249,6 +251,36 @@ export default function Checkout() {
                     }));
                 }
             );
+        }
+    };
+
+    const handleVNPayPayment = async () => {
+        const bookingId = bookingSuccessData?.backendBookingId;
+
+        if (!bookingId) {
+            setErrorMessage('Không tìm thấy đơn hàng trong hệ thống.');
+            return;
+        }
+
+        if (isPaying) return;
+
+        setIsPaying(true);
+        setErrorMessage('');
+
+        try {
+            const data = await createVNPayPayment(bookingId);
+
+            if (!data.txnRef || !data.paymentUrl) {
+                throw new Error('Backend trả về thông tin thanh toán không hợp lệ');
+            }
+
+            sessionStorage.setItem('pendingPaymentRef', data.txnRef);
+
+            window.location.assign(data.paymentUrl);
+
+        } catch (err) {
+            setErrorMessage(err.message);
+            setIsPaying(false);
         }
     };
 
@@ -341,15 +373,16 @@ export default function Checkout() {
                     };
 
                     const apiRes = await bookingApi.createBooking(apiReq, idempotencyKey);
-                    if (apiRes && apiRes.bookingCode) {
-                        generatedBookingCode = apiRes.bookingCode;
-                        backendBookingId = apiRes.id;
+                    if (!apiRes?.id || !apiRes?.bookingCode) {
+                        throw new Error('Backend không trả về Booking hợp lệ');
                     }
+                    generatedBookingCode = apiRes.bookingCode;
+                    backendBookingId = apiRes.id;
                 } catch (apiErr) {
-                    console.warn('Backend API đặt lịch thông báo (sử dụng cache/demo fallback):', apiErr.message);
+                    throw new Error('Không thể tạo đơn hàng: ' + apiErr.message, { cause: apiErr });
                 }
             } else {
-                await new Promise(r => setTimeout(r, 600));
+                throw new Error('Vui lòng đăng nhập để đặt dịch vụ');
             }
 
             const newBookingRecord = {
@@ -377,6 +410,7 @@ export default function Checkout() {
 
             setBookingSuccessData({
                 bookingCode: generatedBookingCode,
+                backendBookingId,
                 ...bookingPayload
             });
 
@@ -524,16 +558,28 @@ export default function Checkout() {
                         </div>
 
                         <div className="success-actions-block">
-                            {bookingSuccessData.paymentMethod === 'VNPAY' ? (
-                                <button
-                                    type="button"
-                                    className="btn-pay-vnpay"
-                                    onClick={() => alert(`Chuyển tiếp sang Cổng VNPAY (CN08 do Tùng phụ trách) cho đơn #${bookingSuccessData.bookingCode}`)}
-                                >
-                                    <FontAwesomeIcon icon={faQrcode} /> Thanh toán VNPAY ngay ({formatPrice(bookingSuccessData.pricing?.totalAmount || 0)})
+                            {bookingSuccessData.paymentMethod === 'VNPAY' && (
+                                <button type="button" className="btn-pay-vnpay" onClick={handleVNPayPayment} disabled={isPaying || !bookingSuccessData.backendBookingId}>
+                                    {isPaying ? (
+                                        <>
+                                            <FontAwesomeIcon icon={faSpinner} spin />
+                                            Đang chuyển đến VNPay...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FontAwesomeIcon icon={faQrcode} />
+                                            Thanh toán VNPAY ngay
+                                            ({formatPrice(bookingSuccessData.pricing?.totalAmount || 0)})
+                                        </>
+                                    )}
                                 </button>
-                            ) : null}
-
+                            )}
+                            {errorMessage && (
+                                <div className="checkout-alert-error">
+                                    <FontAwesomeIcon icon={faCircleExclamation} />
+                                    <span>{errorMessage}</span>
+                                </div>
+                            )}
                             <Link
                                 to={`/customer/bookings?id=${bookingSuccessData.bookingCode}`}
                                 className="btn-pay-vnpay"

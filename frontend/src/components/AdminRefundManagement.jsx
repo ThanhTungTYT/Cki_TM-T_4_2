@@ -12,7 +12,7 @@ import {
     faFileInvoiceDollar
 } from '@fortawesome/free-solid-svg-icons';
 
-import AdminLayout from './AdminLayout';
+import AdminLayout from "../pages/admin/AdminLayout";
 import { refundApi } from '../services/api';
 import './AdminRefundManagement.css';
 

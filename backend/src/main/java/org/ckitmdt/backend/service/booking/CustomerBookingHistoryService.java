@@ -15,53 +15,51 @@ public class CustomerBookingHistoryService {
     @Autowired
     private BookingRepository bookingRepository;
 
-    public List<BookingHistoryResponseDto> getCustomerBookings(Long customerId, String status) {
-        List<Booking> bookings = bookingRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+    public List<BookingHistoryResponseDto> getCustomerBookings(
+            Long customerId,
+            String status
+    ) {
+        List<Booking> bookings =
+                bookingRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
 
+        // Lọc danh sách theo trạng thái nếu có
         if (status != null && !status.trim().isEmpty()) {
             bookings = bookings.stream()
                     .filter(b -> status.equalsIgnoreCase(b.getStatus()))
                     .collect(Collectors.toList());
         }
 
-        // Chuyển đổi sang DTO để trả về cho Frontend
-        return bookings.stream().map(b -> BookingHistoryResponseDto.builder()
-                .id(b.getId())
-                .bookingCode(b.getBookingCode())
-                .partnerName(b.getPartner() != null ? b.getPartner().getBusinessName() : "Đang tìm đối tác")
-                .addressDetail(b.getAddress() != null ? b.getAddress().getStreetAddress() : "N/A")
-                .totalAmount(b.getTotalAmount())
-                .status(b.getStatus())
-                .scheduledStart(b.getScheduledStart())
-                .scheduledEnd(b.getScheduledEnd())
-                .createdAt(b.getCreatedAt())
-                .customerNote(b.getCustomerNote())
-                .build()
-        ).collect(Collectors.toList());
-        return bookings.stream().map(b -> {
-            // Hiển thị tên đơn vị đối tác hoặc trạng thái chờ nhận đơn
-            String partnerName = (b.getPartner() != null) ? "Đối tác phục vụ" : "Đang tìm đối tác";
-
-            // Lấy thông tin địa chỉ làm việc
-            String addressText = (b.getAddress() != null) ? b.getAddress().getStreetAddress() : "N/A";
-
-            return BookingHistoryResponseDto.builder()
-                    .id(b.getId())
-                    .bookingCode(b.getBookingCode())
-                    .partnerName(partnerName)
-                    .addressDetail(addressText)
-                    .totalAmount(b.getTotalAmount())
-                    .status(b.getStatus())
-                    .scheduledStart(b.getScheduledStart())
-                    .scheduledEnd(b.getScheduledEnd())
-                    .createdAt(b.getCreatedAt())
-                    .customerNote(b.getCustomerNote())
-                    .build();
-        }).collect(Collectors.toList());
+        // Chuyển Booking Entity thành DTO
+        return bookings.stream()
+                .map(b -> BookingHistoryResponseDto.builder()
+                        .id(b.getId())
+                        .bookingCode(b.getBookingCode())
+                        .partnerName(
+                                b.getPartner() != null
+                                        ? b.getPartner().getBusinessName()
+                                        : "Đang tìm đối tác"
+                        )
+                        .addressDetail(
+                                b.getAddress() != null
+                                        ? b.getAddress().getStreetAddress()
+                                        : "N/A"
+                        )
+                        .totalAmount(b.getTotalAmount())
+                        .status(b.getStatus())
+                        .scheduledStart(b.getScheduledStart())
+                        .scheduledEnd(b.getScheduledEnd())
+                        .createdAt(b.getCreatedAt())
+                        .customerNote(b.getCustomerNote())
+                        .build()
+                )
+                .collect(Collectors.toList());
     }
 
     public Booking getBookingDetail(Long bookingId, Long customerId) {
-        return bookingRepository.findByIdAndCustomerId(bookingId, customerId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn này"));
+        return bookingRepository
+                .findByIdAndCustomerId(bookingId, customerId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn này"
+                ));
     }
 }
