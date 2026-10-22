@@ -41,4 +41,7 @@ public class Payment {
 
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
+
+    @Column(name = "txn_ref", unique = true, length = 100)
+    private String txnRef;
 }

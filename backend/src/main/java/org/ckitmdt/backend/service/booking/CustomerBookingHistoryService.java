@@ -30,7 +30,7 @@ public class CustomerBookingHistoryService {
         return bookings.stream().map(b -> BookingHistoryResponseDto.builder()
                 .id(b.getId())
                 .bookingCode(b.getBookingCode())
-                .partnerName(b.getPartner() != null ? b.getPartner().getCompanyName() : "Đang tìm đối tác")
+                .partnerName(b.getPartner() != null ? b.getPartner().getBusinessName() : "Đang tìm đối tác")
                 .addressDetail(b.getAddress() != null ? b.getAddress().getStreetAddress() : "N/A")
                 .totalAmount(b.getTotalAmount())
                 .status(b.getStatus())

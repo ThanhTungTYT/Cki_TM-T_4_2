@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -56,9 +57,13 @@ public class SecurityConfig {
                                 "/api/auth/verify-reset-password",
                                 "/api/auth/reset-password"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/vnpay/ipn")
+                        .permitAll()
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
                         .requestMatchers("/api/users/**")
+                        .authenticated()
+                        .requestMatchers("/api/payments/**")
                         .authenticated()
                         .anyRequest()
                         .authenticated()
@@ -76,7 +81,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowedOrigins(
-                List.of("http://localhost:5173")
+                List.of("http://localhost:5173", "https://handmade-opponent-punk.ngrok-free.dev")
         );
 
         config.setAllowedMethods(
