@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
@@ -69,5 +71,11 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
             LocalDateTime start,
             LocalDateTime end
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.id = :bookingId")
+    Optional<Booking> findByIdForUpdate(
+            @Param("bookingId") Long bookingId
     );
 }
