@@ -1,4 +1,3 @@
-
 package org.ckitmdt.backend.config;
 
 import lombok.RequiredArgsConstructor;
@@ -33,6 +32,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http
     ) throws Exception {
+
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors ->
@@ -57,14 +57,55 @@ public class SecurityConfig {
                                 "/api/auth/verify-reset-password",
                                 "/api/auth/reset-password"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/payments/vnpay/ipn")
-                        .permitAll()
-                        .requestMatchers("/api/admin/**")
-                        .hasRole("ADMIN")
-                        .requestMatchers("/api/users/**")
-                        .authenticated()
-                        .requestMatchers("/api/payments/**")
-                        .authenticated()
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/payments/vnpay/ipn"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                "/api/admin/accounts/**",
+                                "/api/admin/services/**",
+                                "/api/admin/orders/**",
+                                "/api/admin/providers/**",
+                                "/api/admin/statistics"
+                        ).hasAnyRole("ADMIN", "STAFF")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/refunds/admin"
+                        ).hasAnyRole("ADMIN", "STAFF")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/refunds/*/review"
+                        ).hasAnyRole("ADMIN", "STAFF")
+
+                        .requestMatchers(
+                                "/api/refunds/bookings/*/request"
+                        ).authenticated()
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/reports/admin"
+                        ).hasAnyRole("ADMIN", "STAFF")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/reports/*/status"
+                        ).hasAnyRole("ADMIN", "STAFF")
+
+                        .requestMatchers(
+                                "/api/admin/**"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
+                                "/api/refunds/**",
+                                "/api/reports/**",
+                                "/api/users/**",
+                                "/api/payments/**"
+                        ).authenticated()
+
                         .anyRequest()
                         .authenticated()
                 )
@@ -81,11 +122,21 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowedOrigins(
-                List.of("http://localhost:5173", "https://handmade-opponent-punk.ngrok-free.dev")
+                List.of(
+                        "http://localhost:5173",
+                        "https://handmade-opponent-punk.ngrok-free.dev"
+                )
         );
 
         config.setAllowedMethods(
-                List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                List.of(
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "OPTIONS"
+                )
         );
 
         config.setAllowedHeaders(List.of("*"));

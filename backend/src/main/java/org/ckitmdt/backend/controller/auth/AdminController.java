@@ -5,16 +5,23 @@ import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -25,9 +32,7 @@ public class AdminController {
 
     @GetMapping("/test")
     public ResponseEntity<String> testAdmin() {
-        return ResponseEntity.ok(
-                "Bạn đang truy cập với quyền ADMIN"
-        );
+        return ResponseEntity.ok("Bạn đang truy cập với quyền ADMIN");
     }
 
     @GetMapping("/statistics")
@@ -44,25 +49,28 @@ public class AdminController {
         LocalDate startDate;
         LocalDate endDate;
 
-        // Nếu người dùng chọn khoảng ngày riêng
         if (fromDate != null || toDate != null) {
             if (fromDate == null || toDate == null
                     || fromDate.isAfter(toDate)) {
-                throw new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.BAD_REQUEST,
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
                         "Vui lòng chọn khoảng ngày hợp lệ."
                 );
             }
 
             startDate = fromDate;
             endDate = toDate;
-
-            // Bao gồm toàn bộ ngày kết thúc
             period = "custom";
         } else {
             int days;
 
             switch (period) {
+                case "7":
+                    days = 7;
+                    break;
+                case "14":
+                    days = 14;
+                    break;
                 case "30":
                     days = 30;
                     break;
@@ -70,9 +78,10 @@ public class AdminController {
                     days = 365;
                     break;
                 default:
-                    period = "7";
-                    days = 7;
-                    break;
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Chu kỳ không hợp lệ. Chỉ chấp nhận 7, 14, 30 hoặc 365 ngày."
+                    );
             }
 
             startDate = today.minusDays(days - 1L);
@@ -80,8 +89,7 @@ public class AdminController {
         }
 
         LocalDateTime start = startDate.atStartOfDay();
-        LocalDateTime endExclusive =
-                endDate.plusDays(1).atStartOfDay();
+        LocalDateTime endExclusive = endDate.plusDays(1).atStartOfDay();
 
         List<Booking> bookings =
                 bookingRepository
@@ -90,17 +98,25 @@ public class AdminController {
                                 endExclusive
                         );
 
-        BigDecimal totalServiceValue = BigDecimal.ZERO;
+        List<Booking> completedRevenueBookings =
+                bookingRepository
+                        .findByStatusAndCompletedAtGreaterThanEqualAndCompletedAtLessThan(
+                                "COMPLETED",
+                                start,
+                                endExclusive
+                        );
 
-        for (Booking booking : bookings) {
+        long completedOrders = completedRevenueBookings.size();
+
+        BigDecimal totalRevenue = BigDecimal.ZERO;
+
+        for (Booking booking : completedRevenueBookings) {
             if (booking.getTotalAmount() != null) {
-                totalServiceValue = totalServiceValue.add(
+                totalRevenue = totalRevenue.add(
                         booking.getTotalAmount()
                 );
             }
         }
-
-        long totalOrders = bookings.size();
 
         long daysBetween =
                 ChronoUnit.DAYS.between(startDate, endDate) + 1;
@@ -114,27 +130,32 @@ public class AdminController {
 
         Map<String, BigDecimal> chart = new LinkedHashMap<>();
 
-        // Tạo sẵn các mốc thời gian, kể cả khi không có đơn hàng
         for (LocalDate date = startDate;
              !date.isAfter(endDate);
              date = date.plusDays(1)) {
 
-            String key = bucketKey(date, monthly, weekly);
-            chart.putIfAbsent(key, BigDecimal.ZERO);
+            chart.putIfAbsent(
+                    bucketKey(date, monthly, weekly),
+                    BigDecimal.ZERO
+            );
         }
 
-        // Cộng giá trị dịch vụ theo thời điểm tạo đơn
-        for (Booking booking : bookings) {
-            if (booking.getCreatedAt() == null) {
+        for (Booking booking : completedRevenueBookings) {
+            if (booking.getCompletedAt() == null
+                    || booking.getTotalAmount() == null) {
                 continue;
             }
 
-            LocalDate date = booking.getCreatedAt().toLocalDate();
+            LocalDate completedDate =
+                    booking.getCompletedAt().toLocalDate();
 
-            String key = bucketKey(date, monthly, weekly);
+            String key = bucketKey(
+                    completedDate,
+                    monthly,
+                    weekly
+            );
 
-            if (chart.containsKey(key)
-                    && booking.getTotalAmount() != null) {
+            if (chart.containsKey(key)) {
                 chart.put(
                         key,
                         chart.get(key).add(booking.getTotalAmount())
@@ -144,39 +165,37 @@ public class AdminController {
 
         List<Map<String, Object>> chartData = new ArrayList<>();
 
-        for (Map.Entry<String, BigDecimal> entry
-                : chart.entrySet()) {
-
+        for (Map.Entry<String, BigDecimal> entry : chart.entrySet()) {
             Map<String, Object> item = new LinkedHashMap<>();
+
             item.put(
                     "label",
                     bucketLabel(
                             entry.getKey(),
                             period,
                             monthly,
-                            weekly,
-                            startDate
+                            weekly
                     )
             );
+
             item.put("value", entry.getValue());
             chartData.add(item);
         }
 
         Map<String, Long> statusCounts = new LinkedHashMap<>();
-
         statusCounts.put("COMPLETED", 0L);
         statusCounts.put("PROCESSING", 0L);
         statusCounts.put("PENDING", 0L);
         statusCounts.put("CANCELLED", 0L);
 
         for (Booking booking : bookings) {
-            String status = booking.getStatus();
-
-            if (status == null) {
+            if (booking.getStatus() == null) {
                 continue;
             }
 
-            status = status.trim().toUpperCase(Locale.ROOT);
+            String status = booking.getStatus()
+                    .trim()
+                    .toUpperCase(Locale.ROOT);
 
             if ("COMPLETED".equals(status)) {
                 statusCounts.put(
@@ -184,7 +203,9 @@ public class AdminController {
                         statusCounts.get("COMPLETED") + 1
                 );
             } else if (
-                    "PENDING".equals(status)
+                    "PENDING_PAYMENT".equals(status)
+                            || "PENDING_PROVIDER".equals(status)
+                            || "PENDING".equals(status)
                             || "WAITING_CONFIRMATION".equals(status)
                             || "PENDING_CONFIRMATION".equals(status)
             ) {
@@ -243,7 +264,9 @@ public class AdminController {
 
             double percentage = statusTotal == 0
                     ? 0
-                    : Math.round(count * 10000.0 / statusTotal) / 100.0;
+                    : Math.round(
+                    count * 10000.0 / statusTotal
+            ) / 100.0;
 
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("label", statusLabels[i]);
@@ -256,16 +279,19 @@ public class AdminController {
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
+
         result.put("period", period);
         result.put("fromDate", startDate);
         result.put("toDate", endDate);
-        result.put("totalServiceValue", totalServiceValue);
-        result.put("totalOrders", totalOrders);
-        result.put("chartData", chartData);
+        result.put("totalServiceValue", totalRevenue);
+        result.put("totalOrders", bookings.size());
+        result.put("completedOrders", completedOrders);
         result.put("orderStats", orderStats);
+        result.put("chartData", chartData);
 
         return ResponseEntity.ok(result);
     }
+
     private String bucketKey(
             LocalDate date,
             boolean monthly,
@@ -276,12 +302,8 @@ public class AdminController {
         }
 
         if (weekly) {
-            return String.valueOf(
-                    ChronoUnit.DAYS.between(
-                            LocalDate.of(1970, 1, 5),
-                            date
-                    ) / 7
-            );
+            LocalDate monday = date.with(DayOfWeek.MONDAY);
+            return monday.toString();
         }
 
         return date.toString();
@@ -291,19 +313,17 @@ public class AdminController {
             String key,
             String period,
             boolean monthly,
-            boolean weekly,
-            LocalDate startDate) {
+            boolean weekly) {
 
         if (monthly) {
             YearMonth month = YearMonth.parse(key);
+
             return "T" + month.getMonthValue()
                     + "/" + month.getYear();
         }
 
         if (weekly) {
-            long weekIndex = Long.parseLong(key);
-            LocalDate monday = LocalDate.of(1970, 1, 5)
-                    .plusWeeks(weekIndex);
+            LocalDate monday = LocalDate.parse(key);
 
             return monday.format(
                     DateTimeFormatter.ofPattern("dd/MM")

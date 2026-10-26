@@ -1,5 +1,5 @@
-import { useLocation, Link } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useLocation, Link } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
     faHouse,
     faChartColumn,
@@ -11,49 +11,55 @@ import {
     faChartPie,
     faMoneyBillTransfer,
     faArrowRightFromBracket,
-} from '@fortawesome/free-solid-svg-icons';
-import './AdminDashboard.css';
+    faTriangleExclamation,
+} from "@fortawesome/free-solid-svg-icons";
+import "./AdminDashboard.css";
 
 const menuItems = [
     {
-        label: 'Tổng quan',
-        path: '/admin',
+        label: "Tổng quan",
+        path: "/admin",
         icon: faChartColumn,
     },
     {
-        label: 'Quản lý đơn hàng',
-        path: '/admin/orders',
+        label: "Quản lý đơn hàng",
+        path: "/admin/orders",
         icon: faClipboardList,
     },
     {
-        label: 'Nhà cung cấp',
-        path: '/admin/providers',
+        label: "Nhà cung cấp",
+        path: "/admin/providers",
         icon: faStore,
     },
     {
-        label: 'Quản lý tài khoản',
-        path: '/admin/accounts',
+        label: "Quản lý tài khoản",
+        path: "/admin/accounts",
         icon: faUsers,
     },
     {
-        label: 'Quản lý dịch vụ',
-        path: '/admin/services',
+        label: "Quản lý dịch vụ",
+        path: "/admin/services",
         icon: faTags,
     },
     {
-        label: 'Giao dịch',
-        path: '/admin/transactions',
+        label: "Giao dịch",
+        path: "/admin/transactions",
         icon: faCreditCard,
     },
     {
-        label: 'Quản lý hoàn tiền',
-        path: '/admin/refunds',
+        label: "Quản lý hoàn tiền",
+        path: "/admin/refunds",
         icon: faMoneyBillTransfer,
     },
     {
-        label: 'Thống kê & báo cáo',
-        path: '/admin/reports',
+        label: "Thống kê doanh thu",
+        path: "/admin/reports",
         icon: faChartPie,
+    },
+    {
+        label: "Quản lý khiếu nại",
+        path: "/admin/complaints",
+        icon: faTriangleExclamation,
     },
 ];
 
@@ -82,17 +88,15 @@ function AdminLayout({ children }) {
                     {menuItems.map((item) => {
                         const isActive =
                             location.pathname === item.path ||
-                            (item.path !== '/admin' &&
-                                location.pathname.startsWith(
-                                    `${item.path}/`
-                                ));
+                            (item.path !== "/admin" &&
+                                location.pathname.startsWith(`${item.path}/`));
 
                         return (
                             <Link
                                 key={item.path}
                                 to={item.path}
                                 className={`admin-menu-item ${
-                                    isActive ? 'active' : ''
+                                    isActive ? "active" : ""
                                 }`}
                             >
                                 <FontAwesomeIcon icon={item.icon} />
@@ -114,13 +118,8 @@ function AdminLayout({ children }) {
                         </div>
                     </div>
 
-                    <Link
-                        className="admin-menu-item logout"
-                        to="/login"
-                    >
-                        <FontAwesomeIcon
-                            icon={faArrowRightFromBracket}
-                        />
+                    <Link className="admin-menu-item logout" to="/login">
+                        <FontAwesomeIcon icon={faArrowRightFromBracket} />
                         <span>Đăng xuất</span>
                     </Link>
                 </div>

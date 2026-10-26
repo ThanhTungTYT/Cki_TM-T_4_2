@@ -37,8 +37,43 @@ public class AdminServiceController {
     public List<Map<String, Object>> getAllServices() {
         return partnerServiceRepository.findAll()
                 .stream()
+                .filter(ps -> ps.getService() != null && ps.getPartner() != null)
                 .map(this::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @GetMapping("/options")
+    @Transactional(readOnly = true)
+    public Map<String, Object> getFormOptions() {
+        List<Map<String, Object>> categories = categoryRepository.findAll()
+                .stream()
+                .filter(category -> category.getStatus() == null
+                        || "ACTIVE".equalsIgnoreCase(category.getStatus()))
+                .map(category -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", category.getId());
+                    item.put("name", category.getName());
+                    return item;
+                })
+                .collect(Collectors.toList());
+
+        List<Map<String, Object>> partners = partnerRepository.findAll()
+                .stream()
+                .filter(partner -> partner.getUser() != null
+                        && !"LOCKED".equalsIgnoreCase(partner.getUser().getStatus()))
+                .map(partner -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", partner.getId());
+                    item.put("name", partner.getBusinessName());
+                    item.put("status", partner.getStatus());
+                    return item;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("categories", categories);
+        result.put("partners", partners);
+        return result;
     }
 
     private Map<String, Object> toResponse(PartnerService ps) {
@@ -50,14 +85,19 @@ public class AdminServiceController {
         result.put("serviceId", service.getId());
         result.put("partnerId", partner.getId());
         result.put("name", service.getName());
-        result.put("category", service.getCategory().getName());
-        result.put("categoryId", service.getCategory().getId());
+        result.put("description",
+                service.getDescription() == null ? "" : service.getDescription());
+        result.put("category",
+                service.getCategory() == null ? "" : service.getCategory().getName());
+        result.put("categoryId",
+                service.getCategory() == null ? null : service.getCategory().getId());
         result.put("provider", partner.getBusinessName());
         result.put("price",
                 ps.getPrice() != null ? ps.getPrice() : service.getBasePrice());
         result.put("estimatedMinutes", service.getEstimatedMinutes());
         result.put("duration", formatDuration(service.getEstimatedMinutes()));
         result.put("status", toVietnameseStatus(ps.getStatus()));
+
         return result;
     }
 
@@ -95,23 +135,25 @@ public class AdminServiceController {
     private String toDatabaseStatus(String status) {
         if (status == null) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Thiếu trạng thái"
+                    HttpStatus.BAD_REQUEST,
+                    "Thiếu trạng thái dịch vụ."
             );
         }
 
-        switch (status) {
-            case "Đang hoạt động":
+        switch (status.trim().toUpperCase()) {
+            case "ĐANG HOẠT ĐỘNG":
             case "ACTIVE":
                 return "ACTIVE";
-            case "Chờ duyệt":
+            case "CHỜ DUYỆT":
             case "PENDING":
                 return "PENDING";
-            case "Tạm ngừng":
+            case "TẠM NGỪNG":
             case "INACTIVE":
                 return "INACTIVE";
             default:
                 throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Trạng thái không hợp lệ"
+                        HttpStatus.BAD_REQUEST,
+                        "Trạng thái dịch vụ không hợp lệ."
                 );
         }
     }
@@ -121,44 +163,32 @@ public class AdminServiceController {
     public Map<String, Object> createService(
             @RequestBody Map<String, Object> body) {
 
-        String name = String.valueOf(body.getOrDefault("name", "")).trim();
-
-        if (name.isEmpty()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Tên dịch vụ không được để trống"
-            );
-        }
-
+        String name = getRequiredText(body, "name");
         Long categoryId = getRequiredLong(body, "categoryId");
         Long partnerId = getRequiredLong(body, "partnerId");
         BigDecimal price = getRequiredPrice(body);
-
-        Integer minutes = body.get("estimatedMinutes") == null
-                ? null
-                : Integer.valueOf(body.get("estimatedMinutes").toString());
-
-        if (minutes != null && minutes <= 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Thời lượng phải lớn hơn 0"
-            );
-        }
+        Integer minutes = getRequiredMinutes(body);
 
         ServiceCategory category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Không tìm thấy danh mục"
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy danh mục dịch vụ."
                 ));
 
         Partner partner = partnerRepository.findById(partnerId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Không tìm thấy nhà cung cấp"
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy nhà cung cấp."
                 ));
+
+        validatePartner(partner);
 
         LocalDateTime now = LocalDateTime.now();
 
         Service service = Service.builder()
                 .category(category)
                 .name(name)
-                .description((String) body.get("description"))
+                .description(getOptionalText(body, "description"))
                 .pricingType("FIXED")
                 .basePrice(price)
                 .estimatedMinutes(minutes)
@@ -169,22 +199,20 @@ public class AdminServiceController {
 
         service = serviceRepository.save(service);
 
-        PartnerService ps = PartnerService.builder()
+        PartnerService partnerService = PartnerService.builder()
                 .partner(partner)
                 .service(service)
                 .price(price)
                 .status(toDatabaseStatus(
-                        String.valueOf(body.getOrDefault(
-                                "status", "Chờ duyệt"
-                        ))
+                        String.valueOf(body.getOrDefault("status", "Chờ duyệt"))
                 ))
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
 
-        ps = partnerServiceRepository.save(ps);
+        partnerService = partnerServiceRepository.save(partnerService);
 
-        return toResponse(ps);
+        return toResponse(partnerService);
     }
 
     @PutMapping("/{id}")
@@ -193,19 +221,15 @@ public class AdminServiceController {
             @PathVariable Long id,
             @RequestBody Map<String, Object> body) {
 
-        PartnerService ps = findPartnerService(id);
-        Service service = ps.getService();
+        PartnerService partnerService = findPartnerService(id);
+        Service service = partnerService.getService();
 
         if (body.containsKey("name")) {
-            String name = String.valueOf(body.get("name")).trim();
+            service.setName(getRequiredText(body, "name"));
+        }
 
-            if (name.isEmpty()) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Tên dịch vụ không được để trống"
-                );
-            }
-
-            service.setName(name);
+        if (body.containsKey("description")) {
+            service.setDescription(getOptionalText(body, "description"));
         }
 
         if (body.containsKey("categoryId")) {
@@ -213,45 +237,64 @@ public class AdminServiceController {
 
             ServiceCategory category = categoryRepository.findById(categoryId)
                     .orElseThrow(() -> new ResponseStatusException(
-                            HttpStatus.NOT_FOUND, "Không tìm thấy danh mục"
+                            HttpStatus.NOT_FOUND,
+                            "Không tìm thấy danh mục dịch vụ."
                     ));
 
             service.setCategory(category);
         }
 
-        if (body.containsKey("price")) {
-            BigDecimal price = getRequiredPrice(body);
-            ps.setPrice(price);
-        }
+        if (body.containsKey("partnerId")) {
+            Long partnerId = getRequiredLong(body, "partnerId");
 
-        if (body.containsKey("estimatedMinutes")) {
-            Integer minutes = Integer.valueOf(
-                    body.get("estimatedMinutes").toString()
-            );
+            Partner partner = partnerRepository.findById(partnerId)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "Không tìm thấy nhà cung cấp."
+                    ));
 
-            if (minutes <= 0) {
+            validatePartner(partner);
+
+            boolean duplicate = partnerServiceRepository.findByPartner_Id(partnerId)
+                    .stream()
+                    .anyMatch(item ->
+                            !item.getId().equals(partnerService.getId())
+                                    && item.getService() != null
+                                    && item.getService().getId().equals(service.getId())
+                    );
+
+            if (duplicate) {
                 throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "Thời lượng phải lớn hơn 0"
+                        HttpStatus.CONFLICT,
+                        "Nhà cung cấp này đã có dịch vụ tương ứng."
                 );
             }
 
-            service.setEstimatedMinutes(minutes);
+            partnerService.setPartner(partner);
+        }
+
+        if (body.containsKey("price")) {
+            partnerService.setPrice(getRequiredPrice(body));
+        }
+
+        if (body.containsKey("estimatedMinutes")) {
+            service.setEstimatedMinutes(getRequiredMinutes(body));
         }
 
         if (body.containsKey("status")) {
-            ps.setStatus(toDatabaseStatus(
-                    String.valueOf(body.get("status"))
-            ));
+            partnerService.setStatus(
+                    toDatabaseStatus(String.valueOf(body.get("status")))
+            );
         }
 
         LocalDateTime now = LocalDateTime.now();
         service.setUpdatedAt(now);
-        ps.setUpdatedAt(now);
+        partnerService.setUpdatedAt(now);
 
         serviceRepository.save(service);
-        partnerServiceRepository.save(ps);
+        partnerServiceRepository.save(partnerService);
 
-        return toResponse(ps);
+        return toResponse(partnerService);
     }
 
     @PutMapping("/{id}/status")
@@ -260,61 +303,161 @@ public class AdminServiceController {
             @PathVariable Long id,
             @RequestBody Map<String, Object> body) {
 
-        PartnerService ps = findPartnerService(id);
+        PartnerService partnerService = findPartnerService(id);
 
-        ps.setStatus(toDatabaseStatus(
-                String.valueOf(body.get("status"))
-        ));
-        ps.setUpdatedAt(LocalDateTime.now());
+        if (!body.containsKey("status") || body.get("status") == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Thiếu trạng thái dịch vụ."
+            );
+        }
 
-        return toResponse(partnerServiceRepository.save(ps));
+        partnerService.setStatus(
+                toDatabaseStatus(String.valueOf(body.get("status")))
+        );
+        partnerService.setUpdatedAt(LocalDateTime.now());
+
+        partnerServiceRepository.save(partnerService);
+
+        return toResponse(partnerService);
     }
 
     @DeleteMapping("/{id}")
     @Transactional
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteService(@PathVariable Long id) {
-        PartnerService ps = findPartnerService(id);
+    public Map<String, Object> deleteService(@PathVariable Long id) {
+        PartnerService partnerService = findPartnerService(id);
 
-        // Chỉ xóa liên kết giữa nhà cung cấp và dịch vụ.
-        // Không xóa dịch vụ chung trong bảng services.
-        partnerServiceRepository.delete(ps);
+        partnerService.setStatus("INACTIVE");
+        partnerService.setUpdatedAt(LocalDateTime.now());
+        partnerServiceRepository.save(partnerService);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("message", "Đã ngừng dịch vụ.");
+        result.put("id", id);
+
+        return result;
+    }
+
+    private void validatePartner(Partner partner) {
+        if (partner.getUser() == null
+                || "LOCKED".equalsIgnoreCase(partner.getUser().getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Nhà cung cấp đang bị khóa."
+            );
+        }
     }
 
     private PartnerService findPartnerService(Long id) {
         return partnerServiceRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
-                        "Không tìm thấy dịch vụ của nhà cung cấp"
+                        "Không tìm thấy dịch vụ."
                 ));
     }
 
-    private Long getRequiredLong(
-            Map<String, Object> body, String field) {
+    private String getRequiredText(
+            Map<String, Object> body,
+            String key) {
 
-        try {
-            return Long.valueOf(body.get(field).toString());
-        } catch (Exception e) {
+        Object value = body.get(key);
+
+        if (value == null || value.toString().trim().isEmpty()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Thiếu hoặc sai dữ liệu " + field
+                    "Trường " + key + " không được để trống."
+            );
+        }
+
+        return value.toString().trim();
+    }
+
+    private String getOptionalText(
+            Map<String, Object> body,
+            String key) {
+
+        Object value = body.get(key);
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private Long getRequiredLong(
+            Map<String, Object> body,
+            String key) {
+
+        Object value = body.get(key);
+
+        if (value == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Thiếu trường " + key + "."
+            );
+        }
+
+        try {
+            long result = new BigDecimal(value.toString()).longValueExact();
+
+            if (result <= 0) {
+                throw new ArithmeticException();
+            }
+
+            return result;
+        } catch (NumberFormatException | ArithmeticException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trường " + key + " không hợp lệ."
             );
         }
     }
 
     private BigDecimal getRequiredPrice(Map<String, Object> body) {
+        Object value = body.get("price");
+
+        if (value == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Thiếu giá dịch vụ."
+            );
+        }
+
         try {
-            BigDecimal price = new BigDecimal(body.get("price").toString());
+            BigDecimal price = new BigDecimal(value.toString());
 
             if (price.compareTo(BigDecimal.ZERO) <= 0) {
-                throw new IllegalArgumentException();
+                throw new NumberFormatException();
             }
 
             return price;
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Giá dịch vụ phải lớn hơn 0"
+                    "Giá dịch vụ phải lớn hơn 0."
+            );
+        }
+    }
+
+    private Integer getRequiredMinutes(Map<String, Object> body) {
+        Object value = body.get("estimatedMinutes");
+
+        if (value == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Thiếu thời lượng dịch vụ."
+            );
+        }
+
+        try {
+            int minutes = new BigDecimal(value.toString()).intValueExact();
+
+            if (minutes <= 0) {
+                throw new NumberFormatException();
+            }
+
+            return minutes;
+        } catch (NumberFormatException | ArithmeticException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Thời lượng phải là số nguyên lớn hơn 0."
             );
         }
     }
