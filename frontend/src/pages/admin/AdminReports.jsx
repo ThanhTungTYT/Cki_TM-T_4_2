@@ -1,383 +1,719 @@
-import { useMemo, useState } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import AdminLayout from "./AdminLayout";
-import {
-    faChartPie,
-    faMoneyBillWave,
-    faClipboardList,
-    faCheckCircle,
-    faUsers,
-    faRotateLeft,
-} from "@fortawesome/free-solid-svg-icons";
-import "./AdminReports.css";
 
-const mockOrders = [
-    { id: "CM001", date: "2026-10-01", amount: 500000, status: "Hoàn thành", service: "Vệ sinh nhà ở", customer: "Nguyễn Văn An" },
-    { id: "CM002", date: "2026-10-03", amount: 800000, status: "Hoàn thành", service: "Vệ sinh văn phòng", customer: "Trần Thị Bình" },
-    { id: "CM003", date: "2026-10-05", amount: 350000, status: "Đang thực hiện", service: "Vệ sinh sofa", customer: "Lê Minh Tuấn" },
-    { id: "CM004", date: "2026-10-07", amount: 250000, status: "Hoàn thành", service: "Vệ sinh máy lạnh", customer: "Phạm Ngọc Hà" },
-    { id: "CM005", date: "2026-10-09", amount: 1200000, status: "Đã hủy", service: "Tổng vệ sinh nhà", customer: "Đỗ Hoàng Nam" },
-    { id: "CM006", date: "2026-10-11", amount: 650000, status: "Hoàn thành", service: "Vệ sinh nhà ở", customer: "Vũ Minh Đức" },
-    { id: "CM007", date: "2026-10-13", amount: 900000, status: "Hoàn thành", service: "Vệ sinh văn phòng", customer: "Nguyễn Thị Mai" },
-    { id: "CM008", date: "2026-10-15", amount: 400000, status: "Đang thực hiện", service: "Vệ sinh sofa", customer: "Phạm Quốc Bảo" },
-    { id: "CM009", date: "2026-10-17", amount: 300000, status: "Hoàn thành", service: "Vệ sinh máy lạnh", customer: "Trần Minh Khang" },
-    { id: "CM010", date: "2026-10-19", amount: 750000, status: "Hoàn thành", service: "Vệ sinh nhà ở", customer: "Lê Ngọc Trâm" },
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+const API_URL = "http://localhost:8080/api/admin/statistics";
+
+const PERIODS = [
+    { label: "7 ngày", value: "7" },
+    { label: "14 ngày", value: "14" },
+    { label: "1 tháng", value: "30" },
+    { label: "1 năm", value: "365" },
 ];
 
-const formatCurrency = (value) =>
-    value.toLocaleString("vi-VN") + " đ";
+const COLORS = {
+    COMPLETED: "#16a34a",
+    PROCESSING: "#3b82f6",
+    PENDING: "#f59e0b",
+    CANCELLED: "#ef4444",
+};
 
-function AdminReports() {
+const money = (value) =>
+    new Intl.NumberFormat("vi-VN", {
+        style: "currency",
+        currency: "VND",
+        maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+
+const number = (value) =>
+    new Intl.NumberFormat("vi-VN").format(Number(value || 0));
+
+const localDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+};
+
+const getToday = () => localDate(new Date());
+
+const getDefaultStart = (days) => {
+    const date = new Date();
+    date.setDate(date.getDate() - days + 1);
+    return localDate(date);
+};
+
+const getToken = () =>
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    sessionStorage.getItem("token") ||
+    sessionStorage.getItem("accessToken");
+
+export default function AdminReports() {
     const [period, setPeriod] = useState("7");
-    const [fromDate, setFromDate] = useState("2026-10-13");
-    const [toDate, setToDate] = useState("2026-10-19");
-    const [appliedFrom, setAppliedFrom] = useState("2026-10-13");
-    const [appliedTo, setAppliedTo] = useState("2026-10-19");
+    const [fromDate, setFromDate] = useState(getDefaultStart(7));
+    const [toDate, setToDate] = useState(getToday());
+    const [customMode, setCustomMode] = useState(false);
 
-    const reportOrders = useMemo(() => {
-        return mockOrders.filter(
-            (order) =>
-                order.date >= appliedFrom &&
-                order.date <= appliedTo
-        );
-    }, [appliedFrom, appliedTo]);
+    const [data, setData] = useState({
+        totalServiceValue: 0,
+        totalOrders: 0,
+        completedOrders: 0,
+        chartData: [],
+        orderStats: [],
+    });
 
-    const completedOrders = reportOrders.filter(
-        (order) => order.status === "Hoàn thành"
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [reloadKey, setReloadKey] = useState(0);
+
+    const fetchStatistics = useCallback(async () => {
+        const token = getToken();
+
+        if (!token) {
+            setError("Không tìm thấy token đăng nhập. Vui lòng đăng nhập lại bằng tài khoản quản trị.");
+            setData({
+                totalServiceValue: 0,
+                totalOrders: 0,
+                completedOrders: 0,
+                chartData: [],
+                orderStats: [],
+            });
+            return;
+        }
+
+        if (!fromDate || !toDate || fromDate > toDate) {
+            setError("Vui lòng chọn khoảng ngày hợp lệ.");
+            return;
+        }
+
+        setLoading(true);
+        setError("");
+
+        try {
+            const params = new URLSearchParams();
+
+            if (customMode) {
+                params.set("fromDate", fromDate);
+                params.set("toDate", toDate);
+            } else {
+                params.set("period", period);
+            }
+
+            const response = await fetch(`${API_URL}?${params.toString()}`, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: "application/json",
+                },
+            });
+
+            if (response.status === 401 || response.status === 403) {
+                throw new Error(
+                    "Bạn không có quyền xem thống kê hoặc phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại bằng tài khoản ADMIN/STAFF được cấp quyền."
+                );
+            }
+
+            if (!response.ok) {
+                const message = await response.text();
+                throw new Error(
+                    message || `Không thể tải thống kê. Mã lỗi: ${response.status}`
+                );
+            }
+
+            const result = await response.json();
+
+            setData({
+                totalServiceValue: Number(result.totalServiceValue || 0),
+                totalOrders: Number(result.totalOrders || 0),
+                completedOrders: Number(result.completedOrders || 0),
+                chartData: Array.isArray(result.chartData)
+                    ? result.chartData.map((item) => ({
+                        label: item.label,
+                        value: Number(item.value || 0),
+                    }))
+                    : [],
+                orderStats: Array.isArray(result.orderStats)
+                    ? result.orderStats.map((item) => ({
+                        ...item,
+                        count: Number(item.count || 0),
+                        value: Number(item.value || 0),
+                        color: item.color || COLORS[item.status] || "#64748b",
+                    }))
+                    : [],
+            });
+        } catch (err) {
+            setError(err.message || "Đã xảy ra lỗi khi tải dữ liệu thống kê.");
+        } finally {
+            setLoading(false);
+        }
+    }, [period, fromDate, toDate, customMode]);
+
+    useEffect(() => {
+        fetchStatistics();
+    }, [fetchStatistics, reloadKey]);
+
+    const maxRevenue = useMemo(
+        () =>
+            Math.max(
+                1,
+                ...data.chartData.map((item) => Number(item.value || 0))
+            ),
+        [data.chartData]
     );
 
-    const revenue = completedOrders.reduce(
-        (sum, order) => sum + order.amount,
+    const pieBackground = useMemo(() => {
+        const total = data.orderStats.reduce(
+            (sum, item) => sum + item.count,
+            0
+        );
+
+        if (!total) return "#e5e7eb";
+
+        let current = 0;
+
+        const segments = data.orderStats.map((item) => {
+            const start = current;
+            current += (item.count / total) * 100;
+            return `${item.color} ${start}% ${current}%`;
+        });
+
+        return `conic-gradient(${segments.join(", ")})`;
+    }, [data.orderStats]);
+
+    const statusTotal = data.orderStats.reduce(
+        (sum, item) => sum + item.count,
         0
     );
 
-    const completionRate = reportOrders.length
-        ? Math.round((completedOrders.length / reportOrders.length) * 100)
-        : 0;
-
-    const serviceStats = Object.values(
-        reportOrders.reduce((result, order) => {
-            if (!result[order.service]) {
-                result[order.service] = {
-                    name: order.service,
-                    orders: 0,
-                    revenue: 0,
-                };
-            }
-
-            result[order.service].orders += 1;
-
-            if (order.status === "Hoàn thành") {
-                result[order.service].revenue += order.amount;
-            }
-
-            return result;
-        }, {})
-    ).sort((a, b) => b.orders - a.orders);
-
-    const dailyStats = Object.values(
-        completedOrders.reduce((result, order) => {
-            if (!result[order.date]) {
-                result[order.date] = {
-                    date: order.date,
-                    revenue: 0,
-                    orders: 0,
-                };
-            }
-
-            result[order.date].revenue += order.amount;
-            result[order.date].orders += 1;
-
-            return result;
-        }, {})
-    ).sort((a, b) => a.date.localeCompare(b.date));
-
-    const maxRevenue = Math.max(
-        ...dailyStats.map((item) => item.revenue),
-        1
-    );
-
-    const applyPeriod = (value) => {
+    const selectPeriod = (value) => {
+        const days = Number(value);
         setPeriod(value);
-
-        const end = new Date("2026-10-19T12:00:00");
-        const start = new Date(end);
-
-        if (value === "7") {
-            start.setDate(end.getDate() - 6);
-        } else if (value === "30") {
-            start.setDate(end.getDate() - 29);
-        } else {
-            start.setDate(end.getDate() - 364);
-        }
-
-        const formatDate = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, "0");
-            const day = String(date.getDate()).padStart(2, "0");
-            return `${year}-${month}-${day}`;
-        };
-
-        const startValue = formatDate(start);
-        const endValue = formatDate(end);
-
-        setFromDate(startValue);
-        setToDate(endValue);
-        setAppliedFrom(startValue);
-        setAppliedTo(endValue);
+        setCustomMode(false);
+        setFromDate(getDefaultStart(days));
+        setToDate(getToday());
     };
 
     const applyCustomDate = () => {
-        if (!fromDate || !toDate) {
-            alert("Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc.");
+        if (!fromDate || !toDate || fromDate > toDate) {
+            setError("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc.");
             return;
         }
 
-        if (fromDate > toDate) {
-            alert("Ngày bắt đầu không được sau ngày kết thúc.");
-            return;
-        }
-
-        setAppliedFrom(fromDate);
-        setAppliedTo(toDate);
-        setPeriod("custom");
+        setCustomMode(true);
+        setReloadKey((current) => current + 1);
     };
 
-    const resetReport = () => {
-        applyPeriod("7");
+    const cardStyle = {
+        background: "#ffffff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 14,
+        padding: 20,
+        minWidth: 0,
+        boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
+    };
+
+    const buttonStyle = (active) => ({
+        border: active ? "1px solid #2563eb" : "1px solid #dbe2ea",
+        background: active ? "#2563eb" : "#ffffff",
+        color: active ? "#ffffff" : "#334155",
+        borderRadius: 8,
+        padding: "9px 15px",
+        cursor: "pointer",
+        fontWeight: 600,
+        fontSize: 13,
+    });
+
+    const inputStyle = {
+        width: "100%",
+        boxSizing: "border-box",
+        border: "1px solid #cbd5e1",
+        borderRadius: 8,
+        padding: "10px 12px",
+        fontSize: 14,
+        background: "#ffffff",
+        color: "#0f172a",
     };
 
     return (
-        <AdminLayout>
-            <div className="admin-reports-page">
-                <div className="reports-heading">
-                    <div>
-                        <h1>Thống kê & báo cáo</h1>
-                        <p>Theo dõi hiệu quả kinh doanh của nền tảng CleanMate.</p>
+        <div
+            style={{
+                padding: "24px",
+                background: "#f5f7fb",
+                minHeight: "100%",
+                color: "#1e293b",
+                fontFamily: "Arial, sans-serif",
+                boxSizing: "border-box",
+            }}
+        >
+            <div
+                style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 16,
+                    flexWrap: "wrap",
+                    marginBottom: 24,
+                }}
+            >
+                <div>
+                    <h1 style={{ margin: "0 0 8px", fontSize: 26, color: "#1e385c" }}>
+                        Thống kê và báo cáo
+                    </h1>
+                    <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
+                        Theo dõi đơn hàng, doanh thu dịch vụ và tỷ lệ trạng thái đơn.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => setReloadKey((current) => current + 1)}
+                    disabled={loading}
+                    style={buttonStyle(false)}
+                >
+                    {loading ? "Đang tải..." : "Làm mới dữ liệu"}
+                </button>
+            </div>
+
+            <section
+                style={{
+                    ...cardStyle,
+                    marginBottom: 20,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 18,
+                }}
+            >
+                <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
+                        Khoảng thời gian thống kê
                     </div>
 
-                    <div className="reports-heading-icon">
-                        <FontAwesomeIcon icon={faChartPie} />
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {PERIODS.map((item) => (
+                            <button
+                                key={item.value}
+                                type="button"
+                                onClick={() => selectPeriod(item.value)}
+                                style={buttonStyle(
+                                    !customMode && period === item.value
+                                )}
+                            >
+                                {item.label}
+                            </button>
+                        ))}
+
+                        <button
+                            type="button"
+                            onClick={() => setCustomMode(true)}
+                            style={buttonStyle(customMode)}
+                        >
+                            Tùy chọn ngày
+                        </button>
                     </div>
                 </div>
 
-                <div className="reports-filter-panel">
-                    <div className="reports-period-options">
-                        <button
-                            className={period === "7" ? "selected" : ""}
-                            onClick={() => applyPeriod("7")}
-                        >
-                            7 ngày
-                        </button>
-
-                        <button
-                            className={period === "30" ? "selected" : ""}
-                            onClick={() => applyPeriod("30")}
-                        >
-                            30 ngày
-                        </button>
-
-                        <button
-                            className={period === "365" ? "selected" : ""}
-                            onClick={() => applyPeriod("365")}
-                        >
-                            1 năm
-                        </button>
-                    </div>
-
-                    <div className="reports-date-inputs">
-                        <label>
+                {customMode && (
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                            gap: 14,
+                            alignItems: "end",
+                        }}
+                    >
+                        <label style={{ fontSize: 13, fontWeight: 600 }}>
                             Từ ngày
                             <input
                                 type="date"
                                 value={fromDate}
-                                onChange={(e) => setFromDate(e.target.value)}
+                                max={toDate || undefined}
+                                onChange={(event) => setFromDate(event.target.value)}
+                                style={{ ...inputStyle, marginTop: 7 }}
                             />
                         </label>
 
-                        <label>
+                        <label style={{ fontSize: 13, fontWeight: 600 }}>
                             Đến ngày
                             <input
                                 type="date"
                                 value={toDate}
-                                onChange={(e) => setToDate(e.target.value)}
+                                min={fromDate || undefined}
+                                max={getToday()}
+                                onChange={(event) => setToDate(event.target.value)}
+                                style={{ ...inputStyle, marginTop: 7 }}
                             />
                         </label>
 
                         <button
-                            className="reports-apply-btn"
+                            type="button"
                             onClick={applyCustomDate}
+                            disabled={loading}
+                            style={{
+                                ...buttonStyle(true),
+                                padding: 12,
+                                height: 42,
+                            }}
                         >
-                            Áp dụng
+                            Áp dụng khoảng ngày
                         </button>
+                    </div>
+                )}
 
+                <div style={{ fontSize: 12, color: "#64748b" }}>
+                    {customMode
+                        ? `Khoảng ngày: ${fromDate || "—"} đến ${toDate || "—"}`
+                        : `Đang xem dữ liệu trong ${PERIODS.find((item) => item.value === period)?.label || period}`}
+                </div>
+            </section>
+
+            {error && (
+                <div
+                    role="alert"
+                    style={{
+                        background: "#fef2f2",
+                        color: "#b91c1c",
+                        border: "1px solid #fecaca",
+                        borderRadius: 10,
+                        padding: 14,
+                        marginBottom: 20,
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                    }}
+                >
+                    {error}
+                    <div style={{ marginTop: 8 }}>
                         <button
-                            className="reports-reset-btn"
-                            onClick={resetReport}
-                            title="Đặt lại bộ lọc"
+                            type="button"
+                            onClick={() => setReloadKey((current) => current + 1)}
+                            style={buttonStyle(false)}
                         >
-                            <FontAwesomeIcon icon={faRotateLeft} />
+                            Thử lại
                         </button>
                     </div>
-
-                    <p className="reports-date-caption">
-                        Dữ liệu từ {appliedFrom} đến {appliedTo}
-                    </p>
                 </div>
+            )}
 
-                <div className="reports-stat-grid">
-                    <div className="report-stat-card">
-                        <div className="report-stat-icon revenue-icon">
-                            <FontAwesomeIcon icon={faMoneyBillWave} />
-                        </div>
-                        <span>Doanh thu hoàn thành</span>
-                        <strong>{formatCurrency(revenue)}</strong>
-                        <small>Chỉ tính đơn đã hoàn thành</small>
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+                    gap: 16,
+                    marginBottom: 20,
+                }}
+            >
+                <div style={cardStyle}>
+                    <div style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
+                        Giá trị đơn hoàn thành
                     </div>
-
-                    <div className="report-stat-card">
-                        <div className="report-stat-icon orders-icon">
-                            <FontAwesomeIcon icon={faClipboardList} />
-                        </div>
-                        <span>Tổng đơn hàng</span>
-                        <strong>{reportOrders.length}</strong>
-                        <small>Trong khoảng thời gian chọn</small>
+                    <div
+                        style={{
+                            fontSize: 24,
+                            fontWeight: 800,
+                            color: "#15803d",
+                            overflowWrap: "anywhere",
+                        }}
+                    >
+                        {money(data.totalServiceValue)}
                     </div>
-
-                    <div className="report-stat-card">
-                        <div className="report-stat-icon completed-icon">
-                            <FontAwesomeIcon icon={faCheckCircle} />
-                        </div>
-                        <span>Đơn hoàn thành</span>
-                        <strong>{completedOrders.length}</strong>
-                        <small>Tỷ lệ {completionRate}%</small>
-                    </div>
-
-                    <div className="report-stat-card">
-                        <div className="report-stat-icon customers-icon">
-                            <FontAwesomeIcon icon={faUsers} />
-                        </div>
-                        <span>Khách hàng có đơn</span>
-                        <strong>
-                            {new Set(reportOrders.map((order) => order.customer)).size}
-                        </strong>
-                        <small>Khách hàng trong dữ liệu mẫu</small>
+                    <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 8 }}>
+                        Tính theo ngày hoàn thành đơn
                     </div>
                 </div>
 
-                <div className="reports-chart-card">
-                    <div className="reports-section-heading">
-                        <div>
-                            <h2>Doanh thu theo ngày</h2>
-                            <p>Chỉ tính đơn hàng đã hoàn thành.</p>
-                        </div>
-                        <span className="reports-chart-unit">Đơn vị: VNĐ</span>
+                <div style={cardStyle}>
+                    <div style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
+                        Tổng đơn được tạo
                     </div>
-
-                    {dailyStats.length === 0 ? (
-                        <div className="reports-no-data">
-                            Không có đơn hoàn thành trong khoảng thời gian này.
-                        </div>
-                    ) : (
-                        <div className="reports-bar-chart">
-                            {dailyStats.map((item) => (
-                                <div className="reports-bar-column" key={item.date}>
-                                <span className="reports-bar-value">
-                                    {item.revenue.toLocaleString("vi-VN")}
-                                </span>
-
-                                    <div className="reports-bar-track">
-                                        <div
-                                            className="reports-bar"
-                                            style={{
-                                                height: `${Math.max(
-                                                    (item.revenue / maxRevenue) * 100,
-                                                    3
-                                                )}%`,
-                                            }}
-                                            title={formatCurrency(item.revenue)}
-                                        />
-                                    </div>
-
-                                    <span className="reports-bar-label">
-                                    {item.date.slice(8, 10)}/
-                                        {item.date.slice(5, 7)}
-                                </span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    <div style={{ fontSize: 28, fontWeight: 800, color: "#2563eb" }}>
+                        {number(data.totalOrders)}
+                    </div>
+                    <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 8 }}>
+                        Tính theo ngày tạo đơn
+                    </div>
                 </div>
 
-                <div className="reports-table-card">
-                    <div className="reports-section-heading">
-                        <div>
-                            <h2>Hiệu quả theo dịch vụ</h2>
-                            <p>So sánh số đơn và doanh thu giữa các dịch vụ.</p>
-                        </div>
+                <div style={cardStyle}>
+                    <div style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
+                        Đơn hoàn thành trong kỳ
                     </div>
-
-                    <div className="reports-table-wrapper">
-                        <table className="reports-table">
-                            <thead>
-                            <tr>
-                                <th>STT</th>
-                                <th>Tên dịch vụ</th>
-                                <th>Số đơn</th>
-                                <th>Doanh thu hoàn thành</th>
-                                <th>Tỷ trọng số đơn</th>
-                            </tr>
-                            </thead>
-
-                            <tbody>
-                            {serviceStats.map((service, index) => (
-                                <tr key={service.name}>
-                                    <td>{index + 1}</td>
-                                    <td><strong>{service.name}</strong></td>
-                                    <td>{service.orders}</td>
-                                    <td className="report-service-revenue">
-                                        {formatCurrency(service.revenue)}
-                                    </td>
-                                    <td>
-                                        <div className="report-share">
-                                            <div className="report-share-track">
-                                                <div
-                                                    className="report-share-fill"
-                                                    style={{
-                                                        width: `${
-                                                            reportOrders.length
-                                                                ? (service.orders / reportOrders.length) * 100
-                                                                : 0
-                                                        }%`,
-                                                    }}
-                                                />
-                                            </div>
-                                            <span>
-                                                {reportOrders.length
-                                                    ? Math.round(
-                                                        (service.orders / reportOrders.length) * 100
-                                                    )
-                                                    : 0}%
-                                            </span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-
-                            {serviceStats.length === 0 && (
-                                <tr>
-                                    <td colSpan="5" className="reports-no-data">
-                                        Không có dữ liệu trong khoảng thời gian này.
-                                    </td>
-                                </tr>
-                            )}
-                            </tbody>
-                        </table>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: "#7c3aed" }}>
+                        {number(data.completedOrders)}
+                    </div>
+                    <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 8 }}>
+                        Tính theo ngày hoàn thành đơn
                     </div>
                 </div>
             </div>
-        </AdminLayout>
+
+            <div
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)",
+                    gap: 20,
+                    alignItems: "start",
+                }}
+            >
+                <section style={cardStyle}>
+                    <h2 style={{ fontSize: 18, margin: "0 0 6px", color: "#1e385c" }}>
+                        Biểu đồ giá trị đơn hoàn thành
+                    </h2>
+                    <p style={{ margin: "0 0 24px", color: "#64748b", fontSize: 13 }}>
+                        Đơn vị: VNĐ. Mốc thời gian tự động thay đổi theo kỳ lọc.
+                    </p>
+
+                    {loading ? (
+                        <div style={{ padding: 35, textAlign: "center", color: "#64748b" }}>
+                            Đang tải biểu đồ...
+                        </div>
+                    ) : data.chartData.length === 0 ? (
+                        <div style={{ padding: 35, textAlign: "center", color: "#64748b" }}>
+                            Chưa có dữ liệu biểu đồ.
+                        </div>
+                    ) : (
+                        <>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    alignItems: "flex-end",
+                                    gap: data.chartData.length > 14 ? 5 : 10,
+                                    height: 260,
+                                    padding: "16px 4px 0",
+                                    borderBottom: "1px solid #cbd5e1",
+                                    overflowX: "auto",
+                                }}
+                            >
+                                {data.chartData.map((item, index) => {
+                                    const value = Number(item.value || 0);
+                                    const height =
+                                        value > 0 ? Math.max(4, (value / maxRevenue) * 210) : 2;
+
+                                    return (
+                                        <div
+                                            key={`${item.label}-${index}`}
+                                            title={`${item.label}: ${money(value)}`}
+                                            style={{
+                                                minWidth: data.chartData.length > 30 ? 15 : 24,
+                                                flex: "1 0 0",
+                                                height: "100%",
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                justifyContent: "flex-end",
+                                                alignItems: "center",
+                                                gap: 7,
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    width: "100%",
+                                                    maxWidth: 44,
+                                                    height: `${height}px`,
+                                                    minHeight: 2,
+                                                    background:
+                                                        value > 0
+                                                            ? "linear-gradient(180deg, #60a5fa, #2563eb)"
+                                                            : "#e2e8f0",
+                                                    borderRadius: "5px 5px 0 0",
+                                                    transition: "height 0.2s ease",
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div
+                                style={{
+                                    display: "flex",
+                                    gap: data.chartData.length > 14 ? 5 : 10,
+                                    padding: "9px 4px 0",
+                                    overflowX: "auto",
+                                }}
+                            >
+                                {data.chartData.map((item, index) => {
+                                    const showLabel =
+                                        data.chartData.length <= 14 ||
+                                        index % Math.ceil(data.chartData.length / 10) === 0 ||
+                                        index === data.chartData.length - 1;
+
+                                    return (
+                                        <div
+                                            key={`${item.label}-label-${index}`}
+                                            style={{
+                                                minWidth: data.chartData.length > 30 ? 15 : 24,
+                                                flex: "1 0 0",
+                                                textAlign: "center",
+                                                color: "#64748b",
+                                                fontSize: 10,
+                                                whiteSpace: "nowrap",
+                                            }}
+                                        >
+                                            {showLabel ? item.label : ""}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div style={{ marginTop: 22 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+                                    Chi tiết theo mốc thời gian
+                                </div>
+                                <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                                    {data.chartData.map((item, index) => (
+                                        <div
+                                            key={`${item.label}-detail-${index}`}
+                                            style={{
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                gap: 12,
+                                                padding: "9px 0",
+                                                borderBottom: "1px solid #f1f5f9",
+                                                fontSize: 13,
+                                            }}
+                                        >
+                                            <span style={{ color: "#475569" }}>{item.label}</span>
+                                            <strong style={{ textAlign: "right" }}>
+                                                {money(item.value)}
+                                            </strong>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </section>
+
+                <section style={cardStyle}>
+                    <h2 style={{ fontSize: 18, margin: "0 0 6px", color: "#1e385c" }}>
+                        Tỷ lệ trạng thái đơn hàng
+                    </h2>
+                    <p style={{ margin: "0 0 24px", color: "#64748b", fontSize: 13 }}>
+                        Phân loại theo trạng thái hiện tại của các đơn được tạo trong kỳ.
+                    </p>
+
+                    {loading ? (
+                        <div style={{ padding: 35, textAlign: "center", color: "#64748b" }}>
+                            Đang tải biểu đồ...
+                        </div>
+                    ) : (
+                        <>
+                            <div
+                                style={{
+                                    width: 200,
+                                    maxWidth: "100%",
+                                    aspectRatio: "1 / 1",
+                                    borderRadius: "50%",
+                                    margin: "0 auto 24px",
+                                    background: pieBackground,
+                                    position: "relative",
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        position: "absolute",
+                                        inset: "25%",
+                                        borderRadius: "50%",
+                                        background: "#ffffff",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        justifyContent: "center",
+                                        alignItems: "center",
+                                    }}
+                                >
+                                    <strong style={{ fontSize: 25, color: "#1e385c" }}>
+                                        {number(statusTotal)}
+                                    </strong>
+                                    <span style={{ fontSize: 12, color: "#64748b" }}>
+                    Đơn hàng
+                  </span>
+                                </div>
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                                {data.orderStats.map((item) => (
+                                    <div key={item.status || item.label}>
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center",
+                                                gap: 10,
+                                                marginBottom: 7,
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: 8,
+                                                    fontSize: 13,
+                                                }}
+                                            >
+                        <span
+                            style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: 3,
+                                background: item.color,
+                                flexShrink: 0,
+                            }}
+                        />
+                                                <span>{item.label}</span>
+                                            </div>
+                                            <strong style={{ fontSize: 13, whiteSpace: "nowrap" }}>
+                                                {number(item.count)} ({Number(item.value || 0).toLocaleString("vi-VN")}%)
+                                            </strong>
+                                        </div>
+
+                                        <div
+                                            style={{
+                                                height: 7,
+                                                borderRadius: 20,
+                                                background: "#f1f5f9",
+                                                overflow: "hidden",
+                                            }}
+                                        >
+                                            <div
+                                                style={{
+                                                    width: `${Math.max(0, Math.min(100, item.value))}%`,
+                                                    height: "100%",
+                                                    borderRadius: 20,
+                                                    background: item.color,
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {statusTotal === 0 && (
+                                <p
+                                    style={{
+                                        textAlign: "center",
+                                        color: "#64748b",
+                                        fontSize: 13,
+                                        marginTop: 20,
+                                    }}
+                                >
+                                    Chưa có đơn hàng trong khoảng thời gian này.
+                                </p>
+                            )}
+                        </>
+                    )}
+                </section>
+            </div>
+
+            <p
+                style={{
+                    color: "#64748b",
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                    marginTop: 20,
+                }}
+            >
+                Lưu ý: Giá trị đơn hoàn thành được tính từ tổng tiền các đơn có trạng
+                thái COMPLETED theo thời điểm hoàn thành. Đây là giá trị dịch vụ của
+                đơn hàng, không mặc định là phần hoa hồng CleanMate nhận được.
+            </p>
+        </div>
     );
 }
-
-export default AdminReports;

@@ -20,20 +20,12 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import './AdminDashboard.css';
 
-const orderStats = [
-    { label: 'Hoàn thành', value: 58, color: '#16a34a', count: 145 },
-    { label: 'Đang xử lý', value: 25, color: '#3b82f6', count: 63 },
-    { label: 'Chờ xác nhận', value: 10, color: '#f59e0b', count: 25 },
-    { label: 'Đã hủy', value: 7, color: '#ef4444', count: 17 },
-];
-
 const formatMoney = (value) =>
     new Intl.NumberFormat('vi-VN', {
         style: 'currency',
         currency: 'VND',
         maximumFractionDigits: 0,
-    }).format(value);
-
+    }).format(Number(value) || 0);
 
 function AdminDashboard() {
     const location = useLocation();
@@ -42,8 +34,11 @@ function AdminDashboard() {
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
     const [appliedRange, setAppliedRange] = useState('7');
+    const [appliedFromDate, setAppliedFromDate] = useState('');
+    const [appliedToDate, setAppliedToDate] = useState('');
 
     const [chartData, setChartData] = useState([]);
+    const [orderStats, setOrderStats] = useState([]);
     const [totalServiceValue, setTotalServiceValue] = useState(0);
     const [totalOrders, setTotalOrders] = useState(0);
     const [loadingStatistics, setLoadingStatistics] = useState(false);
@@ -55,25 +50,49 @@ function AdminDashboard() {
     );
 
     const pieTotalOrders = orderStats.reduce(
-        (sum, item) => sum + item.count,
+        (sum, item) => sum + (Number(item.count) || 0),
         0
     );
 
-    const pieBackground = orderStats.reduce(
-        (result, item) => {
-            const previous = result.total;
-            const next = previous + item.value;
-            result.parts.push(`${item.color} ${previous}% ${next}%`);
-            result.total = next;
-            return result;
-        },
-        { parts: [], total: 0 }
-    ).parts.join(', ');
+    let accumulatedPercentage = 0;
+
+    const pieBackground = orderStats
+        .map((item) => {
+            const percentage = Math.max(0, Number(item.value) || 0);
+
+            if (percentage === 0) {
+                return null;
+            }
+
+            const start = accumulatedPercentage;
+            accumulatedPercentage += percentage;
+
+            return `${item.color || '#64748b'} ${start}% ${accumulatedPercentage}%`;
+        })
+        .filter(Boolean)
+        .join(', ');
 
     useEffect(() => {
-        let cancelled = false;
+        const controller = new AbortController();
 
         async function fetchStatistics() {
+            if (
+                appliedRange === 'custom' &&
+                (!appliedFromDate ||
+                    !appliedToDate ||
+                    appliedFromDate > appliedToDate)
+            ) {
+                setStatisticsError(
+                    'Vui lòng chọn khoảng ngày bắt đầu và kết thúc hợp lệ.'
+                );
+                setChartData([]);
+                setOrderStats([]);
+                setTotalServiceValue(0);
+                setTotalOrders(0);
+                setLoadingStatistics(false);
+                return;
+            }
+
             setLoadingStatistics(true);
             setStatisticsError('');
 
@@ -81,40 +100,23 @@ function AdminDashboard() {
                 const params = new URLSearchParams();
 
                 if (appliedRange === 'custom') {
-                    if (!fromDate || !toDate) {
-                        setStatisticsError(
-                            'Vui lòng chọn cả ngày bắt đầu và ngày kết thúc.'
-                        );
-                        setChartData([]);
-                        setTotalServiceValue(0);
-                        setTotalOrders(0);
-                        return;
-                    }
-
-                    if (fromDate > toDate) {
-                        setStatisticsError(
-                            'Ngày bắt đầu không được sau ngày kết thúc.'
-                        );
-                        setChartData([]);
-                        setTotalServiceValue(0);
-                        setTotalOrders(0);
-                        return;
-                    }
-
-                    params.set('fromDate', fromDate);
-                    params.set('toDate', toDate);
+                    params.set('fromDate', appliedFromDate);
+                    params.set('toDate', appliedToDate);
                 } else {
                     params.set('period', appliedRange);
                 }
 
                 const token =
+                    localStorage.getItem('accessToken') ||
                     localStorage.getItem('token') ||
-                    localStorage.getItem('accessToken');
+                    sessionStorage.getItem('accessToken') ||
+                    sessionStorage.getItem('token');
 
                 const response = await fetch(
                     `/api/admin/statistics?${params.toString()}`,
                     {
                         method: 'GET',
+                        signal: controller.signal,
                         headers: {
                             Accept: 'application/json',
                             ...(token
@@ -125,36 +127,47 @@ function AdminDashboard() {
                 );
 
                 if (!response.ok) {
+                    if (response.status === 401 || response.status === 403) {
+                        throw new Error(
+                            'Bạn cần đăng nhập bằng tài khoản có quyền Admin.'
+                        );
+                    }
+
                     throw new Error(
-                        response.status === 401 || response.status === 403
-                            ? 'Bạn cần đăng nhập bằng tài khoản có quyền Admin.'
-                            : `Không lấy được thống kê (HTTP ${response.status}).`
+                        `Không lấy được dữ liệu thống kê (HTTP ${response.status}).`
                     );
                 }
 
                 const data = await response.json();
 
-                if (cancelled) return;
-
                 setChartData(
                     Array.isArray(data.chartData) ? data.chartData : []
                 );
+
+                setOrderStats(
+                    Array.isArray(data.orderStats) ? data.orderStats : []
+                );
+
                 setTotalServiceValue(
                     Number(data.totalServiceValue) || 0
                 );
+
                 setTotalOrders(Number(data.totalOrders) || 0);
             } catch (error) {
-                if (cancelled) return;
+                if (error.name === 'AbortError') {
+                    return;
+                }
 
                 setStatisticsError(
-                    error.message ||
-                    'Không thể kết nối tới máy chủ thống kê.'
+                    error.message || 'Không thể kết nối máy chủ thống kê.'
                 );
+
                 setChartData([]);
+                setOrderStats([]);
                 setTotalServiceValue(0);
                 setTotalOrders(0);
             } finally {
-                if (!cancelled) {
+                if (!controller.signal.aborted) {
                     setLoadingStatistics(false);
                 }
             }
@@ -162,24 +175,56 @@ function AdminDashboard() {
 
         fetchStatistics();
 
-        return () => {
-            cancelled = true;
-        };
-    }, [appliedRange, fromDate, toDate]);
-
-    const handleApplyFilter = () => {
-        if (fromDate || toDate) {
-            setAppliedRange('custom');
-        } else {
-            setAppliedRange(period);
-        }
-    };
+        return () => controller.abort();
+    }, [appliedRange, appliedFromDate, appliedToDate]);
 
     const handlePeriodChange = (value) => {
         setPeriod(value);
         setFromDate('');
         setToDate('');
+        setAppliedFromDate('');
+        setAppliedToDate('');
+        setStatisticsError('');
         setAppliedRange(value);
+    };
+
+    const handleApplyFilter = () => {
+        if (!fromDate && !toDate) {
+            setAppliedFromDate('');
+            setAppliedToDate('');
+            setStatisticsError('');
+            setAppliedRange(period);
+            return;
+        }
+
+        if (!fromDate || !toDate) {
+            setStatisticsError(
+                'Bạn cần chọn cả ngày bắt đầu và ngày kết thúc.'
+            );
+            return;
+        }
+
+        if (fromDate > toDate) {
+            setStatisticsError(
+                'Ngày bắt đầu không được sau ngày kết thúc.'
+            );
+            return;
+        }
+
+        setAppliedFromDate(fromDate);
+        setAppliedToDate(toDate);
+        setStatisticsError('');
+        setAppliedRange('custom');
+    };
+
+    const handleResetFilter = () => {
+        setPeriod('7');
+        setFromDate('');
+        setToDate('');
+        setAppliedFromDate('');
+        setAppliedToDate('');
+        setStatisticsError('');
+        setAppliedRange('7');
     };
 
     return (
@@ -210,7 +255,7 @@ function AdminDashboard() {
 
                     <a
                         className={`admin-menu-item ${
-                            location.pathname === "/admin/orders" ? "active" : ""
+                            location.pathname === '/admin/orders' ? 'active' : ''
                         }`}
                         href="/admin/orders"
                     >
@@ -220,7 +265,7 @@ function AdminDashboard() {
 
                     <a
                         className={`admin-menu-item ${
-                            location.pathname === "/admin/providers" ? "active" : ""
+                            location.pathname === '/admin/providers' ? 'active' : ''
                         }`}
                         href="/admin/providers"
                     >
@@ -250,7 +295,7 @@ function AdminDashboard() {
 
                     <a
                         className={`admin-menu-item ${
-                            location.pathname === "/admin/transactions" ? "active" : ""
+                            location.pathname === '/admin/transactions' ? 'active' : ''
                         }`}
                         href="/admin/transactions"
                     >
@@ -260,7 +305,7 @@ function AdminDashboard() {
 
                     <a
                         className={`admin-menu-item ${
-                            location.pathname === "/admin/reports" ? "active" : ""
+                            location.pathname === '/admin/reports' ? 'active' : ''
                         }`}
                         href="/admin/reports"
                     >
@@ -277,6 +322,7 @@ function AdminDashboard() {
                             <span>Administrator</span>
                         </div>
                     </div>
+
                     <a className="admin-menu-item logout" href="/login">
                         <FontAwesomeIcon icon={faArrowRightFromBracket} />
                         <span>Đăng xuất</span>
@@ -288,9 +334,16 @@ function AdminDashboard() {
                 <header className="admin-topbar">
                     <div>
                         <h1>Tổng quan hệ thống</h1>
-                        <p>Xin chào! Đây là tình hình hoạt động của CleanMate.</p>
+                        <p>
+                            Xin chào! Đây là tình hình hoạt động của CleanMate.
+                        </p>
                     </div>
-                    <button className="admin-notification" aria-label="Thông báo">
+
+                    <button
+                        className="admin-notification"
+                        aria-label="Thông báo"
+                        type="button"
+                    >
                         <FontAwesomeIcon icon={faBell} />
                         <span />
                     </button>
@@ -302,7 +355,7 @@ function AdminDashboard() {
                             <span className="summary-icon blue">
                                 <FontAwesomeIcon icon={faMoneyBillWave} />
                             </span>
-                            <span className="summary-tag">+12,5%</span>
+                            <span className="summary-tag">Thống kê</span>
                         </div>
                         <p>Tổng giá trị dịch vụ</p>
                         <h2>{formatMoney(totalServiceValue)}</h2>
@@ -314,11 +367,13 @@ function AdminDashboard() {
                             <span className="summary-icon purple">
                                 <FontAwesomeIcon icon={faCreditCard} />
                             </span>
-                            <span className="summary-tag">+8,2%</span>
+                            <span className="summary-tag">Thông tin</span>
                         </div>
                         <p>Phí nền tảng</p>
                         <h2>12.850.000đ</h2>
-                        <span className="summary-note">Doanh thu hoa hồng</span>
+                        <span className="summary-note">
+                            Chưa kết nối API thống kê phí nền tảng
+                        </span>
                     </div>
 
                     <div className="admin-summary-card">
@@ -326,7 +381,7 @@ function AdminDashboard() {
                             <span className="summary-icon orange">
                                 <FontAwesomeIcon icon={faClipboardList} />
                             </span>
-                            <span className="summary-tag">+6,4%</span>
+                            <span className="summary-tag">Thống kê</span>
                         </div>
                         <p>Tổng số đơn hàng</p>
                         <h2>{totalOrders}</h2>
@@ -338,11 +393,13 @@ function AdminDashboard() {
                             <span className="summary-icon green">
                                 <FontAwesomeIcon icon={faStore} />
                             </span>
-                            <span className="summary-tag">+4,1%</span>
+                            <span className="summary-tag">Thông tin</span>
                         </div>
                         <p>Đối tác đang hoạt động</p>
                         <h2>48</h2>
-                        <span className="summary-note">Đối tác đã được duyệt</span>
+                        <span className="summary-note">
+                            Chưa kết nối API thống kê đối tác
+                        </span>
                     </div>
                 </section>
 
@@ -351,8 +408,11 @@ function AdminDashboard() {
                         <div className="admin-panel-heading">
                             <div>
                                 <h2>Thống kê giá trị dịch vụ</h2>
-                                <p>Biểu đồ cột theo khoảng thời gian tùy chọn (CN10)</p>
+                                <p>
+                                    Biểu đồ cột theo khoảng thời gian tùy chọn (CN10)
+                                </p>
                             </div>
+
                             <span className="panel-icon">
                                 <FontAwesomeIcon icon={faChartColumn} />
                             </span>
@@ -363,11 +423,14 @@ function AdminDashboard() {
                                 <span>Khoảng thời gian</span>
                                 <select
                                     value={period}
-                                    onChange={(event) => handlePeriodChange(event.target.value)}
+                                    onChange={(event) =>
+                                        handlePeriodChange(event.target.value)
+                                    }
                                 >
                                     <option value="7">7 ngày gần nhất</option>
-                                    <option value="30">30 ngày gần nhất</option>
-                                    <option value="365">12 tháng gần nhất</option>
+                                    <option value="14">14 ngày gần nhất</option>
+                                    <option value="30">1 tháng gần nhất</option>
+                                    <option value="365">1 năm gần nhất</option>
                                 </select>
                             </label>
 
@@ -376,7 +439,10 @@ function AdminDashboard() {
                                 <input
                                     type="date"
                                     value={fromDate}
-                                    onChange={(event) => setFromDate(event.target.value)}
+                                    max={toDate || undefined}
+                                    onChange={(event) =>
+                                        setFromDate(event.target.value)
+                                    }
                                 />
                             </label>
 
@@ -385,26 +451,39 @@ function AdminDashboard() {
                                 <input
                                     type="date"
                                     value={toDate}
-                                    onChange={(event) => setToDate(event.target.value)}
+                                    min={fromDate || undefined}
+                                    onChange={(event) =>
+                                        setToDate(event.target.value)
+                                    }
                                 />
                             </label>
 
                             <button
                                 className="apply-filter-btn"
+                                type="button"
                                 onClick={handleApplyFilter}
+                                disabled={loadingStatistics}
                             >
                                 <FontAwesomeIcon icon={faCalendarDays} />
                                 Áp dụng
+                            </button>
+
+                            <button
+                                className="apply-filter-btn"
+                                type="button"
+                                onClick={handleResetFilter}
+                                disabled={loadingStatistics}
+                            >
+                                Đặt lại
                             </button>
                         </div>
 
                         <div className="revenue-total">
                             <div>
                                 <span>Tổng giá trị trong biểu đồ</span>
-                                <strong>
-                                    {formatMoney(totalServiceValue)}
-                                </strong>
+                                <strong>{formatMoney(totalServiceValue)}</strong>
                             </div>
+
                             {loadingStatistics && (
                                 <p className="statistics-message">
                                     Đang tải dữ liệu thống kê...
@@ -412,17 +491,21 @@ function AdminDashboard() {
                             )}
 
                             {statisticsError && (
-                                <p className="statistics-error">
+                                <p className="statistics-error" role="alert">
                                     {statisticsError}
                                 </p>
                             )}
+
                             <span className="revenue-legend">
                                 <i />
                                 Giá trị dịch vụ
                             </span>
                         </div>
 
-                        <div className="bar-chart" aria-label="Biểu đồ cột giá trị dịch vụ">
+                        <div
+                            className="bar-chart"
+                            aria-label="Biểu đồ cột giá trị dịch vụ"
+                        >
                             <div className="chart-y-axis">
                                 <span>100%</span>
                                 <span>75%</span>
@@ -430,6 +513,7 @@ function AdminDashboard() {
                                 <span>25%</span>
                                 <span>0%</span>
                             </div>
+
                             <div className="bar-chart-content">
                                 <div className="chart-grid-lines">
                                     <i />
@@ -438,26 +522,47 @@ function AdminDashboard() {
                                     <i />
                                     <i />
                                 </div>
+
                                 <div className="bar-list">
                                     {chartData.map((item, index) => (
-                                        <div className="bar-column" key={`${item.label}-${index}`}>
+                                        <div
+                                            className="bar-column"
+                                            key={`${item.label}-${index}`}
+                                            title={`${item.label}: ${formatMoney(item.value)}`}
+                                        >
                                             <div className="bar-value">
                                                 {formatMoney(item.value)}
                                             </div>
+
                                             <div className="bar-track">
                                                 <div
                                                     className="bar"
                                                     style={{
-                                                        height: `${((Number(item.value) || 0) / maxValue) * 100}%`,
+                                                        height: `${
+                                                            ((Number(item.value) || 0) /
+                                                                maxValue) *
+                                                            100
+                                                        }%`,
                                                     }}
                                                 />
                                             </div>
-                                            <span className="bar-label">{item.label}</span>
+
+                                            <span className="bar-label">
+                                                {item.label}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         </div>
+
+                        {!loadingStatistics &&
+                            !statisticsError &&
+                            chartData.length === 0 && (
+                                <p className="statistics-message">
+                                    Không có dữ liệu trong khoảng thời gian này.
+                                </p>
+                            )}
                     </div>
 
                     <div className="admin-panel order-panel">
@@ -466,6 +571,7 @@ function AdminDashboard() {
                                 <h2>Thống kê đơn hàng</h2>
                                 <p>Tỷ lệ đơn hàng theo trạng thái (CN11)</p>
                             </div>
+
                             <span className="panel-icon">
                                 <FontAwesomeIcon icon={faChartPie} />
                             </span>
@@ -474,7 +580,11 @@ function AdminDashboard() {
                         <div className="pie-chart-wrap">
                             <div
                                 className="pie-chart"
-                                style={{ background: `conic-gradient(${pieBackground})` }}
+                                style={{
+                                    background: pieTotalOrders > 0
+                                        ? `conic-gradient(${pieBackground})`
+                                        : '#e5e7eb',
+                                }}
                                 role="img"
                                 aria-label="Biểu đồ tròn tỷ lệ đơn hàng theo trạng thái"
                             >
@@ -487,21 +597,38 @@ function AdminDashboard() {
 
                         <div className="order-legend">
                             {orderStats.map((item) => (
-                                <div className="order-legend-row" key={item.label}>
+                                <div
+                                    className="order-legend-row"
+                                    key={item.status || item.label}
+                                >
                                     <div className="order-legend-name">
-                                        <i style={{ backgroundColor: item.color }} />
+                                        <i
+                                            style={{
+                                                backgroundColor: item.color,
+                                            }}
+                                        />
                                         <span>{item.label}</span>
                                     </div>
+
                                     <strong>{item.count}</strong>
-                                    <span className="order-percent">{item.value}%</span>
+
+                                    <span className="order-percent">
+                                        {item.value}%
+                                    </span>
                                 </div>
                             ))}
+
+                            {orderStats.length === 0 && (
+                                <p className="statistics-message">
+                                    Chưa có dữ liệu trạng thái đơn hàng.
+                                </p>
+                            )}
                         </div>
 
                         <div className="order-panel-footer">
                             <span>
                                 <FontAwesomeIcon icon={faRotate} />
-                                Dữ liệu minh họa
+                                Dữ liệu từ database theo khoảng thời gian đã chọn
                             </span>
                         </div>
                     </div>
@@ -515,6 +642,7 @@ function AdminDashboard() {
                                 <p>Cập nhật tình hình hệ thống</p>
                             </div>
                         </div>
+
                         <div className="activity-list">
                             <div className="activity-item">
                                 <span className="activity-icon green">
@@ -523,9 +651,10 @@ function AdminDashboard() {
                                 <div>
                                     <strong>Đơn hàng được hoàn thành</strong>
                                     <p>Đơn hàng #CM1025 đã hoàn tất</p>
-                                    <small>5 phút trước</small>
+                                    <small>Hoạt động minh họa</small>
                                 </div>
                             </div>
+
                             <div className="activity-item">
                                 <span className="activity-icon orange">
                                     <FontAwesomeIcon icon={faClock} />
@@ -533,9 +662,10 @@ function AdminDashboard() {
                                 <div>
                                     <strong>Đơn hàng chờ xác nhận</strong>
                                     <p>Có 3 đơn hàng cần được kiểm tra</p>
-                                    <small>20 phút trước</small>
+                                    <small>Hoạt động minh họa</small>
                                 </div>
                             </div>
+
                             <div className="activity-item">
                                 <span className="activity-icon blue">
                                     <FontAwesomeIcon icon={faStore} />
@@ -543,7 +673,7 @@ function AdminDashboard() {
                                 <div>
                                     <strong>Đối tác đăng ký mới</strong>
                                     <p>2 hồ sơ đối tác đang chờ duyệt</p>
-                                    <small>1 giờ trước</small>
+                                    <small>Hoạt động minh họa</small>
                                 </div>
                             </div>
                         </div>
@@ -556,6 +686,7 @@ function AdminDashboard() {
                                 <p>Các mục cần Admin kiểm tra</p>
                             </div>
                         </div>
+
                         <div className="pending-list">
                             <div className="pending-item">
                                 <div>
@@ -564,6 +695,7 @@ function AdminDashboard() {
                                 </div>
                                 <b>02</b>
                             </div>
+
                             <div className="pending-item">
                                 <div>
                                     <strong>Yêu cầu hủy đơn</strong>
@@ -571,6 +703,7 @@ function AdminDashboard() {
                                 </div>
                                 <b>03</b>
                             </div>
+
                             <div className="pending-item">
                                 <div>
                                     <strong>Khiếu nại mới</strong>
@@ -583,7 +716,7 @@ function AdminDashboard() {
                 </section>
 
                 <footer className="admin-footer">
-                    CleanMate Admin Panel · Giao diện minh họa
+                    CleanMate Admin Panel
                 </footer>
             </main>
         </div>
