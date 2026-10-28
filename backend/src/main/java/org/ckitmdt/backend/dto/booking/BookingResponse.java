@@ -37,6 +37,8 @@ public class BookingResponse {
     private BigDecimal totalAmount;
 
     private String status;
+    private String paymentMethod;
+    private String paymentStatus;
     private String customerNote;
     private String cancelReason;
 

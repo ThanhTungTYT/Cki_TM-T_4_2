@@ -1,5 +1,23 @@
 const BASE_URL = 'http://localhost:8080/api';
 
+export const publicServicesApi = {
+    async getFilters({ signal } = {}) {
+        const res = await fetch(`${BASE_URL}/v1/services/filters`, { signal });
+        return handleResponse(res, 'Không thể tải bộ lọc dịch vụ.');
+    },
+
+    async search(params, { signal } = {}) {
+        const query = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                query.set(key, String(value));
+            }
+        });
+        const res = await fetch(`${BASE_URL}/v1/services?${query}`, { signal });
+        return handleResponse(res, 'Không thể tải danh sách dịch vụ.');
+    }
+};
+
 // =========================
 // AUTH HEADERS
 // =========================

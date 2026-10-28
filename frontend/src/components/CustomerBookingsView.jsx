@@ -18,8 +18,7 @@
         faStar,
         faShieldHalved,
         faFileInvoice,
-        faCheck,
-        faSliders
+        faCheck
     } from '@fortawesome/free-solid-svg-icons';
     import { bookingApi, refundApi } from '../services/api';
     import './CustomerBookingsView.css';
@@ -117,208 +116,11 @@
         { title: 'Nghiệm thu hoàn tất', icon: faCheckCircle }
     ];
     
-    const DEFAULT_BOOKINGS = [
-        {
-            id: 'CM-2026-928174',
-            providerId: 1,
-            providerName: 'Công ty TNHH Vệ sinh CleanHome Pro',
-            providerPhone: '0908 123 456',
-            status: 'PENDING_COMPLETION',
-            createdAt: '16/10/2026 14:30',
-            customer: {
-                fullName: 'Trần Minh Danh',
-                phone: '0912 345 678',
-                email: 'danh.tran@gmail.com'
-            },
-            address: {
-                city: 'TP. Hồ Chí Minh',
-                district: 'Quận 1',
-                ward: 'Phường Bến Nghé',
-                streetAddress: 'Tòa Landmark 81, Căn 24.08, 720A Điện Biên Phủ',
-                formattedAddress: 'Tòa Landmark 81, Căn 24.08, 720A Điện Biên Phủ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-                lat: 10.7952,
-                lng: 106.7218
-            },
-            cleaner: {
-                name: 'Nguyễn Văn Hùng',
-                phone: '0978 999 888',
-                avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-                rating: 4.9,
-                completedJobs: 142
-            },
-            schedule: {
-                date: '16/10/2026',
-                startTime: '15:00',
-                endTime: '18:00',
-                durationHours: 3
-            },
-            items: [
-                {
-                    serviceName: 'Dịch vụ dọn dẹp nhà tiêu chuẩn',
-                    packageName: 'Chuyên sâu (3-4 giờ)',
-                    quantity: 1,
-                    unitPrice: 350000,
-                    estimatedPrice: 350000,
-                    notes: 'Lau sạch bụi kính ban công và hút bụi thảm phòng khách'
-                },
-                {
-                    serviceName: 'Khử khuẩn & Vệ sinh nệm sofa',
-                    packageName: 'Ghế sofa 3 chỗ ngồi',
-                    quantity: 1,
-                    unitPrice: 200000,
-                    estimatedPrice: 200000,
-                    notes: 'Dùng hơi nước nóng diệt khuẩn'
-                }
-            ],
-            pricing: {
-                subtotal: 550000,
-                discount: 50000,
-                totalAmount: 500000
-            },
-            paymentMethod: 'VNPAY',
-            paymentStatus: 'PAID',
-            history: [
-                { time: '14:30 16/10/2026', actor: 'Khách hàng', text: 'Tạo đơn đặt lịch và giữ chỗ thành công.' },
-                { time: '14:32 16/10/2026', actor: 'Cổng VNPAY (CN08)', text: 'Xác thực thanh toán 500.000đ thành công. Mã GD: VNP149201.' },
-                { time: '14:38 16/10/2026', actor: 'Đối tác CleanHome', text: 'Tiếp nhận đơn hàng và duyệt năng lực phục vụ.' },
-                { time: '14:45 16/10/2026', actor: 'Đối tác CleanHome', text: 'Phân công nhân viên Nguyễn Văn Hùng nhận việc.' },
-                { time: '14:50 16/10/2026', actor: 'Nhân viên Hùng', text: 'Bắt đầu di chuyển đến địa chỉ khách hàng.' },
-                { time: '15:02 16/10/2026', actor: 'Nhân viên Hùng', text: 'Check-in GPS tại tọa độ 10.7952, 106.7218 (sai số 12m). Bắt đầu làm việc.' },
-                { time: '17:55 16/10/2026', actor: 'Nhân viên Hùng', text: 'Đã hoàn thành vệ sinh sạch sẽ, gửi yêu cầu khách hàng nghiệm thu.' }
-            ]
-        },
-        {
-            id: 'CM-2026-834190',
-            providerId: 2,
-            providerName: 'Dịch vụ Vệ sinh Xanh GreenClean',
-            providerPhone: '0938 777 666',
-            status: 'CONFIRMED',
-            createdAt: '15/10/2026 09:15',
-            customer: {
-                fullName: 'Trần Minh Danh',
-                phone: '0912 345 678',
-                email: 'danh.tran@gmail.com'
-            },
-            address: {
-                city: 'TP. Hồ Chí Minh',
-                district: 'Quận 7',
-                ward: 'Phường Tân Phong',
-                streetAddress: '15 Đường số 8, KDC Him Lam',
-                formattedAddress: '15 Đường số 8, KDC Him Lam, Phường Tân Phong, Quận 7, TP. Hồ Chí Minh',
-                lat: 10.7423,
-                lng: 106.6985
-            },
-            cleaner: null,
-            schedule: {
-                date: '17/10/2026',
-                startTime: '09:00',
-                endTime: '11:00',
-                durationHours: 2
-            },
-            items: [
-                {
-                    serviceName: 'Vệ sinh máy lạnh treo tường Inverter',
-                    packageName: 'Bảo dưỡng 2 dàn lạnh',
-                    quantity: 2,
-                    unitPrice: 180000,
-                    estimatedPrice: 360000,
-                    notes: 'Kiểm tra gas và xịt rửa màng lọc'
-                }
-            ],
-            pricing: {
-                subtotal: 360000,
-                discount: 0,
-                totalAmount: 360000
-            },
-            paymentMethod: 'CASH',
-            paymentStatus: 'UNPAID',
-            history: [
-                { time: '09:15 15/10/2026', actor: 'Khách hàng', text: 'Đặt lịch thành công (Phương thức Tiền mặt COD).' },
-                { time: '09:30 15/10/2026', actor: 'Đối tác GreenClean', text: 'Xác nhận tiếp nhận đơn, chuẩn bị nhân sự kỹ thuật máy lạnh.' }
-            ]
-        },
-        {
-            id: 'CM-2026-619203',
-            providerId: 1,
-            providerName: 'Công ty TNHH Vệ sinh CleanHome Pro',
-            providerPhone: '0908 123 456',
-            status: 'COMPLETED',
-            createdAt: '10/10/2026 08:00',
-            customer: {
-                fullName: 'Trần Minh Danh',
-                phone: '0912 345 678',
-                email: 'danh.tran@gmail.com'
-            },
-            address: {
-                city: 'TP. Hồ Chí Minh',
-                district: 'Quận 1',
-                ward: 'Phường Bến Nghé',
-                streetAddress: '123 Nguyễn Huệ, Căn hộ 402',
-                formattedAddress: '123 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-                lat: 10.7769,
-                lng: 106.7009
-            },
-            cleaner: {
-                name: 'Lê Thị Mai',
-                phone: '0933 111 222',
-                avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80',
-                rating: 5.0,
-                completedJobs: 98
-            },
-            schedule: {
-                date: '10/10/2026',
-                startTime: '08:30',
-                endTime: '11:30',
-                durationHours: 3
-            },
-            items: [
-                {
-                    serviceName: 'Dịch vụ dọn dẹp nhà tiêu chuẩn',
-                    packageName: 'Tiêu chuẩn (2-3 giờ)',
-                    quantity: 1,
-                    unitPrice: 280000,
-                    estimatedPrice: 280000,
-                    notes: 'Lau sàn và cọ rửa 2 phòng tắm'
-                }
-            ],
-            pricing: {
-                subtotal: 280000,
-                discount: 30000,
-                totalAmount: 250000
-            },
-            paymentMethod: 'VNPAY',
-            paymentStatus: 'PAID',
-            history: [
-                { time: '08:00 10/10/2026', actor: 'Khách hàng', text: 'Khởi tạo đơn hàng.' },
-                { time: '08:05 10/10/2026', actor: 'Hệ thống VNPAY', text: 'Thanh toán thành công 250.000đ.' },
-                { time: '08:15 10/10/2026', actor: 'Đối tác CleanHome', text: 'Phân công chị Mai.' },
-                { time: '08:30 10/10/2026', actor: 'Nhân viên Mai', text: 'Check-in và bắt đầu ca.' },
-                { time: '11:30 10/10/2026', actor: 'Nhân viên Mai', text: 'Hoàn thành công việc.' },
-                { time: '11:35 10/10/2026', actor: 'Khách hàng', text: 'Nghiệm thu hài lòng 5 sao và hoàn tất đơn hàng.' }
-            ]
-        }
-    ];
-    
     export default function CustomerBookingsView() {
         const [searchParams] = useSearchParams();
         const highlightId = searchParams.get('id');
     
-        const [bookings, setBookings] = useState(() => {
-            try {
-                const saved = localStorage.getItem('cleanmate_bookings');
-    
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        return parsed;
-                    }
-                }
-            } catch {
-                // Bỏ qua dữ liệu localStorage lỗi.
-            }
-    
-            return DEFAULT_BOOKINGS;
-        });
+        const [bookings, setBookings] = useState([]);
     
         const [filterTab, setFilterTab] = useState('ALL');
         const [selectedBookingId, setSelectedBookingId] = useState(
@@ -434,15 +236,6 @@
                 });
         }, []);
     
-        // Lưu dữ liệu giao diện vào localStorage.
-        useEffect(() => {
-            try {
-                localStorage.setItem('cleanmate_bookings', JSON.stringify(bookings));
-            } catch (err) {
-                console.warn('Không thể lưu đơn hàng vào localStorage:', err);
-            }
-        }, [bookings]);
-    
         // Chọn đơn mặc định sau khi có dữ liệu.
         const selectedBooking = useMemo(() => {
             return bookings.find(b => b.id === selectedBookingId)
@@ -552,12 +345,23 @@
     
             if (targetBooking?.dbId) {
                 try {
-                    await bookingApi.executeAction(
-                        targetBooking.dbId,
-                        'CUSTOMER_ACCEPT',
-                        'Khách hàng đã kiểm tra, nghiệm thu và xác nhận hoàn tất dịch vụ.',
-                        targetBooking.version
-                    );
+                    const updated = await bookingApi.executeAction(targetBooking.dbId, {
+                        action: 'CUSTOMER_ACCEPT',
+                        note: 'Khách hàng đã kiểm tra, nghiệm thu và xác nhận hoàn tất dịch vụ.',
+                        version: targetBooking.version
+                    });
+                    setBookings((previous) => previous.map((booking) => booking.dbId === updated.id
+                        ? {
+                            ...booking,
+                            status: updated.status,
+                            version: updated.version,
+                            history: (updated.statusHistory || []).map((entry) => ({
+                                time: entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : '',
+                                actor: entry.changedByName || 'Hệ thống',
+                                text: entry.note || `${entry.oldStatus || ''} → ${entry.newStatus || ''}`
+                            }))
+                        }
+                        : booking));
                 } catch (err) {
                     console.warn('API executeAction thông báo:', err.message);
                     showFeedback(
@@ -568,56 +372,39 @@
                 }
             }
     
-            const now = new Date();
-            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
-    
-            setBookings(prev => prev.map(b => {
-                if (b.id !== bookingId) return b;
-    
-                return {
-                    ...b,
-                    status: 'COMPLETED',
-                    history: [
-                        ...(b.history || []),
-                        {
-                            time: timeStr,
-                            actor: 'Khách hàng (Nghiệm thu)',
-                            text: 'Khách hàng đã kiểm tra và xác nhận hoàn tất dịch vụ.'
-                        }
-                    ]
-                };
-            }));
-    
             showFeedback(
                 'Tuyệt vời! Bạn đã xác nhận hoàn thành dịch vụ.',
                 'success'
             );
             setShowReviewModal(true);
         };
-    
-        // Bộ mô phỏng CN17: chỉ phục vụ demo giao diện.
-        const handleTransitionState = (nextStatus, eventDesc) => {
-            if (!selectedBooking) return;
-    
-            const now = new Date();
-            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
-    
-            setBookings(prev => prev.map(b => {
-                if (b.id !== selectedBooking.id) return b;
-    
-                return {
-                    ...b,
-                    status: nextStatus,
-                    history: [
-                        ...(b.history || []),
-                        {
-                            time: timeStr,
-                            actor: 'Mô phỏng State Machine (CN17)',
-                            text: eventDesc
-                        }
-                    ]
-                };
-            }));
+
+        const handleCustomerCancel = async () => {
+            if (!selectedBooking?.dbId) return;
+            if (!window.confirm(`Bạn có chắc muốn hủy đơn ${selectedBooking.id}?`)) return;
+            try {
+                const updated = await bookingApi.executeAction(selectedBooking.dbId, {
+                    action: 'CANCEL',
+                    note: 'Khách hàng yêu cầu hủy đơn.',
+                    version: selectedBooking.version
+                });
+                setBookings((previous) => previous.map((booking) => booking.dbId === updated.id
+                    ? {
+                        ...booking,
+                        status: updated.status,
+                        version: updated.version,
+                        cancelReason: updated.cancelReason,
+                        history: (updated.statusHistory || []).map((entry) => ({
+                            time: entry.createdAt ? new Date(entry.createdAt).toLocaleString('vi-VN') : '',
+                            actor: entry.changedByName || 'Hệ thống',
+                            text: entry.note || `${entry.oldStatus || ''} → ${entry.newStatus || ''}`
+                        }))
+                    }
+                    : booking));
+                showFeedback('Đơn đã được hủy.', 'success');
+            } catch (err) {
+                showFeedback(err.message || 'Không thể hủy đơn ở trạng thái hiện tại.', 'error');
+            }
         };
     
         return (
@@ -636,7 +423,7 @@
                     {[
                         ['ALL', `Tất cả (${bookings.length})`],
                         ['ACTIVE', 'Đang thực hiện'],
-                        ['PENDING', 'Chờ tiếp nhận'],
+                        ['PENDING', 'Chờ xử lý'],
                         ['COMPLETED', 'Đã hoàn thành'],
                         ['CANCELLED', 'Đã hủy / Từ chối']
                     ].map(([value, label]) => (
@@ -799,6 +586,16 @@
                                         </div>
                                     )}
     
+                                    {['PENDING_PAYMENT', 'PENDING_PROVIDER', 'CONFIRMED', 'ASSIGNED'].includes(selectedBooking.status)
+                                        && selectedBooking.dbId && (
+                                            <div className="customer-action-container">
+                                                <button type="button" className="btn-action-cancel" onClick={handleCustomerCancel}>
+                                                    Hủy đơn
+                                                </button>
+                                                <small>Có thể hủy trước khi nhân viên bắt đầu di chuyển.</small>
+                                            </div>
+                                        )}
+
                                     {selectedBooking.status === 'COMPLETED' && (
                                         <div className="completed-pill">
                                             <FontAwesomeIcon icon={faCheckCircle} />
@@ -857,94 +654,7 @@
                                 )}
     
                                 {/* Bộ mô phỏng CN17 */}
-                                <div className="sim-control-panel">
-                                    <div className="sim-label">
-                                        <FontAwesomeIcon icon={faSliders} />
-                                        <span>
-                                            Bộ mô phỏng luồng chuyển trạng thái (CN17 Demo):
-                                        </span>
-                                    </div>
-    
-                                    <div className="sim-btns-row">
-                                        <button
-                                            type="button"
-                                            className="btn-sim-step"
-                                            onClick={() =>
-                                                handleTransitionState(
-                                                    'CONFIRMED',
-                                                    'Đối tác xác nhận đủ năng lực phục vụ.'
-                                                )
-                                            }
-                                        >
-                                            1. Chấp nhận
-                                        </button>
-    
-                                        <button
-                                            type="button"
-                                            className="btn-sim-step"
-                                            onClick={() =>
-                                                handleTransitionState(
-                                                    'ASSIGNED',
-                                                    'Đã phân công nhân viên Nguyễn Văn Hùng.'
-                                                )
-                                            }
-                                        >
-                                            2. Phân công
-                                        </button>
-    
-                                        <button
-                                            type="button"
-                                            className="btn-sim-step"
-                                            onClick={() =>
-                                                handleTransitionState(
-                                                    'EN_ROUTE',
-                                                    'Nhân viên bắt đầu di chuyển qua CN24.'
-                                                )
-                                            }
-                                        >
-                                            3. Di chuyển
-                                        </button>
-    
-                                        <button
-                                            type="button"
-                                            className="btn-sim-step"
-                                            onClick={() =>
-                                                handleTransitionState(
-                                                    'IN_PROGRESS',
-                                                    'Check-in GPS đạt chuẩn, bắt đầu dọn dẹp.'
-                                                )
-                                            }
-                                        >
-                                            4. Bắt đầu
-                                        </button>
-    
-                                        <button
-                                            type="button"
-                                            className="btn-sim-step"
-                                            onClick={() =>
-                                                handleTransitionState(
-                                                    'PENDING_COMPLETION',
-                                                    'Hoàn tất dọn dẹp, gửi khách nghiệm thu.'
-                                                )
-                                            }
-                                        >
-                                            5. Nộp kết quả
-                                        </button>
-    
-                                        <button
-                                            type="button"
-                                            className="btn-sim-step done-step"
-                                            onClick={() =>
-                                                handleTransitionState(
-                                                    'COMPLETED',
-                                                    'Khách hàng nghiệm thu đạt chất lượng.'
-                                                )
-                                            }
-                                        >
-                                            6. Nghiệm thu xong
-                                        </button>
-                                    </div>
-                                </div>
+
                             </div>
     
                             {/* Thông tin đối tác và nhân viên */}
@@ -1112,13 +822,17 @@
                                         )}
     
                                         <div className="calc-row final">
-                                            <span>
-                                                Tổng tiền ({selectedBooking.paymentMethod || 'VNPAY'}):
+                                                <span>
+                                                Tổng tiền ({selectedBooking.paymentMethod === 'CASH' ? 'Tiền mặt khi hoàn tất' : 'VNPay'}):
                                             </span>
     
                                             <strong className="price-big">
                                                 {formatPrice(selectedBooking.pricing?.totalAmount)}
                                             </strong>
+                                        </div>
+                                        <div className="calc-row">
+                                            <span>Thanh toán:</span>
+                                            <strong>{selectedBooking.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}</strong>
                                         </div>
                                     </div>
                                 </div>

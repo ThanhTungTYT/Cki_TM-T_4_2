@@ -32,5 +32,7 @@ public class CreateBookingRequest {
 
     private String voucherCode;
 
+    private String paymentMethod;
+
     private String idempotencyKey;
 }

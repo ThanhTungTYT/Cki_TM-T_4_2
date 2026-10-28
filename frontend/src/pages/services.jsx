@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -13,135 +13,14 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ServicePackageModal from '../components/ServicePackageModal';
 import { useCartDispatch } from '../context/CartContext';
+import { publicServicesApi } from '../services/api';
 import './services.css';
 
-const services = [
-    {
-        id: 1,
-        name: 'Vệ sinh nhà ở định kỳ',
-        provider: 'Công ty TNHH Vệ sinh CleanPro',
-        providerId: 1,
-        rating: 4.9,
-        reviews: 120,
-        location: 'Quận 1, HCM',
-        price: '120.000đ/giờ',
-        basePrice: 120000,
-        type: 'Vệ sinh nhà ở',
-        pricingType: 'Giá theo giờ',
-        packages: [
-            { id: 101, name: 'Gói tiêu chuẩn 2 giờ', durationMinutes: 120, employeeCount: 1, minArea: 30, maxArea: 55, price: 150000 },
-            { id: 102, name: 'Gói chuyên sâu 3.5 giờ', durationMinutes: 210, employeeCount: 1, minArea: 55, maxArea: 85, price: 250000 },
-            { id: 103, name: 'Gói đại gia đình 4 giờ (2 NV)', durationMinutes: 240, employeeCount: 2, minArea: 85, maxArea: 130, price: 420000 }
-        ]
-    },
-    {
-        id: 2,
-        name: 'Tổng dọn dẹp nhà trọn gói',
-        provider: 'CleanPro Việt Nam',
-        providerId: 2,
-        rating: 4.8,
-        reviews: 850,
-        location: 'Quận 7, HCM',
-        price: '1.200.000đ/lần',
-        basePrice: 1200000,
-        type: 'Tổng vệ sinh',
-        pricingType: 'Giá trọn gói',
-        packages: [
-            { id: 201, name: 'Căn hộ dưới 70m²', durationMinutes: 240, employeeCount: 2, minArea: 40, maxArea: 70, price: 1200000 },
-            { id: 202, name: 'Căn hộ 70 - 100m²', durationMinutes: 300, employeeCount: 3, minArea: 70, maxArea: 100, price: 1650000 },
-            { id: 203, name: 'Nhà phố / Biệt thự > 100m²', durationMinutes: 360, employeeCount: 4, minArea: 100, maxArea: 200, price: 2400000 }
-        ]
-    },
-    {
-        id: 3,
-        name: 'Vệ sinh máy lạnh 1.5 HP',
-        provider: 'Dịch vụ vệ sinh Hoàng Gia',
-        providerId: 3,
-        rating: 4.7,
-        reviews: 620,
-        location: 'Quận 3, HCM',
-        price: '180.000đ/lần',
-        basePrice: 180000,
-        type: 'Vệ sinh máy lạnh',
-        pricingType: 'Giá cố định',
-        packages: [
-            { id: 301, name: 'Vệ sinh máy treo tường tiêu chuẩn', durationMinutes: 60, employeeCount: 1, price: 180000 },
-            { id: 302, name: 'Vệ sinh + Nạp ga R32 / R410A', durationMinutes: 90, employeeCount: 1, price: 320000 }
-        ]
-    },
-    {
-        id: 4,
-        name: 'Giặt sấy sofa nệm bằng hơi nước',
-        provider: 'Vệ sinh Xanh Sài Gòn',
-        providerId: 4,
-        rating: 4.6,
-        reviews: 340,
-        location: 'Bình Thạnh, HCM',
-        price: '300.000đ/lần',
-        basePrice: 300000,
-        type: 'Vệ sinh sofa/nệm',
-        pricingType: 'Giá cố định',
-        packages: [
-            { id: 401, name: 'Sofa đơn / Sofa băng 2 chỗ', durationMinutes: 60, employeeCount: 1, price: 300000 },
-            { id: 402, name: 'Sofa góc L / Sofa giường', durationMinutes: 120, employeeCount: 2, price: 480000 }
-        ]
-    },
-    {
-        id: 5,
-        name: 'Vệ sinh kính văn phòng',
-        provider: 'Công ty Sạch Bóng',
-        providerId: 5,
-        rating: 4.8,
-        reviews: 210,
-        location: 'Thủ Đức, HCM',
-        price: '400.000đ/lần',
-        basePrice: 400000,
-        type: 'Vệ sinh văn phòng',
-        pricingType: 'Giá theo m²',
-        packages: []
-    },
-    {
-        id: 6,
-        name: 'Dọn dẹp căn hộ sau xây dựng',
-        provider: 'CleanPro Việt Nam',
-        providerId: 2,
-        rating: 4.5,
-        reviews: 95,
-        location: 'Quận 2, HCM',
-        price: '1.500.000đ/lần',
-        basePrice: 1500000,
-        type: 'Vệ sinh sau xây dựng',
-        pricingType: 'Giá trọn gói',
-        packages: []
-    }
-];
-
-const categories = [
-    'Vệ sinh nhà ở',
-    'Vệ sinh văn phòng',
-    'Vệ sinh sau xây dựng',
-    'Vệ sinh sofa/nệm',
-    'Vệ sinh máy lạnh',
-    'Tổng vệ sinh'
-];
-
-const areas = [
-    'Quận 1',
-    'Quận 2',
-    'Quận 3',
-    'Quận 7',
-    'Bình Thạnh',
-    'Thủ Đức'
-];
-
-const pricingTypes = [
-    'Giá cố định',
-    'Giá theo m²',
-    'Giá theo giờ',
-    'Giá trọn gói'
-];
-
 const PAGE_SIZE = 6;
+
+function formatPrice(value) {
+    return `${Number(value || 0).toLocaleString('vi-VN')}đ`;
+}
 
 function Services() {
     const navigate = useNavigate();
@@ -154,11 +33,67 @@ function Services() {
     const [keyword, setKeyword] = useState('');
     const [selectedCategories, setSelectedCategories] = useState([]);
     const [selectedArea, setSelectedArea] = useState('');
-    const [maxPrice, setMaxPrice] = useState(2000000);
+    const [maxPrice, setMaxPrice] = useState(null);
     const [minRating, setMinRating] = useState(0);
     const [selectedPricingTypes, setSelectedPricingTypes] = useState([]);
     const [sortBy, setSortBy] = useState('popular');
     const [currentPage, setCurrentPage] = useState(1);
+    const [filterOptions, setFilterOptions] = useState(null);
+    const [services, setServices] = useState([]);
+    const [totalServices, setTotalServices] = useState(0);
+    const [totalPages, setTotalPages] = useState(0);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+    const [retryKey, setRetryKey] = useState(0);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        publicServicesApi.getFilters({ signal: controller.signal })
+            .then((options) => {
+                setFilterOptions(options);
+                setMaxPrice(options.priceLimit ?? 0);
+            })
+            .catch((error) => {
+                if (error.name !== 'AbortError') setLoadError(error.message);
+            });
+        return () => controller.abort();
+    }, [retryKey]);
+
+    useEffect(() => {
+        if (!filterOptions) return undefined;
+        const controller = new AbortController();
+        const timer = setTimeout(() => {
+            setIsLoading(true);
+            setLoadError('');
+            publicServicesApi.search({
+                keyword: keyword.trim(),
+                category: selectedCategories.join(','),
+                area: selectedArea,
+                maxPrice,
+                minRating: minRating || null,
+                pricingType: selectedPricingTypes.join(','),
+                sortBy,
+                page: currentPage - 1,
+                size: PAGE_SIZE
+            }, { signal: controller.signal })
+                .then((result) => {
+                    setServices(result.content || []);
+                    setTotalServices(result.totalElements || 0);
+                    setTotalPages(result.totalPages || 0);
+                })
+                .catch((error) => {
+                    if (error.name !== 'AbortError') setLoadError(error.message);
+                })
+                .finally(() => {
+                    if (!controller.signal.aborted) setIsLoading(false);
+                });
+        }, keyword.trim() ? 250 : 0);
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    }, [filterOptions, keyword, selectedCategories, selectedArea, maxPrice,
+        minRating, selectedPricingTypes, sortBy, currentPage, retryKey]);
 
     const handleOpenModal = (service, goToCheckout = false) => {
         setModalService(service);
@@ -196,83 +131,35 @@ function Services() {
         setKeyword('');
         setSelectedCategories([]);
         setSelectedArea('');
-        setMaxPrice(2000000);
+        setMaxPrice(filterOptions?.priceLimit ?? 0);
         setMinRating(0);
         setSelectedPricingTypes([]);
         setSortBy('popular');
         setCurrentPage(1);
     };
 
-    const filteredServices = useMemo(() => {
-        const normalizedKeyword = keyword.trim().toLocaleLowerCase('vi');
+    const categories = filterOptions?.categories || [];
+    const areas = filterOptions?.areas || [];
+    const pricingTypes = filterOptions?.pricingTypes || [];
+    const priceLimit = filterOptions?.priceLimit || 0;
+    const displayedMaxPrice = maxPrice ?? priceLimit;
 
-        const result = services.filter((service) => {
-            const searchableText = [
-                service.name,
-                service.provider,
-                service.type,
-                service.location
-            ].join(' ').toLocaleLowerCase('vi');
-
-            const matchesKeyword =
-                !normalizedKeyword || searchableText.includes(normalizedKeyword);
-
-            const matchesCategory =
-                selectedCategories.length === 0 ||
-                selectedCategories.includes(service.type);
-
-            const areaName = service.location.split(',')[0].trim();
-            const matchesArea =
-                !selectedArea || areaName === selectedArea;
-
-            const matchesPrice = service.basePrice <= maxPrice;
-
-            const matchesRating = service.rating >= minRating;
-
-            const matchesPricingType =
-                selectedPricingTypes.length === 0 ||
-                selectedPricingTypes.includes(service.pricingType);
-
-            return (
-                matchesKeyword &&
-                matchesCategory &&
-                matchesArea &&
-                matchesPrice &&
-                matchesRating &&
-                matchesPricingType
-            );
-        });
-
-        if (sortBy === 'price-asc') {
-            result.sort((a, b) => a.basePrice - b.basePrice);
-        } else if (sortBy === 'price-desc') {
-            result.sort((a, b) => b.basePrice - a.basePrice);
-        } else if (sortBy === 'rating') {
-            result.sort((a, b) => b.rating - a.rating);
-        } else if (sortBy === 'reviews') {
-            result.sort((a, b) => b.reviews - a.reviews);
-        } else {
-            result.sort((a, b) => b.reviews - a.reviews);
-        }
-
-        return result;
-    }, [
-        keyword,
-        selectedCategories,
-        selectedArea,
-        maxPrice,
-        minRating,
-        selectedPricingTypes,
-        sortBy
-    ]);
-
-    const totalPages = Math.max(1, Math.ceil(filteredServices.length / PAGE_SIZE));
-    const safePage = Math.min(currentPage, totalPages);
-
-    const visibleServices = filteredServices.slice(
-        (safePage - 1) * PAGE_SIZE,
-        safePage * PAGE_SIZE
-    );
+    const activeFilters = [
+        ...(keyword.trim() ? [{ key: 'keyword', label: 'Tìm: ' + keyword.trim(), clear: () => setKeyword('') }] : []),
+        ...selectedCategories.map((category) => ({
+            key: 'category-' + category,
+            label: categories.find((item) => item.value === category)?.label || category,
+            clear: () => toggleCategory(category)
+        })),
+        ...(selectedArea ? [{ key: 'area', label: selectedArea, clear: () => setSelectedArea('') }] : []),
+        ...(filterOptions && displayedMaxPrice < filterOptions.priceLimit ? [{
+            key: 'price', label: 'Giá đến ' + displayedMaxPrice.toLocaleString('vi-VN') + 'đ', clear: () => setMaxPrice(priceLimit)
+        }] : []),
+        ...(minRating ? [{ key: 'rating', label: 'Từ ' + minRating + ' sao', clear: () => setMinRating(0) }] : []),
+        ...selectedPricingTypes.map((type) => ({
+            key: 'pricing-' + type, label: type, clear: () => togglePricingType(type)
+        }))
+    ];
 
     return (
         <div className="services-page">
@@ -290,7 +177,7 @@ function Services() {
             </div>
 
             <main className="services-container">
-                <aside className="filter-sidebar">
+                <aside className="filter-sidebar" aria-label="Bộ lọc dịch vụ">
                     <div className="filter-title">
                         <h3>Bộ lọc tìm kiếm</h3>
                         <button type="button" onClick={clearFilters}>
@@ -299,13 +186,15 @@ function Services() {
                     </div>
 
                     <div className="filter-section">
-                        <h4>TÌM KIẾM</h4>
+                        <h4 id="service-search-label">TÌM KIẾM</h4>
                         <div className="service-search">
                             <FontAwesomeIcon icon={faMagnifyingGlass} />
                             <input
                                 type="search"
+                                aria-labelledby="service-search-label"
+                                aria-describedby="service-search-hint"
                                 value={keyword}
-                                placeholder="Tên dịch vụ, nhà cung cấp..."
+                                placeholder="Tên dịch vụ, nhà cung cấp, khu vực..."
                                 onChange={(e) => {
                                     setKeyword(e.target.value);
                                     setCurrentPage(1);
@@ -314,20 +203,20 @@ function Services() {
                         </div>
                     </div>
 
+                    <p id="service-search-hint" className="filter-hint">Tìm có hoặc không dấu, ví dụ: “may lanh”. Kết quả cập nhật khi bạn nhập.</p>
+
                     <div className="filter-section">
                         <h4>LOẠI DỊCH VỤ</h4>
 
                         {categories.map((category) => (
-                            <label key={category}>
+                            <label key={category.value}>
                                 <input
                                     type="checkbox"
-                                    checked={selectedCategories.includes(category)}
-                                    onChange={() => toggleCategory(category)}
+                                    checked={selectedCategories.includes(category.value)}
+                                    onChange={() => toggleCategory(category.value)}
                                 />
-                                {category}
-                                <span>
-                                    ({services.filter((s) => s.type === category).length})
-                                </span>
+                                {category.label}
+                                <span>({category.count})</span>
                             </label>
                         ))}
                     </div>
@@ -335,6 +224,7 @@ function Services() {
                     <div className="filter-section">
                         <h4>KHU VỰC</h4>
                         <select
+                            aria-label="Lọc theo khu vực"
                             value={selectedArea}
                             onChange={(e) => {
                                 setSelectedArea(e.target.value);
@@ -343,36 +233,39 @@ function Services() {
                         >
                             <option value="">Tất cả quận huyện</option>
                             {areas.map((area) => (
-                                <option key={area} value={area}>
-                                    {area}
+                                <option key={area.value} value={area.value}>
+                                    {area.label} ({area.count})
                                 </option>
                             ))}
                         </select>
                     </div>
 
                     <div className="filter-section">
-                        <h4>KHOẢNG GIÁ (VNĐ)</h4>
+                        <h4>GIÁ CƠ BẢN TỐI ĐA (VNĐ)</h4>
                         <input
                             type="range"
-                            min="100000"
-                            max="2000000"
-                            step="50000"
-                            value={maxPrice}
+                            min="0"
+                            max={priceLimit}
+                            step="10000"
+                            aria-label="Giá cơ bản tối đa"
+                            aria-valuetext={displayedMaxPrice.toLocaleString('vi-VN') + ' đồng'}
+                            value={displayedMaxPrice}
+                            disabled={!filterOptions}
                             onChange={(e) => {
                                 setMaxPrice(Number(e.target.value));
                                 setCurrentPage(1);
                             }}
                         />
                         <div className="price-range">
-                            <span>100.000đ</span>
-                            <span>{maxPrice.toLocaleString('vi-VN')}đ</span>
+                            <span>0đ</span>
+                            <span>{displayedMaxPrice.toLocaleString('vi-VN')}đ</span>
                         </div>
                     </div>
 
                     <div className="filter-section">
                         <h4>ĐÁNH GIÁ</h4>
 
-                        {[5, 4, 3].map((rating) => (
+                        {[4.8, 4.5, 4].map((rating) => (
                             <label key={rating}>
                                 <input
                                     type="radio"
@@ -383,9 +276,7 @@ function Services() {
                                         setCurrentPage(1);
                                     }}
                                 />
-                                {rating === 5
-                                    ? '⭐⭐⭐⭐⭐'
-                                    : `${'⭐'.repeat(rating)} trở lên`}
+                                <span className="rating-filter-label">★ {rating.toLocaleString('vi-VN')} trở lên</span>
                             </label>
                         ))}
 
@@ -407,13 +298,13 @@ function Services() {
                         <h4>HÌNH THỨC GIÁ</h4>
 
                         {pricingTypes.map((pricingType) => (
-                            <label key={pricingType}>
+                            <label key={pricingType.value}>
                                 <input
                                     type="checkbox"
-                                    checked={selectedPricingTypes.includes(pricingType)}
-                                    onChange={() => togglePricingType(pricingType)}
+                                    checked={selectedPricingTypes.includes(pricingType.value)}
+                                    onChange={() => togglePricingType(pricingType.value)}
                                 />
-                                {pricingType}
+                                {pricingType.label} ({pricingType.count})
                             </label>
                         ))}
                     </div>
@@ -423,9 +314,8 @@ function Services() {
                     <div className="service-list-header">
                         <div>
                             <h1>Danh sách dịch vụ vệ sinh</h1>
-                            <p>
-                                Tìm thấy {filteredServices.length} dịch vụ phù hợp
-                                tại TP. HCM
+                            <p role="status" aria-live="polite" aria-atomic="true">
+                                Tìm thấy {totalServices} dịch vụ phù hợp
                             </p>
                         </div>
 
@@ -445,10 +335,34 @@ function Services() {
                         </select>
                     </div>
 
-                    {visibleServices.length > 0 ? (
+                    {activeFilters.length > 0 && (
+                        <div className="active-service-filters" aria-label="Các điều kiện đang lọc">
+                            <span>Đang lọc:</span>
+                            {activeFilters.map((filter) => (
+                                <button
+                                    key={filter.key}
+                                    type="button"
+                                    aria-label={'Bỏ điều kiện ' + filter.label}
+                                    onClick={() => { filter.clear(); setCurrentPage(1); }}
+                                >
+                                    {filter.label} <span aria-hidden="true">×</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {loadError ? (
+                        <div className="no-services" role="alert">
+                            <h3>Không thể tải danh sách dịch vụ</h3>
+                            <p>{loadError}</p>
+                            <button type="button" onClick={() => setRetryKey((value) => value + 1)}>Thử lại</button>
+                        </div>
+                    ) : isLoading ? (
+                        <div className="no-services" role="status">Đang tải dịch vụ…</div>
+                    ) : services.length > 0 ? (
                         <div className="service-grid">
-                            {visibleServices.map((service) => (
-                                <div className="service-card" key={service.id}>
+                            {services.map((service) => (
+                                <div className="service-card" key={`${service.id}-${service.providerId}`}>
                                     <div
                                         className="service-image"
                                         onClick={() =>
@@ -485,14 +399,16 @@ function Services() {
                                                 }
                                                 style={{ cursor: 'pointer' }}
                                             >
-                                                {service.provider}
+                                                {service.providerName}
                                             </span>
                                         </p>
 
                                         <div className="service-info">
                                             <span className="rating">
                                                 <FontAwesomeIcon icon={faStar} />
-                                                {' '}{service.rating} ({service.reviews})
+                                                {' '}{service.rating > 0
+                                                    ? `${service.rating.toFixed(1)} (${service.reviews})`
+                                                    : 'Chưa có đánh giá'}
                                             </span>
 
                                             <span>
@@ -504,7 +420,7 @@ function Services() {
                                         <div className="service-bottom">
                                             <div>
                                                 <small>Mức phí</small>
-                                                <strong>{service.price}</strong>
+                                                <strong>{formatPrice(service.basePrice)}</strong>
                                             </div>
 
                                             <div className="service-card-actions">
@@ -545,23 +461,23 @@ function Services() {
                         </div>
                     )}
 
-                    {filteredServices.length > PAGE_SIZE && (
+                    {totalPages > 1 && (
                         <div className="service-pagination">
                             <button
                                 type="button"
-                                disabled={safePage === 1}
+                                disabled={currentPage === 1 || isLoading}
                                 onClick={() => setCurrentPage((page) => page - 1)}
                             >
                                 Trang trước
                             </button>
 
                             <span>
-                                Trang {safePage} / {totalPages}
+                                Trang {currentPage} / {totalPages}
                             </span>
 
                             <button
                                 type="button"
-                                disabled={safePage === totalPages}
+                                disabled={currentPage === totalPages || isLoading}
                                 onClick={() => setCurrentPage((page) => page + 1)}
                             >
                                 Trang sau

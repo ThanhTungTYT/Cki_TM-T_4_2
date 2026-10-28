@@ -42,11 +42,6 @@ function formatDateString(date) {
     return `${y}-${m}-${d}`;
 }
 
-const DISTRICT_LIST = [
-    'Quận 1', 'Quận 3', 'Quận 4', 'Quận 5', 'Quận 7', 'Quận 10',
-    'Bình Thạnh', 'Phú Nhuận', 'Gò Vấp', 'Tân Bình', 'TP. Thủ Đức'
-];
-
 const TIME_SLOTS = [
     { id: '08:00', label: '08:00 - Sáng sớm', period: 'morning' },
     { id: '09:30', label: '09:30 - Buổi sáng', period: 'morning' },
@@ -109,14 +104,44 @@ export default function Checkout() {
         return { fullName: '', phone: '', email: '' };
     });
 
-    const [addressForm, setAddressForm] = useState({
-        city: 'TP. Hồ Chí Minh',
-        district: 'Quận 1',
-        ward: 'Phường Bến Nghé',
-        streetAddress: '123 Nguyễn Huệ, Căn hộ 402',
-        lat: 10.7769,
-        lng: 106.7009
-    });
+    const [addressForm, setAddressForm] = useState({ city: '', district: '', ward: '', streetAddress: '', lat: null, lng: null });
+    const [defaultAddressId, setDefaultAddressId] = useState(null);
+    const [addressLoading, setAddressLoading] = useState(true);
+    const [defaultAddressError, setDefaultAddressError] = useState('');
+
+    useEffect(() => {
+        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+        if (!token) {
+            setAddressLoading(false);
+            setDefaultAddressError('Vui lòng đăng nhập để tải địa chỉ mặc định.');
+            return;
+        }
+        fetch('http://localhost:8080/api/users/me/addresses', {
+            headers: { Authorization: `Bearer ${token}` }
+        }).then(async (response) => {
+            const addresses = await response.json().catch(() => []);
+            if (!response.ok) throw new Error(addresses.message || addresses.detail || 'Không thể tải địa chỉ đã lưu.');
+            const address = addresses.find((item) => item.isDefault);
+            if (!address) {
+                setDefaultAddressError('Bạn chưa có địa chỉ mặc định. Hãy đặt một địa chỉ mặc định trong hồ sơ trước khi đặt lịch.');
+                return;
+            }
+            setDefaultAddressId(address.id);
+            setAddressForm({
+                city: address.province || '',
+                district: address.district || '',
+                ward: address.ward || '',
+                streetAddress: address.streetAddress || '',
+                lat: address.latitude ?? null,
+                lng: address.longitude ?? null
+            });
+            setCustomerInfo((current) => ({
+                ...current,
+                fullName: current.fullName || address.receiverName || '',
+                phone: current.phone || address.phone || ''
+            }));
+        }).catch((err) => setDefaultAddressError(err.message)).finally(() => setAddressLoading(false));
+    }, []);
 
     const [specialNotes, setSpecialNotes] = useState('');
 
@@ -246,8 +271,8 @@ export default function Checkout() {
                     // Fallback to random coordinate around HCMC center
                     setAddressForm(prev => ({
                         ...prev,
-                        lat: 10.7769,
-                        lng: 106.7009
+                        lat: null,
+                        lng: null
                     }));
                 }
             );
@@ -301,6 +326,10 @@ export default function Checkout() {
 
         if (!addressForm.streetAddress.trim()) {
             setErrorMessage('Vui lòng nhập địa chỉ cụ thể nơi thực hiện dịch vụ.');
+            return;
+        }
+        if (!defaultAddressId) {
+            setErrorMessage('Cần có địa chỉ mặc định trong hồ sơ để tiếp tục đặt lịch.');
             return;
         }
 
@@ -359,7 +388,8 @@ export default function Checkout() {
                     const scheduledStart = `${selectedDate}T${selectedTimeSlot}:00`;
                     const apiReq = {
                         partnerId: checkoutItems[0]?.providerId ? Number(checkoutItems[0].providerId) : 1,
-                        addressId: 1, // Địa chỉ người dùng
+                        addressId: Number(defaultAddressId),
+                        paymentMethod,
                         items: checkoutItems.map(item => ({
                             serviceId: item.serviceId ? Number(item.serviceId) : 1,
                             packageId: item.packageId ? Number(item.packageId) : null,
@@ -538,6 +568,9 @@ export default function Checkout() {
                                     {bookingSuccessData.paymentMethod === 'BANK_TRANSFER' && 'Chuyển khoản ngân hàng VietQR'}
                                 </strong>
                             </div>
+                            {bookingSuccessData.paymentMethod === 'CASH' && (
+                                <p className="cash-payment-note">Bạn thanh toán cho đối tác sau khi hoàn tất dịch vụ. Đối tác sẽ xác nhận đã thu tiền trên đơn hàng.</p>
+                            )}
                         </div>
 
                         <div className="success-items-list">
@@ -691,6 +724,9 @@ export default function Checkout() {
                                 </div>
                             </div>
 
+                            {addressLoading && <p>Đang tải địa chỉ mặc định...</p>}
+                            {defaultAddressError && <p className="checkout-error-message">{defaultAddressError} <Link to="/profile">Mở hồ sơ</Link></p>}
+                            {defaultAddressId && <p>Địa chỉ đang dùng được lấy từ địa chỉ mặc định trong hồ sơ.</p>}
                             <div className="form-grid-2">
                                 <div className="form-group">
                                     <label htmlFor="customerFullName">
@@ -724,28 +760,22 @@ export default function Checkout() {
                             <div className="form-grid-3">
                                 <div className="form-group">
                                     <label htmlFor="citySelect">Tỉnh / Thành phố *</label>
-                                    <select
+                                    <input
                                         id="citySelect"
+                                        type="text"
                                         value={addressForm.city}
-                                        onChange={(e) => setAddressForm(prev => ({ ...prev, city: e.target.value }))}
-                                    >
-                                        <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
-                                        <option value="Hà Nội">Hà Nội</option>
-                                        <option value="Đà Nẵng">Đà Nẵng</option>
-                                    </select>
+                                        readOnly
+                                    />
                                 </div>
 
                                 <div className="form-group">
                                     <label htmlFor="districtSelect">Quận / Huyện *</label>
-                                    <select
+                                    <input
                                         id="districtSelect"
+                                        type="text"
                                         value={addressForm.district}
-                                        onChange={(e) => setAddressForm(prev => ({ ...prev, district: e.target.value }))}
-                                    >
-                                        {DISTRICT_LIST.map(d => (
-                                            <option key={d} value={d}>{d}</option>
-                                        ))}
-                                    </select>
+                                        readOnly
+                                    />
                                 </div>
 
                                 <div className="form-group">
@@ -754,7 +784,7 @@ export default function Checkout() {
                                         id="wardInput"
                                         type="text"
                                         value={addressForm.ward}
-                                        onChange={(e) => setAddressForm(prev => ({ ...prev, ward: e.target.value }))}
+                                        readOnly
                                         placeholder="Ví dụ: Phường Bến Nghé"
                                         required
                                     />
@@ -769,7 +799,7 @@ export default function Checkout() {
                                     id="streetInput"
                                     type="text"
                                     value={addressForm.streetAddress}
-                                    onChange={(e) => setAddressForm(prev => ({ ...prev, streetAddress: e.target.value }))}
+                                    readOnly
                                     placeholder="Ví dụ: Tòa Landmark 81, Căn 24.08, 720A Điện Biên Phủ"
                                     required
                                 />
@@ -941,14 +971,14 @@ export default function Checkout() {
                                         name="paymentMethod"
                                         value="BANK_TRANSFER"
                                         checked={paymentMethod === 'BANK_TRANSFER'}
-                                        onChange={() => setPaymentMethod('BANK_TRANSFER')}
+                                        disabled
                                     />
                                     <div className="method-icon-box bank-icon">
                                         <FontAwesomeIcon icon={faCreditCard} />
                                     </div>
                                     <div className="method-info">
                                         <strong>Chuyển khoản ngân hàng VietQR</strong>
-                                        <p>Quét mã QR chuyển khoản chính xác số tiền đơn hàng với cú pháp tự động</p>
+                                        <p>Phương thức này hiện chưa được hỗ trợ.</p>
                                     </div>
                                 </label>
                             </div>

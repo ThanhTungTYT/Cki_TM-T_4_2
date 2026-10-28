@@ -11,6 +11,8 @@ import org.ckitmdt.backend.repository.BookingItemRepository;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.BookingStatusHistoryRepository;
 import org.ckitmdt.backend.repository.UserRepository;
+import org.ckitmdt.backend.repository.PaymentRepository;
+import org.ckitmdt.backend.entity.Payment;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,7 @@ public class BookingStateEngine {
     private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
     private final BookingItemRepository bookingItemRepository;
     private final UserRepository userRepository;
+    private final PaymentRepository paymentRepository;
 
     /**
      * Thực hiện chuyển trạng thái đơn hàng.
@@ -97,6 +100,41 @@ public class BookingStateEngine {
             );
         }
 
+        // Authorize before any side effect, including lazy expiration.
+        validateActorPermission(booking, currentUser, action);
+
+        if (action == BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT) {
+            if (currentStatus != BookingStatusEnum.PENDING_COMPLETION
+                    && currentStatus != BookingStatusEnum.COMPLETED) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Chỉ có thể xác nhận tiền mặt sau khi dịch vụ đã hoàn tất.");
+            }
+            Payment cashPayment = paymentRepository.findByBooking_Id(bookingId).stream()
+                    .filter(payment -> "CASH".equalsIgnoreCase(payment.getPaymentProvider()))
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Đơn này không sử dụng phương thức thanh toán tiền mặt."));
+            if (!"PENDING".equalsIgnoreCase(cashPayment.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Khoản tiền mặt không còn ở trạng thái chờ xác nhận.");
+            }
+            LocalDateTime paidAt = LocalDateTime.now();
+            cashPayment.setStatus("SUCCESS");
+            cashPayment.setPaidAt(paidAt);
+            cashPayment.setTransactionCode("CASH-" + booking.getBookingCode());
+            paymentRepository.save(cashPayment);
+            booking.setUpdatedAt(paidAt);
+            Booking savedBooking = bookingRepository.save(booking);
+            bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                    .booking(savedBooking)
+                    .oldStatus(currentStatus.name())
+                    .newStatus(currentStatus.name())
+                    .changedBy(currentUser)
+                    .note("Đối tác xác nhận đã thu đủ tiền mặt từ khách hàng.")
+                    .createdAt(paidAt)
+                    .build());
+            return mapToBookingResponse(savedBooking);
+        }
+
         // 4. Kiểm tra hết hạn giữ chỗ
         if (currentStatus == BookingStatusEnum.PENDING_PAYMENT
                 && booking.getHoldExpiresAt() != null
@@ -129,9 +167,6 @@ public class BookingStateEngine {
         BookingStatusEnum targetStatus = determineNextStatus(
                 currentStatus, action
         );
-
-        // 6. Kiểm tra quyền trước khi cập nhật
-        validateActorPermission(booking, currentUser, action);
 
         // 7. Cập nhật trạng thái
         String oldStatus = booking.getStatus();
@@ -179,6 +214,28 @@ public class BookingStateEngine {
         );
 
         return mapToBookingResponse(savedBooking);
+    }
+
+    @Transactional
+    public void expirePendingPayment(Long bookingId) {
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
+        if (booking == null || !BookingStatusEnum.PENDING_PAYMENT.name().equals(booking.getStatus())
+                || booking.getHoldExpiresAt() == null || LocalDateTime.now().isBefore(booking.getHoldExpiresAt())) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String oldStatus = booking.getStatus();
+        booking.setStatus(BookingStatusEnum.EXPIRED.name());
+        booking.setUpdatedAt(now);
+        Booking saved = bookingRepository.save(booking);
+        bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                .booking(saved)
+                .oldStatus(oldStatus)
+                .newStatus(BookingStatusEnum.EXPIRED.name())
+                .note("Hết thời gian giữ chỗ mà chưa nhận được thanh toán.")
+                .createdAt(now)
+                .build());
     }
 
     /**
@@ -289,10 +346,10 @@ public class BookingStateEngine {
 
         switch (action) {
             case CUSTOMER_PAY_SUCCESS -> {
-                if (!isCustomer) {
+                if (!isStaffRole(role)) {
                     throw new ResponseStatusException(
                             HttpStatus.FORBIDDEN,
-                            "Bạn không có quyền xác nhận thanh toán đơn này."
+                            "Chỉ hệ thống thanh toán hoặc nhân viên có quyền xác nhận thanh toán."
                     );
                 }
             }
@@ -315,6 +372,12 @@ public class BookingStateEngine {
                 }
             }
 
+            case PROVIDER_CONFIRM_CASH_PAYMENT -> {
+                if (!isPartner) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "Chỉ đối tác của đơn hàng mới có quyền xác nhận đã thu tiền mặt.");
+                }
+            }
             case START_TRAVEL, START_JOB, SUBMIT_COMPLETION -> {
                 if (!isPartner && !isCleanerRole(role)) {
                     throw new ResponseStatusException(
@@ -430,15 +493,17 @@ public class BookingStateEngine {
         boolean isCleaner = user != null
                 && isCleanerRole(normalizeRole(user.getRole()));
 
+        boolean hasUnpaidCashPayment = (isPartner || isAdmin)
+                && paymentRepository.findByBooking_Id(booking.getId()).stream()
+                        .anyMatch(payment -> "CASH".equalsIgnoreCase(payment.getPaymentProvider())
+                                && "PENDING".equalsIgnoreCase(payment.getStatus()));
+
         switch (status) {
             case PENDING_PAYMENT -> {
                 if (isCustomer || isAdmin) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
 
-                if (isCustomer || isAdmin) {
-                    allowed.add(BookingActionEnum.CUSTOMER_PAY_SUCCESS.name());
-                }
             }
 
             case PENDING_PROVIDER -> {
@@ -490,6 +555,10 @@ public class BookingStateEngine {
                     allowed.add(BookingActionEnum.CUSTOMER_ACCEPT.name());
                 }
 
+                if (hasUnpaidCashPayment) {
+                    allowed.add(BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT.name());
+                }
+
                 if (isAdmin) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
@@ -498,6 +567,10 @@ public class BookingStateEngine {
             default -> {
                 // Trạng thái cuối không có hành động tiếp theo.
             }
+        }
+
+        if (status == BookingStatusEnum.COMPLETED && hasUnpaidCashPayment) {
+            allowed.add(BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT.name());
         }
 
         return allowed;
@@ -559,6 +632,12 @@ public class BookingStateEngine {
                     .replaceAll(", ,", ",");
         }
 
+        List<Payment> payments = paymentRepository.findByBooking_Id(booking.getId());
+        boolean cashPayment = payments.stream().anyMatch(payment -> "CASH".equalsIgnoreCase(payment.getPaymentProvider()));
+        boolean alreadyPaid = payments.stream().anyMatch(payment -> "SUCCESS".equalsIgnoreCase(payment.getStatus()));
+        String paymentMethod = cashPayment ? "CASH" : "VNPAY";
+        String paymentStatus = alreadyPaid ? "PAID" : "UNPAID";
+
         return BookingResponse.builder()
                 .id(booking.getId())
                 .bookingCode(booking.getBookingCode())
@@ -590,6 +669,8 @@ public class BookingStateEngine {
                 .discountAmount(booking.getDiscountAmount())
                 .totalAmount(booking.getTotalAmount())
                 .status(booking.getStatus())
+                .paymentMethod(paymentMethod)
+                .paymentStatus(paymentStatus)
                 .customerNote(booking.getCustomerNote())
                 .cancelReason(booking.getCancelReason())
                 .holdExpiresAt(booking.getHoldExpiresAt())

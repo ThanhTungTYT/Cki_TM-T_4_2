@@ -332,7 +332,7 @@ a {
     }
 
     .filter-sidebar {
-        display: none;
+        display: block;
     }
 
     .service-grid {
@@ -348,4 +348,99 @@ a {
     .services-header .nav {
         display: none;
     }
+}
+/* Search and active filters */
+.services-page .service-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    color: #64748b;
+}
+.services-page .service-search:focus-within {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.services-page .service-search input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: 14px;
+}
+.services-page .filter-hint {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #64748b;
+}
+.services-page .filter-section .rating-filter-label {
+    margin-left: 0;
+    color: #4b5563;
+}
+.services-page .active-service-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+}
+.services-page .active-service-filters button {
+    padding: 8px 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 20px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+.services-page .active-service-filters button:hover { background: #dbeafe; }
+.services-page .no-services {
+    padding: 40px 20px;
+    text-align: center;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+.services-page .no-services p { margin: 12px 0 20px; color: #64748b; }
+.services-page .no-services button,
+.services-page .service-pagination button {
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: #2563eb;
+    color: #fff;
+}
+.services-page .service-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 24px;
+}
+.services-page .service-pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+.services-page .filter-section input { accent-color: #2563eb; }
+.services-page .service-list { min-width: 0; }
+@media (max-width: 1000px) {
+    .services-page .filter-sidebar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 20px;
+    }
+    .services-page .filter-title,
+    .services-page .filter-hint,
+    .services-page .filter-section:has(.service-search) { grid-column: 1 / -1; }
+}
+@media (max-width: 650px) {
+    .services-page .filter-sidebar { display: block; }
+    .services-page .service-list-header {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .services-page .service-list-header h1 { font-size: 22px; }
 }
