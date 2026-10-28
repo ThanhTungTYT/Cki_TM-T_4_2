@@ -305,10 +305,6 @@ export default function AdminAccounts() {
             <div className="admin-accounts-page">
                 <div className="accounts-page-heading">
                     <div>
-                        <p className="accounts-breadcrumb">
-                            Admin / Quản lý tài khoản
-                        </p>
-
                         <h1>Quản lý tài khoản</h1>
 
                         <p className="accounts-subtitle">

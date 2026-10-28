@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -8,8 +9,11 @@ import {
     faClipboardList,
     faCheck,
     faClock,
+    faTriangleExclamation,
+    faArrowRight,
 } from "@fortawesome/free-solid-svg-icons";
 import AdminLayout from "./AdminLayout";
+import "./AdminComplaintManagement.css";
 
 const API_URL = "http://localhost:8080/api/reports";
 
@@ -20,11 +24,11 @@ const STATUS_LABELS = {
     REJECTED: "Đã từ chối",
 };
 
-const STATUS_COLORS = {
-    OPEN: { background: "#fff3d6", color: "#946200" },
-    IN_PROGRESS: { background: "#dbeafe", color: "#1d4ed8" },
-    RESOLVED: { background: "#dcfce7", color: "#166534" },
-    REJECTED: { background: "#fee2e2", color: "#b91c1c" },
+const STATUS_CLASSES = {
+    OPEN: "complaint-status complaint-status-open",
+    IN_PROGRESS: "complaint-status complaint-status-progress",
+    RESOLVED: "complaint-status complaint-status-resolved",
+    REJECTED: "complaint-status complaint-status-rejected",
 };
 
 function getToken() {
@@ -43,7 +47,9 @@ async function apiRequest(url, options = {}) {
         ...options,
         headers: {
             Accept: "application/json",
-            ...(options.body ? { "Content-Type": "application/json" } : {}),
+            ...(options.body
+                ? { "Content-Type": "application/json" }
+                : {}),
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...options.headers,
         },
@@ -54,13 +60,17 @@ async function apiRequest(url, options = {}) {
 
         try {
             const data = await response.json();
-            message = data.message || data.detail || data.error || message;
+            message =
+                data.message ||
+                data.detail ||
+                data.error ||
+                message;
         } catch {
             try {
                 const text = await response.text();
                 if (text) message = text;
             } catch {
-                // Giữ thông báo lỗi mặc định.
+                message = `Yêu cầu thất bại (HTTP ${response.status}).`;
             }
         }
 
@@ -68,6 +78,13 @@ async function apiRequest(url, options = {}) {
     }
 
     if (response.status === 204) return null;
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!contentType.includes("application/json")) {
+        return null;
+    }
+
     return response.json();
 }
 
@@ -76,9 +93,25 @@ function formatDate(value) {
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) return String(value);
+    if (Number.isNaN(date.getTime())) {
+        return String(value);
+    }
 
-    return date.toLocaleString("vi-VN");
+    return date.toLocaleString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+function getReportStatus(report) {
+    return report?.status || "OPEN";
+}
+
+function getReportTitle(report) {
+    return report?.subject || "Không có tiêu đề";
 }
 
 function AdminComplaintManagement() {
@@ -96,6 +129,7 @@ function AdminComplaintManagement() {
     const loadReports = useCallback(async () => {
         setLoading(true);
         setError("");
+        setNotice("");
 
         try {
             const data = await apiRequest(`${API_URL}/admin`);
@@ -119,7 +153,8 @@ function AdminComplaintManagement() {
 
         return reports.filter((report) => {
             const matchesStatus =
-                statusFilter === "ALL" || report.status === statusFilter;
+                statusFilter === "ALL" ||
+                getReportStatus(report) === statusFilter;
 
             const searchable = [
                 report.subject,
@@ -129,24 +164,32 @@ function AdminComplaintManagement() {
                 report.bookingCode,
                 report.reportedName,
                 report.description,
+                report.id,
             ]
-                .filter(Boolean)
+                .filter((value) => value !== null && value !== undefined)
                 .join(" ")
                 .toLowerCase();
 
-            return matchesStatus && (!search || searchable.includes(search));
+            return (
+                matchesStatus &&
+                (!search || searchable.includes(search))
+            );
         });
     }, [reports, keyword, statusFilter]);
 
     const stats = useMemo(
         () => ({
             total: reports.length,
-            open: reports.filter((report) => report.status === "OPEN").length,
+            open: reports.filter(
+                (report) => getReportStatus(report) === "OPEN"
+            ).length,
             processing: reports.filter(
-                (report) => report.status === "IN_PROGRESS"
+                (report) => getReportStatus(report) === "IN_PROGRESS"
             ).length,
             finished: reports.filter((report) =>
-                ["RESOLVED", "REJECTED"].includes(report.status)
+                ["RESOLVED", "REJECTED"].includes(
+                    getReportStatus(report)
+                )
             ).length,
         }),
         [reports]
@@ -155,9 +198,19 @@ function AdminComplaintManagement() {
     const openDetail = (report) => {
         setSelectedReport(report);
         setNextStatus(
-            report.status === "OPEN" ? "IN_PROGRESS" : report.status
+            getReportStatus(report) === "OPEN"
+                ? "IN_PROGRESS"
+                : getReportStatus(report)
         );
         setResolution(report.resolution || "");
+        setError("");
+        setNotice("");
+    };
+
+    const closeDetail = () => {
+        if (submitting) return;
+
+        setSelectedReport(null);
         setError("");
         setNotice("");
     };
@@ -165,20 +218,26 @@ function AdminComplaintManagement() {
     const saveStatus = async (event) => {
         event.preventDefault();
 
-        if (!selectedReport) return;
+        if (!selectedReport || submitting) return;
 
         if (
             ["RESOLVED", "REJECTED"].includes(nextStatus) &&
             !resolution.trim()
         ) {
-            setError("Vui lòng nhập kết quả xử lý trước khi đóng khiếu nại.");
+            setError(
+                "Vui lòng nhập kết quả xử lý trước khi kết thúc khiếu nại."
+            );
             return;
         }
 
         if (
-            ["RESOLVED", "REJECTED"].includes(selectedReport.status)
+            ["RESOLVED", "REJECTED"].includes(
+                getReportStatus(selectedReport)
+            )
         ) {
-            setError("Khiếu nại đã kết thúc xử lý, không thể cập nhật.");
+            setError(
+                "Khiếu nại đã kết thúc xử lý nên không thể cập nhật thêm."
+            );
             return;
         }
 
@@ -198,19 +257,31 @@ function AdminComplaintManagement() {
                 }
             );
 
+            const updatedReport =
+                updated && updated.id !== undefined
+                    ? updated
+                    : {
+                        ...selectedReport,
+                        status: nextStatus,
+                        resolution: resolution.trim(),
+                    };
+
             setReports((current) =>
                 current.map((report) =>
-                    report.id === updated.id ? updated : report
+                    report.id === updatedReport.id
+                        ? updatedReport
+                        : report
                 )
             );
 
-            setSelectedReport(updated);
-            setNextStatus(updated.status);
-            setResolution(updated.resolution || "");
+            setSelectedReport(updatedReport);
+            setNextStatus(getReportStatus(updatedReport));
+            setResolution(updatedReport.resolution || "");
             setNotice("Đã cập nhật trạng thái khiếu nại.");
         } catch (err) {
             setError(
-                err.message || "Không thể cập nhật trạng thái khiếu nại."
+                err.message ||
+                "Không thể cập nhật trạng thái khiếu nại."
             );
         } finally {
             setSubmitting(false);
@@ -218,157 +289,135 @@ function AdminComplaintManagement() {
     };
 
     const isTerminal = selectedReport
-        ? ["RESOLVED", "REJECTED"].includes(selectedReport.status)
+        ? ["RESOLVED", "REJECTED"].includes(
+            getReportStatus(selectedReport)
+        )
         : false;
 
     return (
         <AdminLayout>
-            <div style={{ padding: 24, color: "#1f2937" }}>
-                <div
-                    style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 16,
-                        flexWrap: "wrap",
-                        marginBottom: 24,
-                    }}
-                >
-                    <div>
-                        <h1 style={{ margin: "0 0 8px", fontSize: 28 }}>
-                            Quản lý khiếu nại
-                        </h1>
-                        <p style={{ margin: 0, color: "#64748b" }}>
-                            Tiếp nhận, theo dõi và cập nhật kết quả xử lý báo cáo.
-                        </p>
+            <div className="admin-complaint-page">
+                <div className="complaint-page-header">
+                    <div className="complaint-page-heading">
+                        <div>
+                            <h1>Quản lý khiếu nại</h1>
+                            <p>
+                                Tiếp nhận, theo dõi và xử lý phản ánh từ
+                                khách hàng.
+                            </p>
+                        </div>
                     </div>
 
                     <button
                         type="button"
+                        className="complaint-btn complaint-btn-primary"
                         onClick={loadReports}
                         disabled={loading}
-                        style={buttonStyle("#2563eb")}
                     >
-                        <FontAwesomeIcon icon={faRotate} /> Làm mới
+                        <FontAwesomeIcon
+                            icon={faRotate}
+                            className={loading ? "complaint-spin" : ""}
+                        />
+                        {loading ? "Đang tải..." : "Làm mới"}
                     </button>
                 </div>
 
-                {error && (
-                    <div style={messageStyle("#fee2e2", "#991b1b")}>
-                        {error}
+                {error && !selectedReport && (
+                    <div className="complaint-alert complaint-alert-error">
+                        <FontAwesomeIcon icon={faTriangleExclamation} />
+                        <span>{error}</span>
                     </div>
                 )}
 
-                {notice && (
-                    <div style={messageStyle("#dcfce7", "#166534")}>
-                        {notice}
+                {notice && !selectedReport && (
+                    <div className="complaint-alert complaint-alert-success">
+                        <FontAwesomeIcon icon={faCheck} />
+                        <span>{notice}</span>
                     </div>
                 )}
 
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                        gap: 16,
-                        marginBottom: 24,
-                    }}
-                >
+                <div className="complaint-stats-grid">
                     <StatCard
                         icon={faClipboardList}
                         label="Tổng khiếu nại"
                         value={stats.total}
+                        variant="blue"
                     />
+
                     <StatCard
                         icon={faClock}
                         label="Mới tiếp nhận"
                         value={stats.open}
+                        variant="orange"
                     />
+
                     <StatCard
                         icon={faRotate}
                         label="Đang xử lý"
                         value={stats.processing}
+                        variant="purple"
                     />
+
                     <StatCard
                         icon={faCheck}
                         label="Đã kết thúc"
                         value={stats.finished}
+                        variant="green"
                     />
                 </div>
 
-                <section
-                    style={{
-                        background: "#fff",
-                        border: "1px solid #e2e8f0",
-                        borderRadius: 14,
-                        padding: 20,
-                    }}
-                >
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 12,
-                            flexWrap: "wrap",
-                            marginBottom: 18,
-                        }}
-                    >
-                        <h2 style={{ fontSize: 19, margin: 0 }}>
-                            Danh sách báo cáo
-                        </h2>
-                        <span style={{ color: "#64748b" }}>
+                <section className="complaint-panel">
+                    <div className="complaint-panel-header">
+                        <div>
+                            <h2>Danh sách khiếu nại</h2>
+                            <p>
+                                Theo dõi nội dung và trạng thái từng báo cáo.
+                            </p>
+                        </div>
+
+                        <span className="complaint-result-count">
                             {filteredReports.length} kết quả
                         </span>
                     </div>
 
-                    <div
-                        style={{
-                            display: "flex",
-                            gap: 12,
-                            flexWrap: "wrap",
-                            marginBottom: 20,
-                        }}
-                    >
-                        <div
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                flex: "1 1 280px",
-                                border: "1px solid #cbd5e1",
-                                borderRadius: 9,
-                                padding: "0 12px",
-                                minHeight: 42,
-                            }}
-                        >
+                    <div className="complaint-toolbar">
+                        <div className="complaint-search">
                             <FontAwesomeIcon
                                 icon={faMagnifyingGlass}
-                                color="#64748b"
                             />
+
                             <input
+                                type="text"
                                 value={keyword}
                                 onChange={(event) =>
                                     setKeyword(event.target.value)
                                 }
                                 placeholder="Tìm tiêu đề, khách hàng, mã đơn..."
-                                style={inputStyle}
                             />
+
+                            {keyword && (
+                                <button
+                                    type="button"
+                                    className="complaint-clear-search"
+                                    aria-label="Xóa từ khóa"
+                                    onClick={() => setKeyword("")}
+                                >
+                                    <FontAwesomeIcon icon={faXmark} />
+                                </button>
+                            )}
                         </div>
 
                         <select
+                            className="complaint-filter"
                             value={statusFilter}
                             onChange={(event) =>
                                 setStatusFilter(event.target.value)
                             }
-                            style={{
-                                ...inputStyle,
-                                flex: "0 1 220px",
-                                border: "1px solid #cbd5e1",
-                                borderRadius: 9,
-                                padding: "10px 12px",
-                            }}
                         >
-                            <option value="ALL">Tất cả trạng thái</option>
+                            <option value="ALL">
+                                Tất cả trạng thái
+                            </option>
+
                             {Object.entries(STATUS_LABELS).map(
                                 ([value, label]) => (
                                     <option key={value} value={value}>
@@ -379,305 +428,359 @@ function AdminComplaintManagement() {
                         </select>
                     </div>
 
-                    <div style={{ overflowX: "auto" }}>
-                        <table
-                            style={{
-                                width: "100%",
-                                borderCollapse: "collapse",
-                                minWidth: 900,
-                            }}
-                        >
+                    <div className="complaint-table-wrapper">
+                        <table className="complaint-table">
                             <thead>
                             <tr>
-                                {[
-                                    "Tiêu đề",
-                                    "Người gửi",
-                                    "Mã đơn",
-                                    "Ngày gửi",
-                                    "Trạng thái",
-                                    "Thao tác",
-                                ].map((heading) => (
-                                    <th
-                                        key={heading}
-                                        style={thStyle}
-                                    >
-                                        {heading}
-                                    </th>
-                                ))}
+                                <th>Tiêu đề khiếu nại</th>
+                                <th>Người gửi</th>
+                                <th>Mã đơn</th>
+                                <th>Ngày gửi</th>
+                                <th>Trạng thái</th>
+                                <th className="complaint-action-column">
+                                    Thao tác
+                                </th>
                             </tr>
                             </thead>
 
                             <tbody>
                             {loading && (
                                 <tr>
-                                    <td colSpan={6} style={emptyStyle}>
+                                    <td
+                                        colSpan={6}
+                                        className="complaint-empty"
+                                    >
+                                            <span className="complaint-loading">
+                                                <FontAwesomeIcon
+                                                    icon={faRotate}
+                                                    className="complaint-spin"
+                                                />
+                                            </span>
                                         Đang tải danh sách khiếu nại...
                                     </td>
                                 </tr>
                             )}
 
                             {!loading &&
-                                filteredReports.map((report) => (
-                                    <tr key={report.id}>
-                                        <td style={tdStyle}>
-                                            <strong>
-                                                {report.subject || "Không có tiêu đề"}
-                                            </strong>
-                                            <div style={mutedStyle}>
-                                                {report.category || "Chưa phân loại"}
-                                            </div>
-                                        </td>
+                                filteredReports.map((report) => {
+                                    const status = getReportStatus(report);
 
-                                        <td style={tdStyle}>
-                                            <div>
-                                                {report.reporterName || "Không rõ"}
-                                            </div>
-                                            <div style={mutedStyle}>
-                                                {report.reporterEmail || ""}
-                                            </div>
-                                        </td>
+                                    return (
+                                        <tr key={report.id}>
+                                            <td>
+                                                <div className="complaint-subject">
+                                                    {getReportTitle(report)}
+                                                </div>
 
-                                        <td style={tdStyle}>
-                                            {report.bookingCode || "—"}
-                                        </td>
+                                                <div className="complaint-subtitle">
+                                                    {report.category ||
+                                                        "Chưa phân loại"}
+                                                </div>
+                                            </td>
 
-                                        <td style={tdStyle}>
-                                            {formatDate(report.createdAt)}
-                                        </td>
-
-                                        <td style={tdStyle}>
-                                                <span
-                                                    style={{
-                                                        ...STATUS_COLORS[report.status],
-                                                        display: "inline-block",
-                                                        borderRadius: 20,
-                                                        padding: "5px 10px",
-                                                        fontSize: 12,
-                                                        fontWeight: 600,
-                                                        whiteSpace: "nowrap",
-                                                    }}
-                                                >
-                                                    {STATUS_LABELS[report.status] ||
-                                                        report.status ||
+                                            <td>
+                                                <div className="complaint-reporter">
+                                                    {report.reporterName ||
                                                         "Không rõ"}
-                                                </span>
-                                        </td>
+                                                </div>
 
-                                        <td style={tdStyle}>
-                                            <button
-                                                type="button"
-                                                onClick={() => openDetail(report)}
-                                                style={buttonStyle("#eff6ff", "#1d4ed8")}
-                                            >
-                                                <FontAwesomeIcon icon={faEye} />
-                                                Xem / xử lý
-                                            </button>
+                                                <div className="complaint-subtitle">
+                                                    {report.reporterEmail ||
+                                                        "Chưa có email"}
+                                                </div>
+                                            </td>
+
+                                            <td>
+                                                    <span className="complaint-booking-code">
+                                                        {report.bookingCode ||
+                                                            "—"}
+                                                    </span>
+                                            </td>
+
+                                            <td className="complaint-date">
+                                                {formatDate(
+                                                    report.createdAt
+                                                )}
+                                            </td>
+
+                                            <td>
+                                                    <span
+                                                        className={
+                                                            STATUS_CLASSES[
+                                                                status
+                                                                ] ||
+                                                            "complaint-status"
+                                                        }
+                                                    >
+                                                        <span className="complaint-status-dot" />
+                                                        {STATUS_LABELS[status] ||
+                                                            status}
+                                                    </span>
+                                            </td>
+
+                                            <td>
+                                                <button
+                                                    type="button"
+                                                    className="complaint-btn complaint-btn-view"
+                                                    onClick={() =>
+                                                        openDetail(report)
+                                                    }
+                                                >
+                                                    <FontAwesomeIcon
+                                                        icon={faEye}
+                                                    />
+                                                    Xem / xử lý
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+
+                            {!loading &&
+                                filteredReports.length === 0 && (
+                                    <tr>
+                                        <td
+                                            colSpan={6}
+                                            className="complaint-empty"
+                                        >
+                                            <div className="complaint-empty-icon">
+                                                <FontAwesomeIcon
+                                                    icon={
+                                                        faClipboardList
+                                                    }
+                                                />
+                                            </div>
+
+                                            <strong>
+                                                Không tìm thấy khiếu nại
+                                            </strong>
+
+                                            <p>
+                                                Thử đổi từ khóa tìm kiếm
+                                                hoặc bộ lọc trạng thái.
+                                            </p>
                                         </td>
                                     </tr>
-                                ))}
-
-                            {!loading && filteredReports.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} style={emptyStyle}>
-                                        Không tìm thấy báo cáo phù hợp.
-                                    </td>
-                                </tr>
-                            )}
+                                )}
                             </tbody>
                         </table>
+                    </div>
+
+                    <div className="complaint-table-footer">
+                        <span>
+                            Đang hiển thị {filteredReports.length} /{" "}
+                            {reports.length} khiếu nại
+                        </span>
                     </div>
                 </section>
 
                 {selectedReport && (
                     <div
-                        onClick={() => setSelectedReport(null)}
-                        style={{
-                            position: "fixed",
-                            inset: 0,
-                            zIndex: 1000,
-                            background: "rgba(15, 23, 42, 0.55)",
-                            display: "flex",
-                            justifyContent: "center",
-                            alignItems: "center",
-                            padding: 16,
-                        }}
+                        className="admin-complaint-modal"
+                        onClick={closeDetail}
                     >
                         <section
+                            className="complaint-modal-content"
                             onClick={(event) => event.stopPropagation()}
-                            style={{
-                                width: "min(760px, 100%)",
-                                maxHeight: "90vh",
-                                overflowY: "auto",
-                                background: "#fff",
-                                borderRadius: 16,
-                                padding: 24,
-                                boxShadow: "0 20px 60px rgba(0,0,0,.2)",
-                            }}
                         >
-                            <div
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    gap: 12,
-                                    marginBottom: 20,
-                                }}
-                            >
-                                <h2 style={{ margin: 0 }}>
-                                    Chi tiết khiếu nại #{selectedReport.id}
-                                </h2>
+                            <div className="complaint-modal-header">
+                                <div className="complaint-modal-title">
+                                    <div className="complaint-modal-icon">
+                                        <FontAwesomeIcon
+                                            icon={faClipboardList}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <h2>Chi tiết khiếu nại</h2>
+                                        <p>
+                                            Mã khiếu nại #{selectedReport.id}
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <button
                                     type="button"
+                                    className="complaint-modal-close"
                                     aria-label="Đóng"
-                                    onClick={() => setSelectedReport(null)}
-                                    style={buttonStyle("#f1f5f9", "#334155")}
+                                    onClick={closeDetail}
+                                    disabled={submitting}
                                 >
                                     <FontAwesomeIcon icon={faXmark} />
                                 </button>
                             </div>
 
-                            <div
-                                style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                                    gap: 12,
-                                    marginBottom: 20,
-                                }}
-                            >
-                                <Detail label="Tiêu đề" value={selectedReport.subject} />
-                                <Detail label="Danh mục" value={selectedReport.category} />
-                                <Detail label="Người gửi" value={selectedReport.reporterName} />
-                                <Detail label="Email" value={selectedReport.reporterEmail} />
-                                <Detail label="Mã đơn hàng" value={selectedReport.bookingCode} />
-                                <Detail label="Đối tượng được báo cáo" value={selectedReport.reportedName} />
-                                <Detail label="Vai trò đối tượng" value={selectedReport.reportedRole} />
-                                <Detail label="Ngày gửi" value={formatDate(selectedReport.createdAt)} />
+                            {error && (
+                                <div className="complaint-alert complaint-alert-error">
+                                    <FontAwesomeIcon
+                                        icon={faTriangleExclamation}
+                                    />
+                                    <span>{error}</span>
+                                </div>
+                            )}
+
+                            {notice && (
+                                <div className="complaint-alert complaint-alert-success">
+                                    <FontAwesomeIcon icon={faCheck} />
+                                    <span>{notice}</span>
+                                </div>
+                            )}
+
+                            <div className="complaint-detail-grid">
+                                <Detail
+                                    label="Tiêu đề"
+                                    value={selectedReport.subject}
+                                />
+
+                                <Detail
+                                    label="Danh mục"
+                                    value={selectedReport.category}
+                                />
+
+                                <Detail
+                                    label="Người gửi"
+                                    value={selectedReport.reporterName}
+                                />
+
+                                <Detail
+                                    label="Email người gửi"
+                                    value={selectedReport.reporterEmail}
+                                />
+
+                                <Detail
+                                    label="Mã đơn hàng"
+                                    value={selectedReport.bookingCode}
+                                />
+
+                                <Detail
+                                    label="Đối tượng được báo cáo"
+                                    value={selectedReport.reportedName}
+                                />
+
+                                <Detail
+                                    label="Vai trò đối tượng"
+                                    value={selectedReport.reportedRole}
+                                />
+
+                                <Detail
+                                    label="Ngày gửi"
+                                    value={formatDate(
+                                        selectedReport.createdAt
+                                    )}
+                                />
                             </div>
 
-                            <div style={{ marginBottom: 20 }}>
-                                <strong>Mô tả nội dung</strong>
-                                <p
-                                    style={{
-                                        whiteSpace: "pre-wrap",
-                                        lineHeight: 1.6,
-                                        background: "#f8fafc",
-                                        borderRadius: 10,
-                                        padding: 14,
-                                        marginTop: 8,
-                                    }}
-                                >
-                                    {selectedReport.description || "Không có mô tả."}
-                                </p>
+                            <div className="complaint-description-section">
+                                <h3>Nội dung khiếu nại</h3>
+
+                                <div className="complaint-description">
+                                    {selectedReport.description ||
+                                        "Không có mô tả nội dung."}
+                                </div>
                             </div>
 
                             {selectedReport.evidenceUrl && (
-                                <p style={{ marginBottom: 20 }}>
-                                    <strong>Minh chứng: </strong>
+                                <div className="complaint-evidence">
+                                    <div>
+                                        <strong>Minh chứng đính kèm</strong>
+                                        <p>
+                                            Mở liên kết để xem minh chứng
+                                            người gửi cung cấp.
+                                        </p>
+                                    </div>
+
                                     <a
                                         href={selectedReport.evidenceUrl}
                                         target="_blank"
                                         rel="noreferrer"
+                                        className="complaint-evidence-link"
                                     >
-                                        Mở minh chứng
+                                        Xem minh chứng
+                                        <FontAwesomeIcon
+                                            icon={faArrowRight}
+                                        />
                                     </a>
-                                </p>
+                                </div>
                             )}
 
                             {selectedReport.resolution && (
-                                <div style={{ marginBottom: 20 }}>
-                                    <strong>Kết quả xử lý trước đó</strong>
-                                    <p style={{ whiteSpace: "pre-wrap" }}>
+                                <div className="complaint-previous-resolution">
+                                    <h3>Kết quả xử lý trước đó</h3>
+                                    <p>
                                         {selectedReport.resolution}
                                     </p>
                                 </div>
                             )}
 
-                            <form onSubmit={saveStatus}>
-                                <label
-                                    style={{
-                                        display: "block",
-                                        fontWeight: 600,
-                                        marginBottom: 8,
-                                    }}
-                                >
-                                    Trạng thái xử lý
-                                </label>
+                            <form
+                                className="complaint-resolution-form"
+                                onSubmit={saveStatus}
+                            >
+                                <div className="complaint-form-field">
+                                    <label htmlFor="complaint-status">
+                                        Trạng thái xử lý
+                                    </label>
 
-                                <select
-                                    value={nextStatus}
-                                    onChange={(event) =>
-                                        setNextStatus(event.target.value)
-                                    }
-                                    disabled={isTerminal || submitting}
-                                    style={{
-                                        ...inputStyle,
-                                        border: "1px solid #cbd5e1",
-                                        borderRadius: 9,
-                                        padding: 12,
-                                        marginBottom: 16,
-                                    }}
-                                >
-                                    {Object.entries(STATUS_LABELS).map(
-                                        ([value, label]) => (
-                                            <option key={value} value={value}>
+                                    <select
+                                        id="complaint-status"
+                                        value={nextStatus}
+                                        onChange={(event) =>
+                                            setNextStatus(
+                                                event.target.value
+                                            )
+                                        }
+                                        disabled={
+                                            isTerminal || submitting
+                                        }
+                                    >
+                                        {Object.entries(
+                                            STATUS_LABELS
+                                        ).map(([value, label]) => (
+                                            <option
+                                                key={value}
+                                                value={value}
+                                            >
                                                 {label}
                                             </option>
-                                        )
-                                    )}
-                                </select>
+                                        ))}
+                                    </select>
+                                </div>
 
-                                <label
-                                    style={{
-                                        display: "block",
-                                        fontWeight: 600,
-                                        marginBottom: 8,
-                                    }}
-                                >
-                                    Kết quả / ghi chú xử lý
-                                </label>
+                                <div className="complaint-form-field">
+                                    <label htmlFor="complaint-resolution">
+                                        Kết quả / ghi chú xử lý
+                                    </label>
 
-                                <textarea
-                                    value={resolution}
-                                    onChange={(event) =>
-                                        setResolution(event.target.value)
-                                    }
-                                    disabled={isTerminal || submitting}
-                                    rows={4}
-                                    placeholder="Nhập kết quả xử lý hoặc lý do từ chối..."
-                                    style={{
-                                        ...inputStyle,
-                                        border: "1px solid #cbd5e1",
-                                        borderRadius: 9,
-                                        padding: 12,
-                                        resize: "vertical",
-                                        marginBottom: 16,
-                                    }}
-                                />
+                                    <textarea
+                                        id="complaint-resolution"
+                                        value={resolution}
+                                        onChange={(event) =>
+                                            setResolution(
+                                                event.target.value
+                                            )
+                                        }
+                                        disabled={
+                                            isTerminal || submitting
+                                        }
+                                        rows={4}
+                                        placeholder="Nhập kết quả xử lý hoặc lý do từ chối..."
+                                    />
+                                </div>
 
-                                {error && (
-                                    <div style={messageStyle("#fee2e2", "#991b1b")}>
-                                        {error}
+                                {isTerminal && (
+                                    <div className="complaint-terminal-note">
+                                        <FontAwesomeIcon icon={faCheck} />
+                                        Khiếu nại đã kết thúc xử lý và không
+                                        thể cập nhật thêm.
                                     </div>
                                 )}
 
-                                {isTerminal && (
-                                    <p style={{ color: "#64748b" }}>
-                                        Báo cáo đã kết thúc xử lý nên không thể cập nhật thêm.
-                                    </p>
-                                )}
-
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        justifyContent: "flex-end",
-                                        gap: 10,
-                                        flexWrap: "wrap",
-                                    }}
-                                >
+                                <div className="complaint-modal-actions">
                                     <button
                                         type="button"
-                                        onClick={() => setSelectedReport(null)}
-                                        style={buttonStyle("#f1f5f9", "#334155")}
+                                        className="complaint-btn complaint-btn-secondary"
+                                        onClick={closeDetail}
+                                        disabled={submitting}
                                     >
                                         Đóng
                                     </button>
@@ -685,12 +788,25 @@ function AdminComplaintManagement() {
                                     {!isTerminal && (
                                         <button
                                             type="submit"
+                                            className="complaint-btn complaint-btn-primary"
                                             disabled={submitting}
-                                            style={buttonStyle("#2563eb")}
                                         >
-                                            {submitting
-                                                ? "Đang lưu..."
-                                                : "Lưu cập nhật"}
+                                            {submitting ? (
+                                                <>
+                                                    <FontAwesomeIcon
+                                                        icon={faRotate}
+                                                        className="complaint-spin"
+                                                    />
+                                                    Đang lưu...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <FontAwesomeIcon
+                                                        icon={faCheck}
+                                                    />
+                                                    Lưu cập nhật
+                                                </>
+                                            )}
                                         </button>
                                     )}
                                 </div>
@@ -703,122 +819,40 @@ function AdminComplaintManagement() {
     );
 }
 
-function StatCard({ icon, label, value }) {
+function StatCard({ icon, label, value, variant }) {
     return (
-        <div
-            style={{
-                background: "#fff",
-                border: "1px solid #e2e8f0",
-                borderRadius: 14,
-                padding: 20,
-            }}
-        >
-            <div
-                style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    color: "#64748b",
-                }}
-            >
+        <div className={`complaint-stat-card complaint-stat-${variant}`}>
+            <div className="complaint-stat-top">
                 <span>{label}</span>
-                <FontAwesomeIcon icon={icon} />
+
+                <div className="complaint-stat-icon">
+                    <FontAwesomeIcon icon={icon} />
+                </div>
             </div>
-            <strong
-                style={{
-                    display: "block",
-                    marginTop: 12,
-                    fontSize: 28,
-                    color: "#0f172a",
-                }}
-            >
+
+            <strong className="complaint-stat-value">
                 {value}
             </strong>
+
+            <span className="complaint-stat-caption">
+                Theo dữ liệu hệ thống
+            </span>
         </div>
     );
 }
 
 function Detail({ label, value }) {
     return (
-        <div
-            style={{
-                background: "#f8fafc",
-                padding: 12,
-                borderRadius: 9,
-                minWidth: 0,
-            }}
-        >
-            <div style={{ color: "#64748b", fontSize: 12, marginBottom: 5 }}>
+        <div className="complaint-detail-item">
+            <span className="complaint-detail-label">
                 {label}
-            </div>
-            <div style={{ overflowWrap: "anywhere", fontWeight: 500 }}>
+            </span>
+
+            <strong className="complaint-detail-value">
                 {value || "—"}
-            </div>
+            </strong>
         </div>
     );
 }
-
-function buttonStyle(background, color = "#fff") {
-    return {
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        border: "none",
-        borderRadius: 8,
-        padding: "10px 14px",
-        background,
-        color,
-        fontWeight: 600,
-        cursor: "pointer",
-    };
-}
-
-function messageStyle(background, color) {
-    return {
-        background,
-        color,
-        borderRadius: 9,
-        padding: 12,
-        marginBottom: 16,
-    };
-}
-
-const inputStyle = {
-    width: "100%",
-    boxSizing: "border-box",
-    outline: "none",
-    font: "inherit",
-    background: "#fff",
-};
-
-const thStyle = {
-    textAlign: "left",
-    padding: "13px 12px",
-    background: "#f8fafc",
-    color: "#475569",
-    fontSize: 13,
-    borderBottom: "1px solid #e2e8f0",
-    whiteSpace: "nowrap",
-};
-
-const tdStyle = {
-    padding: "14px 12px",
-    borderBottom: "1px solid #e2e8f0",
-    verticalAlign: "top",
-    fontSize: 14,
-};
-
-const mutedStyle = {
-    color: "#64748b",
-    fontSize: 12,
-    marginTop: 5,
-};
-
-const emptyStyle = {
-    padding: 28,
-    textAlign: "center",
-    color: "#64748b",
-};
 
 export default AdminComplaintManagement;

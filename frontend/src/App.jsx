@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+import { BrowserRouter, Routes, Route} from "react-router-dom";
 import Home from "./pages/home";
 import Login from "./pages/login";
 import Register from "./pages/register";
@@ -16,10 +17,9 @@ import AdminServices from "./pages/admin/AdminServices";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminTransactions from "./pages/admin/AdminTransactions";
-import AdminReports from "./pages/admin/AdminReports";
 import AdminComplaintManagement from "./pages/admin/AdminComplaintManagement";
 import ForgotPassword from "./pages/forgot-password";
-import AdminRefundManagement from "./components/AdminRefundManagement";
+import AdminRefundManagement from "./pages/admin/AdminRefundManagement.jsx";
 import PaymentResult from "./pages/PaymentResult";
 
 function App() {
@@ -32,9 +32,9 @@ function App() {
                 <Route path="/admin/providers" element={<AdminProviders />} />
                 <Route path="/admin/orders" element={<AdminOrders />} />
                 <Route path="/admin/transactions" element={<AdminTransactions />} />
-                <Route path="/admin/reports" element={<AdminReports />} />
                 <Route path="/admin/complaints" element={<AdminComplaintManagement />} />
                 <Route path="/admin/refunds" element={<AdminRefundManagement />} />
+
 
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />

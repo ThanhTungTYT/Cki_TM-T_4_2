@@ -88,6 +88,16 @@ public class AdminController {
             endDate = today;
         }
 
+        long daysBetween =
+                ChronoUnit.DAYS.between(startDate, endDate) + 1;
+
+        if (daysBetween > 366) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Khoảng ngày không được vượt quá 366 ngày."
+            );
+        }
+
         LocalDateTime start = startDate.atStartOfDay();
         LocalDateTime endExclusive = endDate.plusDays(1).atStartOfDay();
 
@@ -105,8 +115,20 @@ public class AdminController {
                                 start,
                                 endExclusive
                         );
+        List<Booking> allBookings = bookingRepository.findAll();
 
-        long completedOrders = completedRevenueBookings.size();
+        BigDecimal allTimeServiceValue = BigDecimal.ZERO;
+
+        for (Booking booking : allBookings) {
+            if ("COMPLETED".equalsIgnoreCase(booking.getStatus())
+                    && booking.getCompletedAt() != null
+                    && booking.getTotalAmount() != null) {
+                allTimeServiceValue =
+                        allTimeServiceValue.add(booking.getTotalAmount());
+            }
+        }
+
+        long allTimeOrders = allBookings.size();
 
         BigDecimal totalRevenue = BigDecimal.ZERO;
 
@@ -118,9 +140,6 @@ public class AdminController {
             }
         }
 
-        long daysBetween =
-                ChronoUnit.DAYS.between(startDate, endDate) + 1;
-
         boolean monthly = "365".equals(period)
                 || ("custom".equals(period) && daysBetween > 60);
 
@@ -128,16 +147,35 @@ public class AdminController {
                 || ("custom".equals(period)
                 && daysBetween > 14 && daysBetween <= 60);
 
-        Map<String, BigDecimal> chart = new LinkedHashMap<>();
+        Map<String, BigDecimal> chartRevenue = new LinkedHashMap<>();
+        Map<String, Long> chartOrderCounts = new LinkedHashMap<>();
 
         for (LocalDate date = startDate;
              !date.isAfter(endDate);
              date = date.plusDays(1)) {
 
-            chart.putIfAbsent(
-                    bucketKey(date, monthly, weekly),
-                    BigDecimal.ZERO
-            );
+            String key = bucketKey(date, monthly, weekly);
+
+            chartRevenue.putIfAbsent(key, BigDecimal.ZERO);
+            chartOrderCounts.putIfAbsent(key, 0L);
+        }
+
+        for (Booking booking : bookings) {
+            if (booking.getCreatedAt() == null) {
+                continue;
+            }
+
+            LocalDate createdDate =
+                    booking.getCreatedAt().toLocalDate();
+
+            String key = bucketKey(createdDate, monthly, weekly);
+
+            if (chartOrderCounts.containsKey(key)) {
+                chartOrderCounts.put(
+                        key,
+                        chartOrderCounts.get(key) + 1
+                );
+            }
         }
 
         for (Booking booking : completedRevenueBookings) {
@@ -155,30 +193,32 @@ public class AdminController {
                     weekly
             );
 
-            if (chart.containsKey(key)) {
-                chart.put(
+            if (chartRevenue.containsKey(key)) {
+                chartRevenue.put(
                         key,
-                        chart.get(key).add(booking.getTotalAmount())
+                        chartRevenue.get(key).add(
+                                booking.getTotalAmount()
+                        )
                 );
             }
         }
 
         List<Map<String, Object>> chartData = new ArrayList<>();
 
-        for (Map.Entry<String, BigDecimal> entry : chart.entrySet()) {
+        for (String key : chartRevenue.keySet()) {
             Map<String, Object> item = new LinkedHashMap<>();
 
             item.put(
                     "label",
-                    bucketLabel(
-                            entry.getKey(),
-                            period,
-                            monthly,
-                            weekly
-                    )
+                    bucketLabel(key, period, monthly, weekly)
+            );
+            item.put("value", chartRevenue.get(key));
+            item.put("revenue", chartRevenue.get(key));
+            item.put(
+                    "orderCount",
+                    chartOrderCounts.getOrDefault(key, 0L)
             );
 
-            item.put("value", entry.getValue());
             chartData.add(item);
         }
 
@@ -236,6 +276,8 @@ public class AdminController {
                 .mapToLong(Long::longValue)
                 .sum();
 
+        long completedOrders = statusCounts.get("COMPLETED");
+
         List<Map<String, Object>> orderStats = new ArrayList<>();
 
         String[] statusKeys = {
@@ -264,9 +306,7 @@ public class AdminController {
 
             double percentage = statusTotal == 0
                     ? 0
-                    : Math.round(
-                    count * 10000.0 / statusTotal
-            ) / 100.0;
+                    : Math.round(count * 10000.0 / statusTotal) / 100.0;
 
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("label", statusLabels[i]);
@@ -283,12 +323,16 @@ public class AdminController {
         result.put("period", period);
         result.put("fromDate", startDate);
         result.put("toDate", endDate);
+        result.put("totalRevenue", totalRevenue);
         result.put("totalServiceValue", totalRevenue);
         result.put("totalOrders", bookings.size());
+
+        result.put("allTimeServiceValue", allTimeServiceValue);
+        result.put("allTimeOrders", allTimeOrders);
+
         result.put("completedOrders", completedOrders);
         result.put("orderStats", orderStats);
         result.put("chartData", chartData);
-
         return ResponseEntity.ok(result);
     }
 
