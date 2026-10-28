@@ -12,8 +12,8 @@ import {
     faFileInvoiceDollar
 } from '@fortawesome/free-solid-svg-icons';
 
-import AdminLayout from "../pages/admin/AdminLayout";
-import { refundApi } from '../services/api';
+import AdminLayout from "./AdminLayout.jsx";
+import { refundApi } from '../../services/api.js';
 import './AdminRefundManagement.css';
 
 const STATUS_OPTIONS = [

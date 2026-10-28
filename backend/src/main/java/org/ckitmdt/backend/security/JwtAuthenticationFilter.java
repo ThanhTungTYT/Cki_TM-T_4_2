@@ -1,4 +1,3 @@
-
 package org.ckitmdt.backend.security;
 
 import jakarta.servlet.FilterChain;
@@ -18,6 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 @Component
 @RequiredArgsConstructor
@@ -34,8 +34,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String authHeader = request.getHeader("Authorization");
+        String requestUri = request.getRequestURI();
 
-        // Không có Bearer token thì để Spring Security xử lý tiếp.
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -43,36 +43,65 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = authHeader.substring(7);
 
-        // Token không hợp lệ thì không xác thực người dùng.
         if (!jwtService.isTokenValid(token)) {
             SecurityContextHolder.clearContext();
+
+            System.out.println(
+                    "JWT DEBUG | URI=" + requestUri
+                            + " | TOKEN_INVALID"
+            );
+
             filterChain.doFilter(request, response);
             return;
         }
 
         String email = jwtService.extractEmail(token);
 
-        // Luôn kiểm tra tài khoản mới nhất trong database.
         User user = userRepository.findByEmail(email).orElse(null);
 
-        // Tài khoản không tồn tại hoặc đã bị khóa.
-        if (user == null || !"ACTIVE".equalsIgnoreCase(user.getStatus())) {
+        if (user == null) {
             SecurityContextHolder.clearContext();
+
+            System.out.println(
+                    "JWT DEBUG | URI=" + requestUri
+                            + " | USER_NOT_FOUND"
+            );
 
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.getWriter().write(
-                    "{\"message\":\"Tài khoản không tồn tại hoặc đã bị khóa.\"}"
+                    "{\"message\":\"Tài khoản không tồn tại.\"}"
             );
             return;
         }
 
-        // Lấy role mới nhất từ database thay vì tin role trong token.
+        if (!"ACTIVE".equalsIgnoreCase(user.getStatus())) {
+            SecurityContextHolder.clearContext();
+
+            System.out.println(
+                    "JWT DEBUG | URI=" + requestUri
+                            + " | ACCOUNT_INACTIVE"
+            );
+
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.getWriter().write(
+                    "{\"message\":\"Tài khoản đã bị khóa hoặc không hoạt động.\"}"
+            );
+            return;
+        }
+
         String role = user.getRole();
 
         if (role == null || role.isBlank()) {
             SecurityContextHolder.clearContext();
+
+            System.out.println(
+                    "JWT DEBUG | URI=" + requestUri
+                            + " | ROLE_EMPTY"
+            );
 
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
@@ -83,7 +112,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Tránh tạo ROLE_ROLE_ADMIN nếu role đã có tiền tố ROLE_.
+        role = role.trim().toUpperCase(Locale.ROOT);
+
         if (role.startsWith("ROLE_")) {
             role = role.substring(5);
         }
@@ -97,9 +127,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         )
                 );
 
-        SecurityContextHolder
-                .getContext()
-                .setAuthentication(authentication);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        System.out.println(
+                "JWT DEBUG | URI=" + requestUri
+                        + " | EMAIL=" + user.getEmail()
+                        + " | ROLE=" + role
+                        + " | AUTHORITIES=" + authentication.getAuthorities()
+        );
 
         filterChain.doFilter(request, response);
     }
