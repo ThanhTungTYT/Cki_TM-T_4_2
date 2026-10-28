@@ -54,9 +54,8 @@ public class VNPayController {
     public ResponseEntity<Map<String, String>> ipn(
             @RequestParam Map<String, String> params
     ) {
-        return ResponseEntity.ok(
-                ipnService.process(params)
-        );
+        Map<String, String> result = ipnService.process(params);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/status/{txnRef}")

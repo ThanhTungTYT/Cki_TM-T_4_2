@@ -9,6 +9,7 @@ import {
     faCheck,
     faTruck,
     faArrowsRotate,
+    faMoneyBillWave,
 } from "@fortawesome/free-solid-svg-icons";
 import "./AdminOrders.css";
 
@@ -113,6 +114,21 @@ const getOrderServiceNames = (order) => {
     return "Chưa có thông tin dịch vụ";
 };
 
+const getOrderActions = (order) => {
+    const actions = [...(ACTIONS_BY_STATUS[order.status] || [])];
+    if (order.paymentMethod === "CASH"
+        && order.payment === "UNPAID"
+        && ["PENDING_COMPLETION", "COMPLETED"].includes(order.status)) {
+        actions.push({
+            action: "provider-confirm-cash-payment",
+            label: "Xác nhận đã thu tiền mặt",
+            icon: faMoneyBillWave,
+            style: "approve",
+        });
+    }
+    return actions;
+};
+
 function mapOrder(order) {
     return {
         ...order,
@@ -126,6 +142,7 @@ function mapOrder(order) {
         amount: Number(order.totalAmount) || 0,
         status: String(order.status || "").toUpperCase(),
         payment: String(order.paymentStatus || "UNPAID").toUpperCase(),
+        paymentMethod: String(order.paymentMethod || "VNPAY").toUpperCase(),
     };
 }
 
@@ -283,6 +300,7 @@ function AdminOrders() {
             "start-job": "bắt đầu thực hiện",
             "submit-completion": "gửi yêu cầu nghiệm thu",
             "customer-accept": "xác nhận hoàn thành đơn hàng",
+            "provider-confirm-cash-payment": "xác nhận đã thu tiền mặt",
         };
 
         const label = actionLabels[action] || action;
@@ -499,7 +517,7 @@ function AdminOrders() {
                             )}
 
                             {!loading && filteredOrders.map((order) => {
-                                const actions = ACTIONS_BY_STATUS[order.status] || [];
+                                const actions = getOrderActions(order);
 
                                 return (
                                     <tr key={order.id}>
@@ -624,6 +642,7 @@ function AdminOrders() {
                                 <p><strong>Ngày đặt:</strong> {formatDate(selectedOrder.createdAt)}</p>
                                 <p><strong>Lịch thực hiện:</strong> {formatDate(selectedOrder.date)} {formatTime(selectedOrder.date)}</p>
                                 <p><strong>Tổng tiền:</strong> {formatCurrency(selectedOrder.amount)}</p>
+                                <p><strong>Phương thức:</strong> {selectedOrder.paymentMethod === "CASH" ? "Tiền mặt khi hoàn tất" : "VNPay"}</p>
                                 <p><strong>Thanh toán:</strong> {PAYMENT_LABELS[selectedOrder.payment] || "Chưa thanh toán"}</p>
                                 <p><strong>Trạng thái:</strong> {getStatusLabel(selectedOrder.status)}</p>
                                 <p><strong>Ghi chú khách hàng:</strong> {selectedOrder.customerNote || "Không có"}</p>
@@ -663,7 +682,7 @@ function AdminOrders() {
                             </div>
 
                             <div className="order-modal-footer">
-                                {(ACTIONS_BY_STATUS[selectedOrder.status] || []).map((action) => (
+                                {getOrderActions(selectedOrder).map((action) => (
                                     <button
                                         key={action.action}
                                         className={

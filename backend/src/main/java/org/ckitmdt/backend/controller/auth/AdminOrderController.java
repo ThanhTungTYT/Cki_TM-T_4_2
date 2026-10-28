@@ -70,6 +70,8 @@ public class AdminOrderController {
             item.put("discountAmount", response.getDiscountAmount());
             item.put("totalAmount", response.getTotalAmount());
             item.put("status", response.getStatus());
+            item.put("paymentMethod", response.getPaymentMethod());
+            item.put("paymentStatus", response.getPaymentStatus());
             item.put("customerNote", response.getCustomerNote());
             item.put("cancelReason", response.getCancelReason());
             item.put("version", response.getVersion());
@@ -127,6 +129,8 @@ public class AdminOrderController {
         result.put("discountAmount", response.getDiscountAmount());
         result.put("totalAmount", response.getTotalAmount());
         result.put("status", response.getStatus());
+        result.put("paymentMethod", response.getPaymentMethod());
+        result.put("paymentStatus", response.getPaymentStatus());
         result.put("customerNote", response.getCustomerNote());
         result.put("cancelReason", response.getCancelReason());
         result.put("version", response.getVersion());

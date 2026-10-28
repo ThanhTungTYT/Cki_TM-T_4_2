@@ -43,6 +43,13 @@ function Profile() {
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
+    const [addresses, setAddresses] = useState([]);
+    const [addressModalOpen, setAddressModalOpen] = useState(false);
+    const [editingAddress, setEditingAddress] = useState(null);
+    const [addressSaving, setAddressSaving] = useState(false);
+    const [addressError, setAddressError] = useState("");
+    const emptyAddress = { receiverName: "", phone: "", province: "", district: "", ward: "", streetAddress: "", isDefault: false };
+    const [addressForm, setAddressForm] = useState(emptyAddress);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -110,6 +117,72 @@ function Profile() {
         };
         fetchProfile();
     }, [navigate]);
+    useEffect(() => {
+        const token = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
+        if (!token) return;
+        fetch("http://localhost:8080/api/users/me/addresses", {
+            headers: { Authorization: `Bearer ${token}` }
+        }).then(async (response) => {
+            if (!response.ok) throw new Error("Không thể tải danh sách địa chỉ");
+            setAddresses(await response.json());
+        }).catch((err) => setAddressError(err.message));
+    }, []);
+
+    const openAddressModal = (address = null) => {
+        setEditingAddress(address);
+        setAddressForm(address ? { ...emptyAddress, ...address } : { ...emptyAddress });
+        setAddressError("");
+        setAddressModalOpen(true);
+    };
+
+    const saveAddress = async (event) => {
+        event.preventDefault();
+        setAddressError("");
+        setAddressSaving(true);
+        try {
+            const token = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
+            const response = await fetch(`http://localhost:8080/api/users/me/addresses${editingAddress ? `/${editingAddress.id}` : ""}`, {
+                method: editingAddress ? "PUT" : "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify(addressForm)
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.message || data.detail || "Không thể lưu địa chỉ");
+            setAddresses((previous) => {
+                const next = editingAddress ? previous.map((item) => item.id === data.id ? data : item) : [data, ...previous];
+                return data.isDefault ? next.map((item) => item.id === data.id ? item : { ...item, isDefault: false }) : next;
+            });
+            setAddressModalOpen(false);
+        } catch (err) {
+            setAddressError(err.message);
+        } finally {
+            setAddressSaving(false);
+        }
+    };
+
+    const deleteAddress = async (address) => {
+        if (!window.confirm("Bạn có chắc muốn xóa địa chỉ này không?")) return;
+        setAddressError("");
+        try {
+            const token = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
+            const response = await fetch(`http://localhost:8080/api/users/me/addresses/${address.id}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.message || data.detail || "Không thể xóa địa chỉ");
+            setAddresses((previous) => {
+                const remaining = previous.filter((item) => item.id !== address.id);
+                if (address.isDefault && remaining.length > 0) {
+                    return remaining.map((item, index) => ({ ...item, isDefault: index === 0 }));
+                }
+                return remaining;
+            });
+        } catch (err) {
+            setAddressError(err.message);
+        }
+    };
+
     const handleSave = async () => {
         setMessage("");
         setError("");
@@ -300,12 +373,58 @@ function Profile() {
                                     <h3>Địa chỉ đã lưu</h3>
                                     <p className="card-subtitle">Danh sách các địa điểm dọn dẹp yêu thích giúp đặt lịch tới nhanh thời gian đặt lịch dọn lần sau.</p>
                                 </div>
-                                <button className="btn-add-address">+ Thêm địa chỉ mới</button>
+                                <button type="button" className="btn-add-address" onClick={() => openAddressModal()}>+ Thêm địa chỉ mới</button>
                             </div>
 
                             <div className="address-list">
+                                {addressError && !addressModalOpen && <p className="address-error">{addressError}</p>}
+                                {addresses.length === 0 && <p className="address-empty">Bạn chưa lưu địa chỉ nào.</p>}
+                                {addresses.map((address) => (
+                                    <article className="saved-address" key={address.id}>
+                                        <div className="saved-address-details">
+                                            <div className="saved-address-heading">
+                                                <strong>{address.receiverName}</strong>
+                                                {address.isDefault && <span className="default-address-badge">Mặc định</span>}
+                                            </div>
+                                            <span>{address.phone}</span>
+                                            <span>{[address.streetAddress, address.ward, address.district, address.province].filter(Boolean).join(", ")}</span>
+                                        </div>
+                                        <div className="saved-address-actions">
+                                            <button type="button" className="btn-edit-address" onClick={() => openAddressModal(address)}>Sửa</button>
+                                            <button type="button" className="btn-delete-address" onClick={() => deleteAddress(address)}>Xóa</button>
+                                        </div>
+                                    </article>
+                                ))}
                             </div>
                         </div>
+
+                        {addressModalOpen && (
+                            <div className="address-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setAddressModalOpen(false); }}>
+                                <form className="address-modal" onSubmit={saveAddress}>
+                                    <div className="address-modal-header">
+                                        <h3>{editingAddress ? "Sửa địa chỉ" : "Thêm địa chỉ mới"}</h3>
+                                        <button type="button" className="address-modal-close" aria-label="Đóng" onClick={() => setAddressModalOpen(false)}>×</button>
+                                    </div>
+                                    <div className="address-modal-grid">
+                                        {[["receiverName", "Tên người nhận"], ["phone", "Số điện thoại"], ["province", "Tỉnh / Thành phố"], ["district", "Quận / Huyện"], ["ward", "Phường / Xã"], ["streetAddress", "Số nhà, tên đường"]].map(([name, label]) => (
+                                            <label className="address-modal-field" key={name}>
+                                                <span>{label}</span>
+                                                <input required name={name} value={addressForm[name]} onChange={(event) => setAddressForm((form) => ({ ...form, [name]: event.target.value }))} />
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <label className="address-default-option">
+                                        <input type="checkbox" checked={Boolean(addressForm.isDefault)} onChange={(event) => setAddressForm((form) => ({ ...form, isDefault: event.target.checked }))} />
+                                        Đặt làm địa chỉ mặc định
+                                    </label>
+                                    {addressError && <p className="address-error">{addressError}</p>}
+                                    <div className="address-modal-actions">
+                                        <button type="button" className="btn-cancel" onClick={() => setAddressModalOpen(false)}>Hủy</button>
+                                        <button type="submit" className="btn-save" disabled={addressSaving}>{addressSaving ? "Đang lưu..." : "Lưu địa chỉ"}</button>
+                                    </div>
+                                </form>
+                            </div>
+                        )}
 
 
                         <div className="profile-form-actions">

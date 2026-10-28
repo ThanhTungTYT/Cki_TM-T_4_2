@@ -26,6 +26,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByIdAndCustomerId(Long id, Long customerId);
 
+    boolean existsByAddress_Id(Long addressId);
+
     long countByPartner_IdAndStatusNotInAndScheduledStartBeforeAndScheduledEndAfter(
             Long partnerId,
             Collection<String> statuses,
@@ -88,4 +90,6 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     Optional<Booking> findByIdForUpdate(
             @Param("bookingId") Long bookingId
     );
+
+    List<Booking> findByStatusAndHoldExpiresAtBefore(String status, LocalDateTime expiresAt);
 }

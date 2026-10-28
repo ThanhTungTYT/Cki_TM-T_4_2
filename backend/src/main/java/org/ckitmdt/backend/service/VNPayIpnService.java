@@ -3,6 +3,9 @@ package org.ckitmdt.backend.service;
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.entity.Payment;
 import org.ckitmdt.backend.repository.PaymentRepository;
+import org.ckitmdt.backend.dto.booking.BookingActionRequest;
+import org.ckitmdt.backend.dto.booking.BookingActionEnum;
+import org.ckitmdt.backend.service.booking.BookingStateEngine;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +19,7 @@ public class VNPayIpnService {
 
     private final VNPayService vnPayService;
     private final PaymentRepository paymentRepository;
+    private final BookingStateEngine bookingStateEngine;
 
     @Transactional
     public Map<String, String> process(
@@ -82,6 +86,17 @@ public class VNPayIpnService {
                 return result("99", "Missing transaction number");
             }
 
+            if (payment.getBooking() == null
+                    || !"PENDING_PAYMENT".equals(payment.getBooking().getStatus())
+                    || (payment.getBooking().getHoldExpiresAt() != null
+                    && LocalDateTime.now().isAfter(payment.getBooking().getHoldExpiresAt()))) {
+                payment.setStatus("REVIEW");
+                payment.setTransactionCode(transactionNo);
+                payment.setPaidAt(LocalDateTime.now());
+                paymentRepository.save(payment);
+                return result("00", "Confirm Success");
+            }
+
             boolean alreadyPaid =
                     paymentRepository.existsByBooking_IdAndStatus(
                             payment.getBooking().getId(),
@@ -92,6 +107,7 @@ public class VNPayIpnService {
                 payment.setStatus("REVIEW");
                 payment.setTransactionCode(transactionNo);
                 paymentRepository.save(payment);
+                moveBookingToProviderQueue(payment);
 
                 return result("00", "Confirm Success");
             }
@@ -110,7 +126,22 @@ public class VNPayIpnService {
 
         paymentRepository.save(payment);
 
+        if ("SUCCESS".equals(payment.getStatus())) moveBookingToProviderQueue(payment);
+
         return result("00", "Confirm Success");
+    }
+
+    private void moveBookingToProviderQueue(Payment payment) {
+        if (payment.getBooking() == null
+                || !"PENDING_PAYMENT".equals(payment.getBooking().getStatus())) return;
+        bookingStateEngine.executeAction(
+                payment.getBooking().getId(),
+                BookingActionRequest.builder()
+                        .action(BookingActionEnum.CUSTOMER_PAY_SUCCESS.name())
+                        .note("Cổng VNPay đã xác nhận thanh toán thành công.")
+                        .build(),
+                null
+        );
     }
 
     private Map<String, String> result(

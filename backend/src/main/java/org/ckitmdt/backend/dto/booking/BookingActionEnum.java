@@ -9,5 +9,6 @@ public enum BookingActionEnum {
     START_JOB,                 // Nhân sự bắt đầu làm (check-in GPS)
     SUBMIT_COMPLETION,         // Nhân sự báo hoàn thành
     CUSTOMER_ACCEPT,           // Khách hàng nghiệm thu & xác nhận hoàn thành
+    PROVIDER_CONFIRM_CASH_PAYMENT, // Đối tác xác nhận đã thu tiền mặt
     CANCEL                     // Hủy đơn theo chính sách
 }

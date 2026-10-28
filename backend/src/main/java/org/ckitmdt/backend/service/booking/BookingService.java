@@ -31,6 +31,7 @@ public class BookingService {
     private final ServicePackageRepository servicePackageRepository;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
+    private final PaymentRepository paymentRepository;
 
     /**
      * Báo giá dịch vụ & kiểm tra năng lực rảnh (Quote & Snapshot Preview - CN07)
@@ -134,6 +135,14 @@ public class BookingService {
 
         User customer = getUserByEmail(userEmail);
 
+        String paymentMethod = request.getPaymentMethod() == null
+                ? "VNPAY"
+                : request.getPaymentMethod().trim().toUpperCase(Locale.ROOT);
+        if (!List.of("VNPAY", "CASH").contains(paymentMethod)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phương thức thanh toán không được hỗ trợ");
+        }
+        boolean cashPayment = "CASH".equals(paymentMethod);
+
         Partner partner = partnerRepository.findById(request.getPartnerId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy nhà cung cấp"));
 
@@ -170,9 +179,9 @@ public class BookingService {
                 .discountAmount(quote.getDiscountAmount())
                 .pointsDiscount(BigDecimal.ZERO)
                 .totalAmount(quote.getTotalAmount())
-                .status(BookingStatusEnum.PENDING_PAYMENT.name())
+                .status(cashPayment ? BookingStatusEnum.PENDING_PROVIDER.name() : BookingStatusEnum.PENDING_PAYMENT.name())
                 .idempotencyKey(request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank() ? request.getIdempotencyKey().trim() : null)
-                .holdExpiresAt(LocalDateTime.now().plusMinutes(15)) // Giữ chỗ 15 phút
+                .holdExpiresAt(cashPayment ? null : LocalDateTime.now().plusMinutes(15))
                 .version(0L)
                 .customerNote(request.getCustomerNote())
                 .createdAt(LocalDateTime.now())
@@ -213,12 +222,25 @@ public class BookingService {
         BookingStatusHistory initialHistory = BookingStatusHistory.builder()
                 .booking(savedBooking)
                 .oldStatus(null)
-                .newStatus(BookingStatusEnum.PENDING_PAYMENT.name())
+                .newStatus(savedBooking.getStatus())
                 .changedBy(customer)
-                .note("Khởi tạo đơn đặt dịch vụ và giữ chỗ 15 phút")
+                .note(cashPayment
+                        ? "Khởi tạo đơn đặt dịch vụ, thanh toán tiền mặt sau khi hoàn tất."
+                        : "Khởi tạo đơn đặt dịch vụ và giữ chỗ 15 phút để thanh toán VNPay.")
                 .createdAt(LocalDateTime.now())
                 .build();
         bookingStatusHistoryRepository.save(initialHistory);
+
+        if (cashPayment) {
+            Payment payment = new Payment();
+            payment.setBooking(savedBooking);
+            payment.setPaymentMethod("CASH_ON_SERVICE");
+            payment.setPaymentProvider("CASH");
+            payment.setAmount(savedBooking.getTotalAmount());
+            payment.setStatus("PENDING");
+            payment.setCreatedAt(LocalDateTime.now());
+            paymentRepository.save(payment);
+        }
 
         // 5. Tự động dọn dẹp các món của Provider này khỏi giỏ hàng của khách (nếu có)
         try {

@@ -5,6 +5,7 @@ import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.UserRepository;
+import org.ckitmdt.backend.service.booking.BookingStateEngine;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -17,6 +18,7 @@ public class BookingPaymentService {
 
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
+    private final BookingStateEngine bookingStateEngine;
 
     private static final Set<String> INVALID_STATUSES =
             Set.of("CANCELLED", "EXPIRED", "REJECTED");
@@ -43,17 +45,17 @@ public class BookingPaymentService {
             throw new SecurityException("Access denied");
         }
 
-        if (booking.getStatus() == null ||
-                INVALID_STATUSES.contains(booking.getStatus())) {
+        if (booking.getStatus() == null || INVALID_STATUSES.contains(booking.getStatus())
+                || !"PENDING_PAYMENT".equals(booking.getStatus())) {
             throw new IllegalStateException(
-                    "Booking cannot be paid"
+                    "Only bookings awaiting payment can be paid"
             );
         }
 
-        if ("HELD".equals(booking.getStatus())
-                && booking.getHoldExpiresAt() != null
+        if (booking.getHoldExpiresAt() != null
                 && LocalDateTime.now()
                 .isAfter(booking.getHoldExpiresAt())) {
+            bookingStateEngine.expirePendingPayment(booking.getId());
             throw new IllegalStateException(
                     "Booking reservation expired"
             );
