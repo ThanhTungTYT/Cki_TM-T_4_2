@@ -8,7 +8,6 @@ import {
     faLocationDot,
     faCartPlus
 } from '@fortawesome/free-solid-svg-icons';
-
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ServicePackageModal from '../components/ServicePackageModal';
@@ -25,11 +24,9 @@ function formatPrice(value) {
 function Services() {
     const navigate = useNavigate();
     const dispatch = useCartDispatch();
-
     const [modalService, setModalService] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [bookingNow, setBookingNow] = useState(false);
-
     const [keyword, setKeyword] = useState('');
     const [selectedCategories, setSelectedCategories] = useState([]);
     const [selectedArea, setSelectedArea] = useState('');
@@ -48,23 +45,28 @@ function Services() {
 
     useEffect(() => {
         const controller = new AbortController();
+
         publicServicesApi.getFilters({ signal: controller.signal })
-            .then((options) => {
+            .then(options => {
                 setFilterOptions(options);
                 setMaxPrice(options.priceLimit ?? 0);
             })
-            .catch((error) => {
+            .catch(error => {
                 if (error.name !== 'AbortError') setLoadError(error.message);
             });
+
         return () => controller.abort();
     }, [retryKey]);
 
     useEffect(() => {
         if (!filterOptions) return undefined;
+
         const controller = new AbortController();
+
         const timer = setTimeout(() => {
             setIsLoading(true);
             setLoadError('');
+
             publicServicesApi.search({
                 keyword: keyword.trim(),
                 category: selectedCategories.join(','),
@@ -76,24 +78,35 @@ function Services() {
                 page: currentPage - 1,
                 size: PAGE_SIZE
             }, { signal: controller.signal })
-                .then((result) => {
+                .then(result => {
                     setServices(result.content || []);
                     setTotalServices(result.totalElements || 0);
                     setTotalPages(result.totalPages || 0);
                 })
-                .catch((error) => {
+                .catch(error => {
                     if (error.name !== 'AbortError') setLoadError(error.message);
                 })
                 .finally(() => {
                     if (!controller.signal.aborted) setIsLoading(false);
                 });
         }, keyword.trim() ? 250 : 0);
+
         return () => {
             clearTimeout(timer);
             controller.abort();
         };
-    }, [filterOptions, keyword, selectedCategories, selectedArea, maxPrice,
-        minRating, selectedPricingTypes, sortBy, currentPage, retryKey]);
+    }, [
+        filterOptions,
+        keyword,
+        selectedCategories,
+        selectedArea,
+        maxPrice,
+        minRating,
+        selectedPricingTypes,
+        sortBy,
+        currentPage,
+        retryKey
+    ]);
 
     const handleOpenModal = (service, goToCheckout = false) => {
         setModalService(service);
@@ -101,27 +114,28 @@ function Services() {
         setIsModalOpen(true);
     };
 
-    const handleConfirmAdd = (item) => {
-        dispatch({ type: 'ADD_ITEM', payload: item });
+    const handleConfirmAdd = async item => {
+        await dispatch({ type: 'ADD_ITEM', payload: item });
+        setIsModalOpen(false);
 
         if (bookingNow) {
             navigate('/checkout');
         }
     };
 
-    const toggleCategory = (category) => {
-        setSelectedCategories((current) =>
+    const toggleCategory = category => {
+        setSelectedCategories(current =>
             current.includes(category)
-                ? current.filter((item) => item !== category)
+                ? current.filter(item => item !== category)
                 : [...current, category]
         );
         setCurrentPage(1);
     };
 
-    const togglePricingType = (pricingType) => {
-        setSelectedPricingTypes((current) =>
+    const togglePricingType = pricingType => {
+        setSelectedPricingTypes(current =>
             current.includes(pricingType)
-                ? current.filter((item) => item !== pricingType)
+                ? current.filter(item => item !== pricingType)
                 : [...current, pricingType]
         );
         setCurrentPage(1);
@@ -141,23 +155,39 @@ function Services() {
     const categories = filterOptions?.categories || [];
     const areas = filterOptions?.areas || [];
     const pricingTypes = filterOptions?.pricingTypes || [];
-    const priceLimit = filterOptions?.priceLimit || 0;
+    const priceLimit = Number(filterOptions?.priceLimit || 0);
     const displayedMaxPrice = maxPrice ?? priceLimit;
 
     const activeFilters = [
-        ...(keyword.trim() ? [{ key: 'keyword', label: 'Tìm: ' + keyword.trim(), clear: () => setKeyword('') }] : []),
-        ...selectedCategories.map((category) => ({
-            key: 'category-' + category,
-            label: categories.find((item) => item.value === category)?.label || category,
+        ...(keyword.trim() ? [{
+            key: 'keyword',
+            label: `Tìm: ${keyword.trim()}`,
+            clear: () => setKeyword('')
+        }] : []),
+        ...selectedCategories.map(category => ({
+            key: `category-${category}`,
+            label: categories.find(item => item.value === category)?.label || category,
             clear: () => toggleCategory(category)
         })),
-        ...(selectedArea ? [{ key: 'area', label: selectedArea, clear: () => setSelectedArea('') }] : []),
-        ...(filterOptions && displayedMaxPrice < filterOptions.priceLimit ? [{
-            key: 'price', label: 'Giá đến ' + displayedMaxPrice.toLocaleString('vi-VN') + 'đ', clear: () => setMaxPrice(priceLimit)
+        ...(selectedArea ? [{
+            key: 'area',
+            label: areas.find(item => item.value === selectedArea)?.label || selectedArea,
+            clear: () => setSelectedArea('')
         }] : []),
-        ...(minRating ? [{ key: 'rating', label: 'Từ ' + minRating + ' sao', clear: () => setMinRating(0) }] : []),
-        ...selectedPricingTypes.map((type) => ({
-            key: 'pricing-' + type, label: type, clear: () => togglePricingType(type)
+        ...(filterOptions && displayedMaxPrice < priceLimit ? [{
+            key: 'price',
+            label: `Giá đến ${displayedMaxPrice.toLocaleString('vi-VN')}đ`,
+            clear: () => setMaxPrice(priceLimit)
+        }] : []),
+        ...(minRating ? [{
+            key: 'rating',
+            label: `Từ ${minRating} sao`,
+            clear: () => setMinRating(0)
+        }] : []),
+        ...selectedPricingTypes.map(type => ({
+            key: `pricing-${type}`,
+            label: pricingTypes.find(item => item.value === type)?.label || type,
+            clear: () => togglePricingType(type)
         }))
     ];
 
@@ -168,11 +198,15 @@ function Services() {
             <div className="breadcrumb">
                 <span
                     onClick={() => navigate('/')}
-                    style={{ cursor: 'pointer' }}
+                    role="link"
+                    tabIndex={0}
+                    onKeyDown={event => {
+                        if (event.key === 'Enter') navigate('/');
+                    }}
                 >
                     Trang chủ
                 </span>
-                {' › '}
+                <span className="breadcrumb-separator">›</span>
                 <strong>Dịch vụ</strong>
             </div>
 
@@ -180,9 +214,7 @@ function Services() {
                 <aside className="filter-sidebar" aria-label="Bộ lọc dịch vụ">
                     <div className="filter-title">
                         <h3>Bộ lọc tìm kiếm</h3>
-                        <button type="button" onClick={clearFilters}>
-                            Xóa tất cả
-                        </button>
+                        <button type="button" onClick={clearFilters}>Xóa tất cả</button>
                     </div>
 
                     <div className="filter-section">
@@ -195,28 +227,28 @@ function Services() {
                                 aria-describedby="service-search-hint"
                                 value={keyword}
                                 placeholder="Tên dịch vụ, nhà cung cấp, khu vực..."
-                                onChange={(e) => {
-                                    setKeyword(e.target.value);
+                                onChange={event => {
+                                    setKeyword(event.target.value);
                                     setCurrentPage(1);
                                 }}
                             />
                         </div>
+                        <p id="service-search-hint" className="filter-hint">
+                            Tìm dịch vụ theo tên, nhà cung cấp hoặc khu vực.
+                        </p>
                     </div>
-
-                    <p id="service-search-hint" className="filter-hint">Tìm có hoặc không dấu, ví dụ: “may lanh”. Kết quả cập nhật khi bạn nhập.</p>
 
                     <div className="filter-section">
                         <h4>LOẠI DỊCH VỤ</h4>
-
-                        {categories.map((category) => (
+                        {categories.map(category => (
                             <label key={category.value}>
                                 <input
                                     type="checkbox"
                                     checked={selectedCategories.includes(category.value)}
                                     onChange={() => toggleCategory(category.value)}
                                 />
-                                {category.label}
-                                <span>({category.count})</span>
+                                <span className="filter-option-label">{category.label}</span>
+                                <span className="filter-count">({category.count})</span>
                             </label>
                         ))}
                     </div>
@@ -226,13 +258,13 @@ function Services() {
                         <select
                             aria-label="Lọc theo khu vực"
                             value={selectedArea}
-                            onChange={(e) => {
-                                setSelectedArea(e.target.value);
+                            onChange={event => {
+                                setSelectedArea(event.target.value);
                                 setCurrentPage(1);
                             }}
                         >
                             <option value="">Tất cả quận huyện</option>
-                            {areas.map((area) => (
+                            {areas.map(area => (
                                 <option key={area.value} value={area.value}>
                                     {area.label} ({area.count})
                                 </option>
@@ -248,11 +280,11 @@ function Services() {
                             max={priceLimit}
                             step="10000"
                             aria-label="Giá cơ bản tối đa"
-                            aria-valuetext={displayedMaxPrice.toLocaleString('vi-VN') + ' đồng'}
+                            aria-valuetext={`${displayedMaxPrice.toLocaleString('vi-VN')} đồng`}
                             value={displayedMaxPrice}
-                            disabled={!filterOptions}
-                            onChange={(e) => {
-                                setMaxPrice(Number(e.target.value));
+                            disabled={!filterOptions || priceLimit <= 0}
+                            onChange={event => {
+                                setMaxPrice(Number(event.target.value));
                                 setCurrentPage(1);
                             }}
                         />
@@ -264,8 +296,7 @@ function Services() {
 
                     <div className="filter-section">
                         <h4>ĐÁNH GIÁ</h4>
-
-                        {[4.8, 4.5, 4].map((rating) => (
+                        {[4.8, 4.5, 4].map(rating => (
                             <label key={rating}>
                                 <input
                                     type="radio"
@@ -276,10 +307,11 @@ function Services() {
                                         setCurrentPage(1);
                                     }}
                                 />
-                                <span className="rating-filter-label">★ {rating.toLocaleString('vi-VN')} trở lên</span>
+                                <span className="rating-filter-label">
+                                    ★ {rating.toLocaleString('vi-VN')} trở lên
+                                </span>
                             </label>
                         ))}
-
                         <label>
                             <input
                                 type="radio"
@@ -290,21 +322,21 @@ function Services() {
                                     setCurrentPage(1);
                                 }}
                             />
-                            Tất cả đánh giá
+                            <span className="filter-option-label">Tất cả đánh giá</span>
                         </label>
                     </div>
 
                     <div className="filter-section">
                         <h4>HÌNH THỨC GIÁ</h4>
-
-                        {pricingTypes.map((pricingType) => (
+                        {pricingTypes.map(pricingType => (
                             <label key={pricingType.value}>
                                 <input
                                     type="checkbox"
                                     checked={selectedPricingTypes.includes(pricingType.value)}
                                     onChange={() => togglePricingType(pricingType.value)}
                                 />
-                                {pricingType.label} ({pricingType.count})
+                                <span className="filter-option-label">{pricingType.label}</span>
+                                <span className="filter-count">({pricingType.count})</span>
                             </label>
                         ))}
                     </div>
@@ -321,8 +353,8 @@ function Services() {
 
                         <select
                             value={sortBy}
-                            onChange={(e) => {
-                                setSortBy(e.target.value);
+                            onChange={event => {
+                                setSortBy(event.target.value);
                                 setCurrentPage(1);
                             }}
                             aria-label="Sắp xếp dịch vụ"
@@ -338,12 +370,15 @@ function Services() {
                     {activeFilters.length > 0 && (
                         <div className="active-service-filters" aria-label="Các điều kiện đang lọc">
                             <span>Đang lọc:</span>
-                            {activeFilters.map((filter) => (
+                            {activeFilters.map(filter => (
                                 <button
                                     key={filter.key}
                                     type="button"
-                                    aria-label={'Bỏ điều kiện ' + filter.label}
-                                    onClick={() => { filter.clear(); setCurrentPage(1); }}
+                                    aria-label={`Bỏ điều kiện ${filter.label}`}
+                                    onClick={() => {
+                                        filter.clear();
+                                        setCurrentPage(1);
+                                    }}
                                 >
                                     {filter.label} <span aria-hidden="true">×</span>
                                 </button>
@@ -355,70 +390,99 @@ function Services() {
                         <div className="no-services" role="alert">
                             <h3>Không thể tải danh sách dịch vụ</h3>
                             <p>{loadError}</p>
-                            <button type="button" onClick={() => setRetryKey((value) => value + 1)}>Thử lại</button>
+                            <button type="button" onClick={() => setRetryKey(value => value + 1)}>
+                                Thử lại
+                            </button>
                         </div>
                     ) : isLoading ? (
                         <div className="no-services" role="status">Đang tải dịch vụ…</div>
                     ) : services.length > 0 ? (
                         <div className="service-grid">
-                            {services.map((service) => (
-                                <div className="service-card" key={`${service.id}-${service.providerId}`}>
+                            {services.map(service => (
+                                <article className="service-card" key={`${service.id}-${service.providerId ?? ''}`}>
                                     <div
                                         className="service-image"
-                                        onClick={() =>
-                                            navigate(`/service-detail/${service.id}`)
-                                        }
-                                        role="button"
+                                        onClick={() => navigate(`/service-detail/${service.id}`)}
+                                        role="link"
                                         tabIndex={0}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
+                                        onKeyDown={event => {
+                                            if (event.key === 'Enter') {
                                                 navigate(`/service-detail/${service.id}`);
                                             }
                                         }}
-                                        style={{ cursor: 'pointer' }}
                                     >
-                                        <div>ẢNH DỊCH VỤ</div>
+                                        {service.thumbnailUrl ? (
+                                            <img
+                                                src={service.thumbnailUrl}
+                                                alt={service.name || 'Dịch vụ vệ sinh'}
+                                                loading="lazy"
+                                            />
+                                        ) : (
+                                            <div className="service-image-placeholder">
+                                                {service.name || 'Dịch vụ vệ sinh'}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="service-content">
                                         <h3
                                             className="service-detail-link"
-                                            onClick={() =>
-                                                navigate(`/service-detail/${service.id}`)
-                                            }
-                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => navigate(`/service-detail/${service.id}`)}
+                                            role="link"
+                                            tabIndex={0}
+                                            onKeyDown={event => {
+                                                if (event.key === 'Enter') {
+                                                    navigate(`/service-detail/${service.id}`);
+                                                }
+                                            }}
                                         >
-                                            {service.name}
+                                            {service.name || 'Dịch vụ chưa có tên'}
                                         </h3>
 
                                         <p className="provider">
                                             Bởi:{' '}
-                                            <span
-                                                onClick={() =>
-                                                    navigate(`/provider/${service.providerId}`)
-                                                }
-                                                style={{ cursor: 'pointer' }}
-                                            >
-                                                {service.providerName}
-                                            </span>
+                                            {service.providerId ? (
+                                                <span
+                                                    className="provider-link"
+                                                    onClick={() => navigate(`/provider/${service.providerId}`)}
+                                                    role="link"
+                                                    tabIndex={0}
+                                                    onKeyDown={event => {
+                                                        if (event.key === 'Enter') {
+                                                            navigate(`/provider/${service.providerId}`);
+                                                        }
+                                                    }}
+                                                >
+                                                    {service.providerName || 'Đối tác'}
+                                                </span>
+                                            ) : (
+                                                <span>Chưa có thông tin đối tác</span>
+                                            )}
                                         </p>
+
+                                        {service.description && (
+                                            <p className="service-description">
+                                                {service.description}
+                                            </p>
+                                        )}
 
                                         <div className="service-info">
                                             <span className="rating">
                                                 <FontAwesomeIcon icon={faStar} />
-                                                {' '}{service.rating > 0
-                                                    ? `${service.rating.toFixed(1)} (${service.reviews})`
+                                                {' '}
+                                                {Number(service.rating || 0) > 0
+                                                    ? `${Number(service.rating).toFixed(1)} (${Number(service.reviews || 0)})`
                                                     : 'Chưa có đánh giá'}
                                             </span>
 
-                                            <span>
+                                            <span className="service-location">
                                                 <FontAwesomeIcon icon={faLocationDot} />
-                                                {' '}{service.location}
+                                                {' '}{service.location || 'Chưa cập nhật khu vực'}
                                             </span>
                                         </div>
 
                                         <div className="service-bottom">
-                                            <div>
+                                            <div className="service-price">
                                                 <small>Mức phí</small>
                                                 <strong>{formatPrice(service.basePrice)}</strong>
                                             </div>
@@ -427,28 +491,24 @@ function Services() {
                                                 <button
                                                     type="button"
                                                     className="btn-add-cart"
-                                                    onClick={() =>
-                                                        handleOpenModal(service, false)
-                                                    }
+                                                    onClick={() => handleOpenModal(service, false)}
                                                     title="Chọn gói và thêm vào giỏ hàng"
                                                 >
                                                     <FontAwesomeIcon icon={faCartPlus} />
-                                                    {' '}Thêm giỏ
+                                                    <span>Thêm giỏ</span>
                                                 </button>
 
                                                 <button
                                                     type="button"
                                                     className="btn-book"
-                                                    onClick={() =>
-                                                        handleOpenModal(service, true)
-                                                    }
+                                                    onClick={() => handleOpenModal(service, true)}
                                                 >
                                                     Đặt ngay
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                </article>
                             ))}
                         </div>
                     ) : (
@@ -466,19 +526,17 @@ function Services() {
                             <button
                                 type="button"
                                 disabled={currentPage === 1 || isLoading}
-                                onClick={() => setCurrentPage((page) => page - 1)}
+                                onClick={() => setCurrentPage(page => page - 1)}
                             >
                                 Trang trước
                             </button>
 
-                            <span>
-                                Trang {currentPage} / {totalPages}
-                            </span>
+                            <span>Trang {currentPage} / {totalPages}</span>
 
                             <button
                                 type="button"
                                 disabled={currentPage === totalPages || isLoading}
-                                onClick={() => setCurrentPage((page) => page + 1)}
+                                onClick={() => setCurrentPage(page => page + 1)}
                             >
                                 Trang sau
                             </button>

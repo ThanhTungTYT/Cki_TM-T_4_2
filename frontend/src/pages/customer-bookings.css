@@ -918,3 +918,549 @@
         justify-content: center;
     }
 }
+.booking-history-panel {
+    width: 100%;
+    min-width: 0;
+}
+
+.booking-history-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 22px 0;
+    flex-wrap: wrap;
+}
+
+.booking-history-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.booking-history-filter,
+.booking-history-reload,
+.booking-history-message button {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+    border-radius: 9px;
+    padding: 9px 13px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.booking-history-filter.active,
+.booking-history-message button {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.booking-history-reload {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.booking-history-reload:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+.booking-history-message {
+    min-height: 180px;
+    padding: 36px 20px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+}
+
+.booking-history-message > svg {
+    font-size: 28px;
+    color: #64748b;
+}
+
+.booking-history-message h3,
+.booking-history-message p {
+    margin: 0;
+}
+
+.booking-history-message.error {
+    color: #b91c1c;
+}
+
+.booking-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.booking-history-card {
+    padding: 20px;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(15, 23, 42, .035);
+}
+
+.booking-history-card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e8edf5;
+}
+
+.booking-history-label,
+.booking-history-info span {
+    display: block;
+    color: #64748b;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.booking-history-card-top h3 {
+    color: #173b68;
+    font-size: 16px;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.booking-history-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border-radius: 20px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.booking-history-status.completed {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.booking-history-status.cancelled,
+.booking-history-status.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.booking-history-status.expired {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.booking-history-card-content {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    padding: 18px 0;
+}
+
+.booking-history-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+}
+
+.booking-history-info > svg {
+    color: #2563eb;
+    margin-top: 3px;
+}
+
+.booking-history-info strong {
+    display: block;
+    color: #1e385c;
+    font-size: 13px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.booking-history-address {
+    padding: 12px;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.booking-history-address span {
+    font-weight: 700;
+}
+
+.booking-history-details {
+    margin-top: 14px;
+    color: #334155;
+    font-size: 13px;
+}
+
+.booking-history-details summary {
+    cursor: pointer;
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.booking-history-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 0 0 12px;
+}
+
+.booking-history-timeline-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-left: 2px solid #bfdbfe;
+    padding-left: 12px;
+}
+
+.booking-history-timeline-item strong {
+    color: #1e385c;
+}
+
+.booking-history-timeline-item span,
+.booking-history-timeline-item p {
+    color: #64748b;
+    margin: 0;
+}
+
+@media (max-width: 700px) {
+    .booking-history-card {
+        padding: 15px;
+    }
+
+    .booking-history-card-top {
+        flex-direction: column;
+    }
+
+    .booking-history-card-content {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .booking-history-toolbar {
+        align-items: stretch;
+    }
+
+    .booking-history-reload {
+        align-self: flex-start;
+    }
+}
+.customer-reports-content {
+    min-width: 0;
+}
+
+.customer-report-card {
+    background: #fff;
+    border: 1px solid #dce5f1;
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 20px;
+}
+
+.customer-report-card h3 {
+    margin: 0 0 18px;
+    color: #173b68;
+    font-size: 16px;
+}
+
+.customer-report-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 16px;
+}
+
+.customer-report-field {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    min-width: 0;
+}
+
+.customer-report-field.full {
+    grid-column: 1 / -1;
+}
+
+.customer-report-field label {
+    color: #334155;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.customer-report-field input,
+.customer-report-field select,
+.customer-report-field textarea {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #fff;
+    color: #173b68;
+    font: inherit;
+    font-size: 13px;
+    padding: 12px;
+    outline: none;
+}
+
+.customer-report-field input,
+.customer-report-field select {
+    min-height: 42px;
+}
+
+.customer-report-field textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.customer-report-field input:focus,
+.customer-report-field select:focus,
+.customer-report-field textarea:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .1);
+}
+
+.customer-report-field small {
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.customer-report-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.customer-report-primary,
+.customer-report-secondary,
+.customer-report-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.customer-report-primary {
+    border: 1px solid #2563eb;
+    background: #2563eb;
+    color: #fff;
+}
+
+.customer-report-secondary,
+.customer-report-refresh {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #334155;
+}
+
+.customer-report-primary:disabled,
+.customer-report-secondary:disabled,
+.customer-report-refresh:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+.customer-report-alert {
+    padding: 12px 15px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.customer-report-alert.error {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+.customer-report-alert.success {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.customer-report-history-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.customer-report-history-heading h3 {
+    margin-bottom: 6px;
+}
+
+.customer-report-history-heading p {
+    margin: 0;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.customer-report-empty {
+    display: flex;
+    min-height: 110px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    color: #64748b;
+    font-size: 13px;
+    text-align: center;
+}
+
+.customer-report-empty svg {
+    font-size: 25px;
+}
+
+.customer-report-empty p {
+    margin: 0;
+}
+
+.customer-report-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.customer-report-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+}
+
+.customer-report-item-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.customer-report-id {
+    color: #64748b;
+    font-size: 11px;
+}
+
+.customer-report-item-heading h4 {
+    margin: 6px 0 0;
+    color: #173b68;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.customer-report-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
+    border-radius: 20px;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.customer-report-status.in_progress {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.customer-report-status.resolved {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.customer-report-status.rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.customer-report-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin: 14px 0;
+    color: #64748b;
+    font-size: 11px;
+}
+
+.customer-report-description {
+    margin: 0;
+    color: #334155;
+    font-size: 13px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.customer-report-resolution {
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 8px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.customer-report-resolution p {
+    margin: 5px 0 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+    .customer-report-card {
+        padding: 15px;
+    }
+
+    .customer-report-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .customer-report-field.full {
+        grid-column: auto;
+    }
+
+    .customer-report-item-heading {
+        flex-direction: column;
+    }
+
+    .customer-report-actions {
+        flex-wrap: wrap;
+    }
+
+    .customer-report-history-heading {
+        align-items: center;
+    }
+}

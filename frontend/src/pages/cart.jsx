@@ -1,3 +1,4 @@
+
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -19,55 +20,88 @@ import { useCart, useCartDispatch } from '../context/CartContext';
 import './cart.css';
 
 function formatPrice(amount) {
-    return (amount || 0).toLocaleString('vi-VN') + 'đ';
+    return Number(amount || 0).toLocaleString('vi-VN') + 'đ';
 }
 
 function Cart() {
-    const { cartItems, totalItems, subtotal } = useCart();
+    const {
+        cartItems,
+        totalItems,
+        subtotal,
+        isCartLoading,
+        cartError
+    } = useCart();
+
     const dispatch = useCartDispatch();
     const navigate = useNavigate();
 
-    // Gom nhóm các dịch vụ theo từng Provider
     const providerGroups = useMemo(() => {
-        const groups = {};
+        const groups = new Map();
+
         cartItems.forEach(item => {
-            const pName = item.providerName || 'Đơn vị vệ sinh CleanMate';
-            const pId = item.providerId || 1;
-            if (!groups[pName]) {
-                groups[pName] = {
-                    providerName: pName,
-                    providerId: pId,
+            const groupKey = item.providerId == null
+                ? 'no-provider'
+                : String(item.providerId);
+
+            if (!groups.has(groupKey)) {
+                groups.set(groupKey, {
+                    key: groupKey,
+                    providerId: item.providerId ?? null,
+                    providerName: item.providerName || '',
                     items: [],
                     subtotal: 0,
                     totalQuantity: 0
-                };
+                });
             }
-            groups[pName].items.push(item);
-            groups[pName].subtotal += item.estimatedPrice || 0;
-            groups[pName].totalQuantity += item.quantity || 1;
+
+            const group = groups.get(groupKey);
+            group.items.push(item);
+            group.subtotal += Number(item.estimatedPrice || 0);
+            group.totalQuantity += Number(item.quantity || 0);
+
+            if (!group.providerName && item.providerName) {
+                group.providerName = item.providerName;
+            }
         });
-        return Object.values(groups);
+
+        return Array.from(groups.values());
     }, [cartItems]);
 
-    const handleUpdateQty = (item, delta) => {
-        const next = item.quantity + delta;
-        if (next < 1) return;
-        dispatch({ type: 'UPDATE_ITEM', payload: { id: item.id, quantity: next } });
+    const handleUpdateQty = async (item, delta) => {
+        const nextQuantity = Number(item.quantity || 1) + delta;
+        if (nextQuantity < 1) return;
+
+        await dispatch({
+            type: 'UPDATE_ITEM',
+            payload: {
+                id: item.id,
+                quantity: nextQuantity
+            }
+        });
     };
 
-    const handleRemoveItem = (id) => {
-        dispatch({ type: 'REMOVE_ITEM', payload: id });
+    const handleRemoveItem = async id => {
+        await dispatch({
+            type: 'REMOVE_ITEM',
+            payload: id
+        });
     };
 
-    const handleClearCart = () => {
-        if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ giỏ dịch vụ?')) {
-            dispatch({ type: 'CLEAR_CART' });
+    const handleClearCart = async () => {
+        if (!window.confirm('Bạn có chắc chắn muốn xóa toàn bộ giỏ dịch vụ?')) {
+            return;
         }
+
+        await dispatch({ type: 'CLEAR_CART' });
     };
 
-    const handleCheckoutGroup = (group) => {
-        // Điều hướng sang trang checkout cho riêng Provider này
-        navigate(`/checkout?providerId=${group.providerId}&providerName=${encodeURIComponent(group.providerName)}`);
+    const handleCheckoutGroup = group => {
+        if (group.providerId == null) {
+            navigate('/checkout');
+            return;
+        }
+
+        navigate(`/checkout?providerId=${encodeURIComponent(group.providerId)}&providerName=${encodeURIComponent(group.providerName)}`);
     };
 
     return (
@@ -86,14 +120,31 @@ function Cart() {
                         <h1>Giỏ dịch vụ của bạn</h1>
                         <p>Quản lý các dịch vụ vệ sinh đã chọn trước khi tiến hành đặt lịch</p>
                     </div>
+
                     {cartItems.length > 0 && (
-                        <button className="cart-clear-all-btn" onClick={handleClearCart}>
+                        <button
+                            type="button"
+                            className="cart-clear-all-btn"
+                            onClick={handleClearCart}
+                            disabled={isCartLoading}
+                        >
                             <FontAwesomeIcon icon={faTrash} /> Xóa tất cả
                         </button>
                     )}
                 </div>
 
-                {cartItems.length === 0 ? (
+                {cartError && (
+                    <div className="cart-error-message" role="alert">
+                        {cartError}
+                    </div>
+                )}
+
+                {isCartLoading && cartItems.length === 0 ? (
+                    <div className="cart-empty-card">
+                        <h2>Đang tải giỏ dịch vụ...</h2>
+                        <p>Vui lòng chờ trong giây lát.</p>
+                    </div>
+                ) : cartItems.length === 0 ? (
                     <div className="cart-empty-card">
                         <div className="empty-icon-box">
                             <FontAwesomeIcon icon={faCartShopping} />
@@ -106,42 +157,60 @@ function Cart() {
                     </div>
                 ) : (
                     <div className="cart-content-layout">
-                        {/* CỘT TRÁI: DANH SÁCH NHÓM THEO PROVIDER */}
                         <div className="cart-groups-column">
-                            {providerGroups.map((group) => (
-                                <div className="provider-cart-card" key={group.providerName}>
+                            {providerGroups.map(group => (
+                                <div className="provider-cart-card" key={group.key}>
                                     <div className="provider-card-header">
                                         <div className="provider-info-badge">
                                             <div className="provider-icon-circle">
                                                 <FontAwesomeIcon icon={faBuilding} />
                                             </div>
                                             <div>
-                                                <h3>{group.providerName}</h3>
+                                                <h3>
+                                                    {group.providerName || 'Chưa có thông tin đối tác'}
+                                                </h3>
                                                 <span className="provider-verified">
-                                                    <FontAwesomeIcon icon={faShieldHalved} /> Đối tác xác minh
+                                                    <FontAwesomeIcon icon={faShieldHalved} />
+                                                    {group.providerId == null
+                                                        ? 'Chưa có thông tin nhà cung cấp'
+                                                        : `Mã đối tác: ${group.providerId}`}
                                                 </span>
                                             </div>
                                         </div>
+
                                         <span className="provider-item-count">
                                             {group.items.length} dịch vụ ({group.totalQuantity} lượt)
                                         </span>
                                     </div>
 
                                     <div className="provider-item-list">
-                                        {group.items.map((item) => (
+                                        {group.items.map(item => (
                                             <div className="cart-table-row" key={item.id}>
                                                 <div className="item-main-details">
-                                                    <h4>{item.serviceName}</h4>
+                                                    {item.serviceThumbnail && (
+                                                        <img
+                                                            src={item.serviceThumbnail}
+                                                            alt={item.serviceName || 'Dịch vụ vệ sinh'}
+                                                            className="cart-service-thumbnail"
+                                                        />
+                                                    )}
+
+                                                    <h4>{item.serviceName || 'Dịch vụ chưa có tên'}</h4>
+
                                                     {item.packageName && (
                                                         <span className="item-pkg-tag">
                                                             {item.packageName}
                                                         </span>
                                                     )}
+
                                                     {item.scheduledDate && (
                                                         <span className="item-date-tag">
-                                                            <FontAwesomeIcon icon={faCalendarDays} /> {item.scheduledDate} ({item.scheduledTime || '08:30'})
+                                                            <FontAwesomeIcon icon={faCalendarDays} />
+                                                            {' '}{item.scheduledDate}
+                                                            {item.scheduledTime ? ` (${item.scheduledTime})` : ''}
                                                         </span>
                                                     )}
+
                                                     {item.note && (
                                                         <p className="item-user-note">
                                                             <em>Ghi chú: {item.note}</em>
@@ -159,14 +228,19 @@ function Cart() {
                                                         <button
                                                             type="button"
                                                             onClick={() => handleUpdateQty(item, -1)}
-                                                            disabled={item.quantity <= 1}
+                                                            disabled={isCartLoading || item.quantity <= 1}
+                                                            aria-label="Giảm số lượng"
                                                         >
                                                             <FontAwesomeIcon icon={faMinus} />
                                                         </button>
+
                                                         <span>{item.quantity}</span>
+
                                                         <button
                                                             type="button"
                                                             onClick={() => handleUpdateQty(item, 1)}
+                                                            disabled={isCartLoading}
+                                                            aria-label="Tăng số lượng"
                                                         >
                                                             <FontAwesomeIcon icon={faPlus} />
                                                         </button>
@@ -181,7 +255,9 @@ function Cart() {
                                                         type="button"
                                                         className="btn-delete-item"
                                                         onClick={() => handleRemoveItem(item.id)}
+                                                        disabled={isCartLoading}
                                                         title="Xóa dịch vụ này"
+                                                        aria-label="Xóa dịch vụ này"
                                                     >
                                                         <FontAwesomeIcon icon={faTrash} />
                                                     </button>
@@ -195,19 +271,21 @@ function Cart() {
                                             <span>Tạm tính nhà cung cấp này:</span>
                                             <strong>{formatPrice(group.subtotal)}</strong>
                                         </div>
+
                                         <button
                                             type="button"
                                             className="btn-checkout-provider"
                                             onClick={() => handleCheckoutGroup(group)}
+                                            disabled={isCartLoading}
                                         >
-                                            Đặt lịch đơn vị này <FontAwesomeIcon icon={faArrowRight} />
+                                            Đặt lịch đơn vị này
+                                            <FontAwesomeIcon icon={faArrowRight} />
                                         </button>
                                     </div>
                                 </div>
                             ))}
                         </div>
 
-                        {/* CỘT PHẢI: TỔNG QUAN GIỎ HÀNG */}
                         <div className="cart-summary-column">
                             <div className="cart-summary-card">
                                 <h3>Tóm tắt giỏ dịch vụ</h3>
@@ -231,13 +309,15 @@ function Cart() {
 
                                 <div className="summary-total-row">
                                     <span>Tổng cộng toàn bộ</span>
-                                    <strong className="summary-total-price">{formatPrice(subtotal)}</strong>
+                                    <strong className="summary-total-price">
+                                        {formatPrice(subtotal)}
+                                    </strong>
                                 </div>
 
                                 <div className="summary-notice-box">
                                     <FontAwesomeIcon icon={faShieldHalved} />
                                     <p>
-                                        <strong>Quy định đặt lịch:</strong> Mỗi đơn đặt sẽ được xác nhận riêng theo từng nhà cung cấp để đảm bảo chất lượng và đúng khung giờ hẹn.
+                                        <strong>Lưu ý đặt lịch:</strong> Kiểm tra dịch vụ, số lượng và lịch hẹn trước khi tiếp tục.
                                     </p>
                                 </div>
 

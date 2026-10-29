@@ -696,3 +696,27 @@
     color: white;
     border-color: #2563eb;
 }
+.provider-service-image-empty {
+    min-height: 180px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 28px;
+}
+
+.provider-service-card > img {
+    display: block;
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+}
+
+.provider-service-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0;
+}
