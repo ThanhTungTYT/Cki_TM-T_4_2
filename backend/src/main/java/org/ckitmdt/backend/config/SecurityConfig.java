@@ -48,7 +48,8 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/v1/services",
                                 "/api/v1/services/filters",
-                                "/api/v1/services/*"
+                                "/api/v1/services/*",
+                                "/api/v1/services/*/reviews"
                         ).permitAll()
 
                         .requestMatchers(

@@ -209,3 +209,39 @@ export const refundApi = {
         return handleResponse(res, 'Không thể xử lý yêu cầu hoàn tiền.');
     }
 };
+
+export const reviewApi = {
+    async getServiceReviews(serviceId, page = 0, signal) {
+        const res = await fetch(
+            `${BASE_URL}/v1/services/${serviceId}/reviews?page=${page}`,
+            {
+                method: 'GET',
+                headers: getAuthHeaders(),
+                signal
+            }
+        );
+        return handleResponse(res, 'Không thể tải bình luận.');
+    },
+
+    async createServiceReview(serviceId, payload) {
+        const res = await fetch(`${BASE_URL}/v1/services/${serviceId}/reviews`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        return handleResponse(res, 'Không thể gửi đánh giá.');
+    },
+
+    async deleteServiceReview(serviceId, reviewId) {
+        const res = await fetch(
+            `${BASE_URL}/v1/services/${serviceId}/reviews/${reviewId}`,
+            {
+                method: 'DELETE',
+                headers: getAuthHeaders()
+            }
+        );
+        if (!res.ok) {
+            await handleResponse(res, 'Không thể xóa bình luận.');
+        }
+    }
+};
