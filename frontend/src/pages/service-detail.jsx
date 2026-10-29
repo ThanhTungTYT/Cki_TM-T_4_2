@@ -1,6 +1,16 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+    faArrowLeft,
+    faCalendarCheck,
+    faChevronRight,
+    faClock,
+    faHashtag,
+    faLayerGroup,
+    faTag
+} from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ServiceReviews from '../components/ServiceReviews';
@@ -163,7 +173,7 @@ function ServiceDetail() {
         <div className="detail-page">
             <Header />
 
-            <div className="detail-breadcrumb">
+            <nav className="detail-breadcrumb" aria-label="Đường dẫn">
                 <span
                     role="link"
                     tabIndex={0}
@@ -174,7 +184,7 @@ function ServiceDetail() {
                 >
                     Trang chủ
                 </span>
-                {' › '}
+                <FontAwesomeIcon className="detail-breadcrumb-separator" icon={faChevronRight} aria-hidden="true" />
                 <span
                     role="link"
                     tabIndex={0}
@@ -185,9 +195,9 @@ function ServiceDetail() {
                 >
                     Dịch vụ
                 </span>
-                {' › '}
+                <FontAwesomeIcon className="detail-breadcrumb-separator" icon={faChevronRight} aria-hidden="true" />
                 <strong>{service.name || 'Chi tiết dịch vụ'}</strong>
-            </div>
+            </nav>
 
             <main className="detail-container">
                 <section className="detail-main">
@@ -214,47 +224,57 @@ function ServiceDetail() {
                         <h1>{service.name || 'Chưa có tên dịch vụ'}</h1>
 
                         <div className="detail-rating">
-                            <span>
+                            <span className="detail-meta-item">
+                                <FontAwesomeIcon icon={faHashtag} aria-hidden="true" />
                                 Mã dịch vụ: {service.id}
                             </span>
                             {service.status && (
-                                <span>Trạng thái: {service.status}</span>
+                                <span className={`detail-status-badge status-${String(service.status).toLowerCase()}`}>
+                                    <span className="detail-status-dot" aria-hidden="true" />
+                                    {service.status}
+                                </span>
                             )}
                         </div>
 
                         <hr />
 
-                        <h2>Mô tả dịch vụ</h2>
+                        <h2 className="detail-section-title">
+                            <FontAwesomeIcon icon={faLayerGroup} aria-hidden="true" />
+                            Mô tả dịch vụ
+                        </h2>
                         <p className="detail-description">
                             {service.description || 'Chưa có mô tả cho dịch vụ này.'}
                         </p>
 
-                        <h2>Thông tin dịch vụ</h2>
+                        <h2 className="detail-section-title">
+                            <FontAwesomeIcon icon={faTag} aria-hidden="true" />
+                            Thông tin dịch vụ
+                        </h2>
 
                         <div className="detail-specifications">
                             <div>
-                                <span>Loại dịch vụ</span>
+                                <span><FontAwesomeIcon icon={faLayerGroup} aria-hidden="true" /> Loại dịch vụ</span>
                                 <strong>
                                     {service.categoryName || 'Chưa cập nhật'}
                                 </strong>
                             </div>
 
                             <div>
-                                <span>Hình thức tính giá</span>
+                                <span><FontAwesomeIcon icon={faTag} aria-hidden="true" /> Hình thức tính giá</span>
                                 <strong>
                                     {service.pricingType || 'Chưa cập nhật'}
                                 </strong>
                             </div>
 
                             <div>
-                                <span>Thời gian dự kiến</span>
+                                <span><FontAwesomeIcon icon={faClock} aria-hidden="true" /> Thời gian dự kiến</span>
                                 <strong>
                                     {formatDuration(service.estimatedMinutes)}
                                 </strong>
                             </div>
 
                             <div>
-                                <span>Giá cơ bản</span>
+                                <span><FontAwesomeIcon icon={faTag} aria-hidden="true" /> Giá cơ bản</span>
                                 <strong>{formatPrice(price)}</strong>
                             </div>
 
@@ -275,7 +295,9 @@ function ServiceDetail() {
                 </section>
 
                 <aside className="detail-booking">
-                    <span className="detail-price-label">Giá cơ bản</span>
+                    <span className="detail-price-label">
+                        <FontAwesomeIcon icon={faTag} aria-hidden="true" /> Giá cơ bản
+                    </span>
 
                     <div className="detail-price">
                         {formatPrice(price)}
@@ -292,7 +314,8 @@ function ServiceDetail() {
                         className="detail-book-button"
                         onClick={() => navigate('/services')}
                     >
-                        Xem và chọn gói dịch vụ
+                        <FontAwesomeIcon icon={faCalendarCheck} aria-hidden="true" />
+                        <span>Xem và chọn gói dịch vụ</span>
                     </button>
 
                     <button
@@ -300,7 +323,8 @@ function ServiceDetail() {
                         className="detail-back-button"
                         onClick={() => navigate('/services')}
                     >
-                        ← Quay lại danh sách
+                        <FontAwesomeIcon icon={faArrowLeft} aria-hidden="true" />
+                        <span>Quay lại danh sách</span>
                     </button>
                 </aside>
 
