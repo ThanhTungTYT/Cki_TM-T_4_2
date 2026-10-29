@@ -6,7 +6,12 @@ import {
     faMagnifyingGlass,
     faStar,
     faLocationDot,
-    faCartPlus
+    faCartPlus,
+    faChevronLeft,
+    faChevronRight,
+    faRotateLeft,
+    faArrowRight,
+    faXmark
 } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -206,7 +211,7 @@ function Services() {
                 >
                     Trang chủ
                 </span>
-                <span className="breadcrumb-separator">›</span>
+                <FontAwesomeIcon className="breadcrumb-separator" icon={faChevronRight} aria-hidden="true" />
                 <strong>Dịch vụ</strong>
             </div>
 
@@ -214,7 +219,9 @@ function Services() {
                 <aside className="filter-sidebar" aria-label="Bộ lọc dịch vụ">
                     <div className="filter-title">
                         <h3>Bộ lọc tìm kiếm</h3>
-                        <button type="button" onClick={clearFilters}>Xóa tất cả</button>
+                        <button type="button" onClick={clearFilters}>
+                            <FontAwesomeIcon icon={faRotateLeft} aria-hidden="true" />
+                        </button>
                     </div>
 
                     <div className="filter-section">
@@ -380,7 +387,8 @@ function Services() {
                                         setCurrentPage(1);
                                     }}
                                 >
-                                    {filter.label} <span aria-hidden="true">×</span>
+                                    {filter.label}
+                                    <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
                                 </button>
                             ))}
                         </div>
@@ -503,7 +511,8 @@ function Services() {
                                                     className="btn-book"
                                                     onClick={() => handleOpenModal(service, true)}
                                                 >
-                                                    Đặt ngay
+                                                    <span>Đặt ngay</span>
+                                                    <FontAwesomeIcon icon={faArrowRight} aria-hidden="true" />
                                                 </button>
                                             </div>
                                         </div>
@@ -516,7 +525,8 @@ function Services() {
                             <h3>Không tìm thấy dịch vụ phù hợp</h3>
                             <p>Hãy thử thay đổi từ khóa hoặc bộ lọc của bạn.</p>
                             <button type="button" onClick={clearFilters}>
-                                Xóa bộ lọc
+                                <FontAwesomeIcon icon={faRotateLeft} aria-hidden="true" />
+                                <span>Xóa bộ lọc</span>
                             </button>
                         </div>
                     )}
@@ -528,7 +538,7 @@ function Services() {
                                 disabled={currentPage === 1 || isLoading}
                                 onClick={() => setCurrentPage(page => page - 1)}
                             >
-                                Trang trước
+                                <FontAwesomeIcon icon={faChevronLeft} aria-hidden="true" />
                             </button>
 
                             <span>Trang {currentPage} / {totalPages}</span>
@@ -538,7 +548,7 @@ function Services() {
                                 disabled={currentPage === totalPages || isLoading}
                                 onClick={() => setCurrentPage(page => page + 1)}
                             >
-                                Trang sau
+                                <FontAwesomeIcon icon={faChevronRight} aria-hidden="true" />
                             </button>
                         </div>
                     )}
