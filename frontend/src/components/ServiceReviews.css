@@ -1,0 +1,253 @@
+.service-reviews {
+    grid-column: 1 / -1;
+    padding: 30px;
+    background: #fff;
+    border: 1px solid #e5eaf2;
+    border-radius: 16px;
+}
+
+.service-reviews-heading,
+.service-review-topline,
+.service-review-form-footer,
+.service-review-login-prompt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.service-reviews-eyebrow {
+    color: #2563eb;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.service-reviews-heading h2 {
+    margin: 7px 0 0;
+    color: #193451;
+    font-size: 24px;
+}
+
+.service-reviews-count,
+.service-review-author time,
+.service-review-form-footer span {
+    color: #64748b;
+    font-size: 13px;
+}
+
+.service-review-form {
+    display: grid;
+    gap: 10px;
+    margin: 24px 0;
+    padding: 20px;
+    background: #f8fafc;
+    border: 1px solid #e5eaf2;
+    border-radius: 12px;
+}
+
+.service-review-form-label {
+    color: #334155;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.service-review-form textarea {
+    width: 100%;
+    min-height: 100px;
+    resize: vertical;
+    padding: 12px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    color: #193451;
+    background-color: #fff;
+    color-scheme: light;
+    font: inherit;
+}
+
+.service-review-form textarea:focus {
+    outline: 2px solid #bfdbfe;
+    border-color: #2563eb;
+}
+
+.service-review-form-footer button,
+.service-review-login-prompt button,
+.service-review-load-more {
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 8px;
+    color: #fff;
+    background: #2563eb;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.service-review-form-footer button:disabled,
+.service-review-delete:disabled,
+.service-review-load-more:disabled {
+    cursor: wait;
+    opacity: .65;
+}
+
+.service-review-login-prompt,
+.service-review-already-posted {
+    margin: 22px 0;
+    padding: 14px 16px;
+    border-radius: 10px;
+    color: #475569;
+    background: #f8fafc;
+}
+
+.service-review-list {
+    display: grid;
+}
+
+.service-review {
+    display: flex;
+    gap: 14px;
+    padding: 22px 2px;
+    border-bottom: 1px solid #edf0f5;
+}
+
+.service-review.is-mine {
+    order: -1;
+}
+
+.service-review-avatar {
+    display: grid;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border-radius: 50%;
+    color: #1d4ed8;
+    background: #dbeafe;
+    font-weight: 800;
+}
+
+.service-review-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.service-review-author {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 9px;
+}
+
+.service-review-author strong {
+    color: #193451;
+    font-size: 15px;
+}
+
+.service-review-you {
+    padding: 3px 8px;
+    border-radius: 20px;
+    color: #1d4ed8;
+    background: #eff6ff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.service-review-delete {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 7px 10px;
+    border: 1px solid #fecaca;
+    border-radius: 7px;
+    color: #b91c1c;
+    background: #fff;
+    cursor: pointer;
+}
+
+.service-review-delete:hover {
+    background: #fef2f2;
+}
+
+.service-review-stars {
+    display: flex;
+    gap: 2px;
+    margin-top: 7px;
+    color: #cbd5e1;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.service-review-stars .is-selected {
+    color: #f59e0b;
+}
+
+.service-review-stars.is-interactive button {
+    padding: 0 2px;
+    border: 0;
+    color: #cbd5e1;
+    background: transparent;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.service-review-stars.is-interactive button.is-selected {
+    color: #f59e0b;
+}
+
+.service-review-stars.is-interactive button:hover {
+    color: #fbbf24;
+}
+
+.service-review-comment {
+    margin: 12px 0 0;
+    color: #475569;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.service-review-load-more {
+    display: block;
+    margin: 22px auto 0;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+.service-review-load-more:hover {
+    background: #dbeafe;
+}
+
+.service-reviews-empty,
+.service-review-error {
+    padding: 18px 0;
+    color: #64748b;
+}
+
+.service-review-error {
+    color: #b91c1c;
+}
+
+@media (max-width: 600px) {
+    .service-reviews {
+        padding: 20px;
+    }
+
+    .service-reviews-heading {
+        align-items: flex-start;
+    }
+
+    .service-reviews-heading h2 {
+        font-size: 20px;
+    }
+
+    .service-review {
+        gap: 10px;
+    }
+
+    .service-review-avatar {
+        flex-basis: 34px;
+        width: 34px;
+        height: 34px;
+    }
+}

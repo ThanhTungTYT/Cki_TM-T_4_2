@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import ServiceReviews from '../components/ServiceReviews';
 import './service-detail.css';
 
 const API_URL = 'http://localhost:8080/api/v1/services';
@@ -302,6 +303,8 @@ function ServiceDetail() {
                         ← Quay lại danh sách
                     </button>
                 </aside>
+
+                <ServiceReviews serviceId={service.id} />
             </main>
 
             <Footer />
