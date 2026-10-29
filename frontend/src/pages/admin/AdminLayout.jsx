@@ -20,7 +20,7 @@ const menuItems = [
     { label: "Nhà cung cấp", path: "/admin/providers", icon: faStore },
     { label: "Quản lý tài khoản", path: "/admin/accounts", icon: faUsers },
     { label: "Quản lý dịch vụ", path: "/admin/services", icon: faTags },
-    { label: "Giao dịch", path: "/admin/transactions", icon: faCreditCard },
+    { label: "Quản lý giao dịch", path: "/admin/transactions", icon: faCreditCard },
     { label: "Quản lý hoàn tiền", path: "/admin/refunds", icon: faMoneyBillTransfer },
     { label: "Quản lý khiếu nại", path: "/admin/complaints", icon: faTriangleExclamation },
 ];

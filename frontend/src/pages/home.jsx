@@ -1,4 +1,7 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faHouse,
     faMagnifyingGlass,
@@ -9,16 +12,56 @@ import {
     faShieldHalved,
     faCircleCheck,
     faHeadset,
-    faCreditCard,
-} from '@fortawesome/free-solid-svg-icons'
+    faCreditCard
+} from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import './home.css'
+import { publicServicesApi } from '../services/api';
+import './home.css';
+
+const formatPrice = (value) => {
+    if (value === null || value === undefined || value === '') {
+        return 'Liên hệ';
+    }
+    return `${Number(value).toLocaleString('vi-VN')}đ`;
+};
 
 function Home() {
-    const services = []
-    const partners = []
-    const reviews = []
+    const navigate = useNavigate();
+    const [services, setServices] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        const controller = new AbortController();
+
+        publicServicesApi.search(
+            {
+                page: 0,
+                size: 6,
+                sortBy: 'popular'
+            },
+            { signal: controller.signal }
+        )
+            .then((result) => {
+                setServices(Array.isArray(result?.content) ? result.content : []);
+                setError('');
+            })
+            .catch((err) => {
+                if (err.name !== 'AbortError') {
+                    setError(err.message || 'Không thể tải dịch vụ.');
+                }
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) {
+                    setLoading(false);
+                }
+            });
+
+        return () => controller.abort();
+    }, []);
+
+    const featuredImage = services.find((service) => service.thumbnailUrl)?.thumbnailUrl;
 
     return (
         <div className="home">
@@ -30,9 +73,8 @@ function Home() {
                         <div className="hero-left">
                             <h1>Dịch vụ vệ sinh chuyên nghiệp tại nhà</h1>
                             <p>
-                                Giải pháp dọn dẹp ngôi nhà thông minh. CleanMate kết nối bạn
-                                với hàng trăm đối tác vệ sinh tận tâm, lành nghề và được xác
-                                minh kỹ lưỡng tại khu vực của bạn.
+                                Tìm kiếm dịch vụ vệ sinh phù hợp, xem thông tin và
+                                lựa chọn gói dịch vụ theo nhu cầu của bạn.
                             </p>
 
                             <div className="search-box">
@@ -44,34 +86,27 @@ function Home() {
                                     <span>LOẠI DỊCH VỤ</span>
                                     <strong>Chọn dịch vụ</strong>
                                 </div>
-                                <div className="search-item">
-                                    <span>CHỌN NGÀY</span>
-                                    <strong>Hôm nay, mai...</strong>
-                                </div>
-                                <button>
+                                <button type="button" onClick={() => navigate('/services')}>
                                     <FontAwesomeIcon icon={faMagnifyingGlass} />
                                     Tìm dịch vụ
                                 </button>
                             </div>
-
-                            <div className="hero-stats">
-                                <div>
-                                    <strong>10,000+</strong>
-                                    <span>Khách hàng</span>
-                                </div>
-                                <div>
-                                    <strong>500+</strong>
-                                    <span>Đối tác</span>
-                                </div>
-                                <div>
-                                    <strong>50,000+</strong>
-                                    <span>Đơn hoàn thành</span>
-                                </div>
-                            </div>
                         </div>
 
                         <div className="hero-image">
-                            <div className="hero-image-placeholder"></div>
+                            {featuredImage ? (
+                                <img
+                                    src={featuredImage}
+                                    alt="Dịch vụ vệ sinh CleanMate"
+                                    onError={(event) => {
+                                        event.currentTarget.style.display = 'none';
+                                    }}
+                                />
+                            ) : (
+                                <div className="hero-image-placeholder">
+                                    {loading ? 'Đang tải hình ảnh...' : 'CleanMate'}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -82,47 +117,65 @@ function Home() {
                         <h2>Giải pháp làm sạch toàn diện</h2>
                     </div>
 
-                    <div className="service-grid">
-                        {services.map((service, index) => (
-                            <div className="service-card" key={index}>
-                                <div className="service-icon">
-                                    <FontAwesomeIcon icon={faHouse} />
-                                </div>
-                                <h3>{service.name}</h3>
-                                <p>{service.description}</p>
-                                <div className="service-bottom">
-                                    <span>Giá khởi điểm</span>
-                                    <strong>{service.price}</strong>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </section>
+                    {loading && (
+                        <p role="status">Đang tải danh sách dịch vụ...</p>
+                    )}
 
-                <section className="section partners-section">
-                    <div className="section-heading">
-                        <span>ĐỐI TÁC NỔI BẬT</span>
-                        <h2>Đơn vị uy tín hàng đầu</h2>
-                    </div>
+                    {!loading && error && (
+                        <div className="home-data-message">
+                            <p>Không thể tải dịch vụ: {error}</p>
+                            <button type="button" onClick={() => window.location.reload()}>
+                                Thử lại
+                            </button>
+                        </div>
+                    )}
 
-                    <div className="partner-grid">
-                        {partners.map((partner, index) => (
-                            <div className="partner-card" key={index}>
-                                <div className="partner-image"></div>
-                                <div className="partner-content">
-                                    <h3>{partner.name}</h3>
-                                    <p>{partner.address}</p>
-                                    <div className="partner-info">
-                                        <span>
-                                            <FontAwesomeIcon icon={faStar} />
-                                            {partner.rating}
-                                        </span>
-                                        <span>{partner.orders} đơn hoàn thành</span>
+                    {!loading && !error && services.length === 0 && (
+                        <p>Hiện chưa có dịch vụ nào được công khai.</p>
+                    )}
+
+                    {!loading && !error && services.length > 0 && (
+                        <div className="service-grid">
+                            {services.map((service) => (
+                                <article className="service-card" key={service.id}>
+                                    {service.thumbnailUrl ? (
+                                        <img
+                                            className="home-service-image"
+                                            src={service.thumbnailUrl}
+                                            alt={service.name}
+                                            onError={(event) => {
+                                                event.currentTarget.style.display = 'none';
+                                            }}
+                                        />
+                                    ) : (
+                                        <div className="service-icon">
+                                            <FontAwesomeIcon icon={faHouse} />
+                                        </div>
+                                    )}
+
+                                    <h3>{service.name}</h3>
+                                    <p>{service.description || 'Chưa có mô tả dịch vụ.'}</p>
+
+                                    <div className="service-bottom">
+                                        <span>Giá khởi điểm</span>
+                                        <strong>{formatPrice(service.basePrice)}</strong>
                                     </div>
-                                    <button>Xem chi tiết</button>
-                                </div>
-                            </div>
-                        ))}
+
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(`/service-detail/${service.id}`)}
+                                    >
+                                        Xem chi tiết
+                                    </button>
+                                </article>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="home-section-action">
+                        <button type="button" onClick={() => navigate('/services')}>
+                            Xem tất cả dịch vụ
+                        </button>
                     </div>
                 </section>
 
@@ -137,76 +190,68 @@ function Home() {
                             <strong>01</strong>
                             <FontAwesomeIcon icon={faMagnifyingGlass} />
                             <h3>Chọn dịch vụ</h3>
-                            <p>Dễ dàng tìm loại dịch vụ phù hợp với nhu cầu của bạn.</p>
+                            <p>Tìm loại dịch vụ phù hợp với nhu cầu.</p>
                         </div>
 
                         <div className="process-card">
                             <strong>02</strong>
                             <FontAwesomeIcon icon={faCalendarCheck} />
                             <h3>Đặt lịch trực tuyến</h3>
-                            <p>Chọn thời gian và địa điểm thuận tiện cho bạn.</p>
+                            <p>Chọn thời gian và địa điểm thuận tiện.</p>
                         </div>
 
                         <div className="process-card">
                             <strong>03</strong>
                             <FontAwesomeIcon icon={faUserCheck} />
                             <h3>Nhân viên thực hiện</h3>
-                            <p>Đội ngũ chuyên nghiệp đến tận nơi và thực hiện dịch vụ.</p>
+                            <p>Nhà cung cấp tiếp nhận và thực hiện đơn đặt dịch vụ.</p>
                         </div>
 
                         <div className="process-card">
                             <strong>04</strong>
                             <FontAwesomeIcon icon={faClipboardCheck} />
                             <h3>Đánh giá dịch vụ</h3>
-                            <p>Xác nhận hoàn tất và đánh giá chất lượng dịch vụ.</p>
+                            <p>Khách hàng đánh giá sau khi sử dụng dịch vụ.</p>
                         </div>
                     </div>
                 </section>
 
                 <section className="section commitment-section">
                     <div className="section-heading">
-                        <span>TẠI SAO CHỌN CLEANMATE</span>
-                        <h2>Cam kết chất lượng dịch vụ vượt trội</h2>
+                        <span>TRẢI NGHIỆM CLEANMATE</span>
+                        <h2>Thông tin rõ ràng, đặt dịch vụ thuận tiện</h2>
                     </div>
 
                     <div className="commitment-grid">
                         <div className="commitment-card">
                             <FontAwesomeIcon icon={faShieldHalved} />
                             <div>
-                                <h3>Đối tác được xác minh</h3>
-                                <p>Đối tác được kiểm tra thông tin và chất lượng.</p>
+                                <h3>Thông tin minh bạch</h3>
+                                <p>Xem mô tả và giá dịch vụ trước khi đặt.</p>
                             </div>
                         </div>
 
                         <div className="commitment-card">
                             <FontAwesomeIcon icon={faCircleCheck} />
                             <div>
-                                <h3>Giá minh bạch</h3>
-                                <p>Chi phí được hiển thị rõ ràng trước khi đặt.</p>
-                            </div>
-                        </div>
-
-                        <div className="commitment-card">
-                            <FontAwesomeIcon icon={faShieldHalved} />
-                            <div>
-                                <h3>Bảo hiểm & bảo hành</h3>
-                                <p>Hỗ trợ bảo vệ khách hàng trong quá trình sử dụng.</p>
+                                <h3>Quản lý đơn đặt</h3>
+                                <p>Theo dõi đơn hàng qua tài khoản của bạn.</p>
                             </div>
                         </div>
 
                         <div className="commitment-card">
                             <FontAwesomeIcon icon={faHeadset} />
                             <div>
-                                <h3>Hỗ trợ 24/7</h3>
-                                <p>Đội ngũ chăm sóc khách hàng luôn sẵn sàng.</p>
+                                <h3>Hỗ trợ khách hàng</h3>
+                                <p>Gửi yêu cầu hỗ trợ khi gặp vấn đề.</p>
                             </div>
                         </div>
 
                         <div className="commitment-card">
                             <FontAwesomeIcon icon={faCreditCard} />
                             <div>
-                                <h3>Thanh toán linh hoạt</h3>
-                                <p>Nhiều phương thức thanh toán thuận tiện.</p>
+                                <h3>Thanh toán</h3>
+                                <p>Kiểm tra phương thức thanh toán được hệ thống hỗ trợ.</p>
                             </div>
                         </div>
 
@@ -214,56 +259,27 @@ function Home() {
                             <FontAwesomeIcon icon={faStar} />
                             <div>
                                 <h3>Đánh giá thực tế</h3>
-                                <p>Đánh giá từ khách hàng đã sử dụng dịch vụ.</p>
+                                <p>Thông tin đánh giá cần được lấy từ dữ liệu hợp lệ.</p>
                             </div>
                         </div>
-                    </div>
-                </section>
-
-                <section className="section reviews-section">
-                    <div className="section-heading">
-                        <span>ĐÁNH GIÁ TỪ KHÁCH HÀNG</span>
-                        <h2>Hơn 10,000+ niềm tin trao gửi</h2>
-                    </div>
-
-                    <div className="review-grid">
-                        {reviews.map((review, index) => (
-                            <div className="review-card" key={index}>
-                                <div className="stars">
-                                    <FontAwesomeIcon icon={faStar} />
-                                    <FontAwesomeIcon icon={faStar} />
-                                    <FontAwesomeIcon icon={faStar} />
-                                    <FontAwesomeIcon icon={faStar} />
-                                    <FontAwesomeIcon icon={faStar} />
-                                </div>
-                                <p>{review.content}</p>
-                                <div className="review-user">
-                                    <div className="avatar"></div>
-                                    <div>
-                                        <strong>{review.name}</strong>
-                                        <span>{review.address}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
                     </div>
                 </section>
 
                 <section className="cta">
                     <div>
                         <h2>Đặt dịch vụ vệ sinh ngay hôm nay</h2>
-                        <p>Nhận ưu đãi giảm ngay 10% cho đơn đặt dịch vụ đầu tiên tại hệ thống CleanMate.</p>
-                        <div className="cta-form">
-                            <input type="text" placeholder="Nhập email hoặc số điện thoại của bạn" />
-                            <button>Nhận tư vấn</button>
-                        </div>
+                        <p>Khám phá danh sách dịch vụ đang được cung cấp trên CleanMate.</p>
+                        <button type="button" onClick={() => navigate('/services')}>
+                            <FontAwesomeIcon icon={faMagnifyingGlass} />
+                            Khám phá dịch vụ
+                        </button>
                     </div>
                 </section>
             </main>
 
             <Footer />
         </div>
-    )
+    );
 }
 
-export default Home
+export default Home;
