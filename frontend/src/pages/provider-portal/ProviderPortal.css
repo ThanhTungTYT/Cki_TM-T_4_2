@@ -130,6 +130,32 @@
 .pp-sidebar-footer {
     padding: 14px 20px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pp-home-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #e0e7ef;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    box-sizing: border-box;
+}
+
+.pp-home-btn:hover {
+    background: rgba(37, 99, 235, 0.35);
+    border-color: rgba(37, 99, 235, 0.6);
+    color: #fff;
 }
 
 .pp-logout-btn {
@@ -146,6 +172,7 @@
     font-size: 13px;
     font-weight: 500;
     transition: background 0.15s;
+    box-sizing: border-box;
 }
 
 .pp-logout-btn:hover {
@@ -180,6 +207,39 @@
     font-size: 16px;
     font-weight: 600;
     color: var(--pp-navy);
+}
+
+.pp-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.pp-topbar-home-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: #f1f5f9;
+    border: 1px solid var(--pp-border);
+    border-radius: 6px;
+    color: var(--pp-navy);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+}
+
+.pp-topbar-home-btn svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+}
+
+.pp-topbar-home-btn:hover {
+    background: var(--pp-primary);
+    border-color: var(--pp-primary);
+    color: #ffffff;
 }
 
 .pp-topbar-user {

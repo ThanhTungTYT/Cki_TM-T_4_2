@@ -1,9 +1,17 @@
-import { NavLink, useNavigate, Outlet } from 'react-router-dom';
+import { NavLink, Link, useNavigate, Outlet } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { providerDashboardApi } from '../../services/providerApi';
 import './ProviderPortal.css';
 
 // Icons (SVG inline để không phụ thuộc thêm thư viện)
+function IconHome() {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+    );
+}
 function IconGrid() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="pp-nav-icon">
@@ -135,10 +143,10 @@ function ProviderLayout() {
         <div className="pp-shell">
             {/* Sidebar */}
             <aside className="pp-sidebar">
-                <div className="pp-sidebar-logo">
+                <Link to="/" className="pp-sidebar-logo" style={{ textDecoration: 'none', display: 'block' }} title="Về trang chủ CleanMate">
                     <div className="logo-text">🧹 CleanMate</div>
                     <div className="logo-sub">Cổng thông tin Đối tác</div>
-                </div>
+                </Link>
 
                 {businessName && (
                     <div className="pp-sidebar-partner">
@@ -163,6 +171,10 @@ function ProviderLayout() {
                 </nav>
 
                 <div className="pp-sidebar-footer">
+                    <Link to="/" className="pp-home-btn" title="Quay về trang chủ">
+                        <IconHome />
+                        <span>Về trang chủ</span>
+                    </Link>
                     <button className="pp-logout-btn" onClick={handleLogout} type="button">
                         <IconLogOut />
                         Đăng xuất
@@ -178,9 +190,15 @@ function ProviderLayout() {
                             window.location.pathname.startsWith(n.to)
                         )?.label || 'Cổng đối tác'}
                     </span>
-                    <div className="pp-topbar-user">
-                        <div className="pp-topbar-avatar">{initial}</div>
-                        <span>{userName || 'Đối tác'}</span>
+                    <div className="pp-topbar-actions">
+                        <Link to="/" className="pp-topbar-home-btn" title="Quay về trang chủ CleanMate">
+                            <IconHome />
+                            <span>Về trang chủ</span>
+                        </Link>
+                        <div className="pp-topbar-user">
+                            <div className="pp-topbar-avatar">{initial}</div>
+                            <span>{userName || 'Đối tác'}</span>
+                        </div>
                     </div>
                 </header>
 
