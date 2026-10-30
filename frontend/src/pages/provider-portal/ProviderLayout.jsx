@@ -38,6 +38,23 @@ function IconCalendar() {
         </svg>
     );
 }
+function IconBroom() {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="pp-nav-icon">
+            <path d="M14 2l4 4-9 9-4-4 9-9zM3 21l4-1-3-3-1 4z" />
+            <line x1="14" y1="6" x2="18" y2="10" />
+        </svg>
+    );
+}
+function IconShieldAlert() {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="pp-nav-icon">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+    );
+}
 function IconTrendingUp() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="pp-nav-icon">
@@ -57,11 +74,12 @@ function IconLogOut() {
 }
 
 const NAV_ITEMS = [
-    { to: '/provider-portal/dashboard', label: 'Tổng quan',    icon: <IconGrid /> },
-    { to: '/provider-portal/bookings',  label: 'Đơn hàng',     icon: <IconClipboard /> },
-    { to: '/provider-portal/employees', label: 'Nhân viên',    icon: <IconUsers /> },
-    { to: '/provider-portal/schedule',  label: 'Lịch làm việc',icon: <IconCalendar /> },
-    { to: '/provider-portal/revenue',   label: 'Doanh thu',    icon: <IconTrendingUp /> },
+    { to: '/provider-portal/dashboard',  label: 'Tổng quan',     icon: <IconGrid /> },
+    { to: '/provider-portal/bookings',   label: 'Đơn hàng',      icon: <IconClipboard /> },
+    { to: '/provider-portal/services',   label: 'Dịch vụ',       icon: <IconBroom /> },
+    { to: '/provider-portal/employees',  label: 'Nhân viên',     icon: <IconUsers /> },
+    { to: '/provider-portal/schedule',   label: 'Lịch làm việc', icon: <IconCalendar /> },
+    { to: '/provider-portal/complaints', label: 'Khiếu nại',     icon: <IconShieldAlert /> },
 ];
 
 function ProviderLayout() {

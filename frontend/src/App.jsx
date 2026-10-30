@@ -30,7 +30,8 @@ import ProviderBookings from './pages/provider-portal/ProviderBookings';
 import ProviderBookingDetail from './pages/provider-portal/ProviderBookingDetail';
 import ProviderEmployees from './pages/provider-portal/ProviderEmployees';
 import ProviderSchedule from './pages/provider-portal/ProviderSchedule';
-import ProviderRevenue from './pages/provider-portal/ProviderRevenue';
+import ProviderServices from './pages/provider-portal/ProviderServices';
+import ProviderComplaints from './pages/provider-portal/ProviderComplaints';
 
 function App() {
     return (
@@ -70,9 +71,11 @@ function App() {
                     <Route path="dashboard" element={<ProviderDashboard />} />
                     <Route path="bookings" element={<ProviderBookings />} />
                     <Route path="bookings/:id" element={<ProviderBookingDetail />} />
+                    <Route path="services" element={<ProviderServices />} />
                     <Route path="employees" element={<ProviderEmployees />} />
                     <Route path="schedule" element={<ProviderSchedule />} />
-                    <Route path="revenue" element={<ProviderRevenue />} />
+                    <Route path="complaints" element={<ProviderComplaints />} />
+                    <Route path="revenue" element={<Navigate to="/provider-portal/dashboard" replace />} />
                 </Route>
             </Routes>
         </BrowserRouter>
