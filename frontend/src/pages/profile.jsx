@@ -74,6 +74,18 @@ function Profile() {
                 return;
             }
 
+            const storedUser = sessionStorage.getItem("user") || localStorage.getItem("user");
+            if (storedUser) {
+                try {
+                    const parsed = JSON.parse(storedUser);
+                    const role = (parsed?.role || "").toUpperCase();
+                    if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
+                        navigate("/provider-portal/dashboard", { replace: true });
+                        return;
+                    }
+                } catch {}
+            }
+
             try {
                 const response = await fetch("http://localhost:8080/api/users/me", {
                     headers: { Authorization: `Bearer ${token}` }
@@ -89,6 +101,12 @@ function Profile() {
                 }
 
                 const data = await response.json();
+                const role = (data.role || "").toUpperCase();
+                if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
+                    navigate("/provider-portal/dashboard", { replace: true });
+                    return;
+                }
+
                 const userProfile = {
                     fullName: data.fullName || "",
                     email: data.email || "",

@@ -1,0 +1,98 @@
+/* ==========================================================================
+   CleanMate Chatbot – Floating Button & Panel Styles
+   Đồng bộ màu sắc với CleanMate (#2563eb / #1d4ed8)
+   ========================================================================== */
+
+/* Nút tròn nổi góc dưới cùng bên phải */
+.cm-floating-button {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 10002;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  padding: 13px 22px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.38);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
+  user-select: none;
+}
+
+.cm-floating-button:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.48);
+}
+
+.cm-floating-button:active {
+  transform: translateY(0);
+}
+
+.cm-float-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.cm-float-label {
+  letter-spacing: 0.2px;
+}
+
+/* Panel chứa widget chatbot */
+.cm-floating-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 84px;
+  z-index: 10001;
+  width: min(430px, calc(100vw - 32px));
+
+  /* Hiệu ứng trượt vào mượt mà */
+  opacity: 0;
+  transform: translateY(14px) scale(0.97);
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cm-floating-panel.cm-panel-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* Khung widget bên trong panel */
+.cm-floating-panel .cm-widget {
+  width: 100%;
+  height: min(620px, calc(100dvh - 120px));
+  min-height: 360px;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(30, 56, 92, 0.2);
+}
+
+/* Responsive cho thiết bị di động */
+@media (max-width: 480px) {
+  .cm-floating-panel {
+    right: 8px;
+    bottom: 76px;
+    width: calc(100vw - 16px);
+  }
+
+  .cm-floating-panel .cm-widget {
+    height: min(600px, calc(100dvh - 96px));
+    min-height: 300px;
+    border-radius: 16px;
+  }
+
+  .cm-floating-button {
+    right: 12px;
+    bottom: 12px;
+    padding: 12px 18px;
+    font-size: 13px;
+  }
+}

@@ -7,10 +7,14 @@ import CartDrawer from './CartDrawer';
 import './Header.css';
 
 function Header() {
-    const storedUser = sessionStorage.getItem("user");
+    const storedUser = sessionStorage.getItem("user") || localStorage.getItem("user");
     const user = storedUser ? JSON.parse(storedUser) : null;
     const { totalItems } = useCart();
     const [isCartOpen, setIsCartOpen] = useState(false);
+
+    const role = (user?.role || '').toUpperCase();
+    const isProvider = ['PROVIDER', 'PARTNER', 'ROLE_PROVIDER', 'ROLE_PARTNER'].includes(role);
+    const profilePath = isProvider ? '/provider-portal/dashboard' : '/profile';
 
     return (
         <>
@@ -33,7 +37,7 @@ function Header() {
 
                     <div className="header-actions">
                         {user ? (
-                            <Link to="/profile" className="user-btn">
+                            <Link to={profilePath} className="user-btn">
                                 <FontAwesomeIcon icon={faUser} />
                                 <span>{user.fullName}</span>
                             </Link>
@@ -47,9 +51,6 @@ function Header() {
                                 </Link>
                             </>
                         )}
-                        <button className="service-btn">
-                            Đặt dịch vụ
-                        </button>
                         <button className="cart-btn" onClick={() => setIsCartOpen(true)} title="Giỏ dịch vụ">
                             <FontAwesomeIcon icon={faCartShopping} />
                             {totalItems > 0 && <span className="cart-badge">{totalItems}</span>}
