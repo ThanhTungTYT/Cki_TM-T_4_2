@@ -76,8 +76,11 @@ function Login() {
             }));
 
             setMessage("Đăng nhập thành công");
-            if (data.role === "ADMIN") {
+            const role = (data.role || "").toUpperCase();
+            if (role === "ADMIN" || role === "ROLE_ADMIN") {
                 window.location.href = "/admin";
+            } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
+                window.location.href = "/provider-portal/dashboard";
             } else {
                 window.location.href = "/";
             }
@@ -126,8 +129,11 @@ function Login() {
                 role: data.role
             }));
             setMessage("Đăng nhập Google thành công");
-            if (data.role === "ADMIN") {
+            const role = (data.role || "").toUpperCase();
+            if (role === "ADMIN" || role === "ROLE_ADMIN") {
                 window.location.href = "/admin";
+            } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
+                window.location.href = "/provider-portal/dashboard";
             } else {
                 window.location.href = "/";
             }
@@ -185,8 +191,11 @@ function Login() {
                     role: data.role
                 }));
                 setMessage("Đăng nhập Facebook thành công");
-                if (data.role === "ADMIN") {
+                const role = (data.role || "").toUpperCase();
+                if (role === "ADMIN" || role === "ROLE_ADMIN") {
                     window.location.href = "/admin";
+                } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
+                    window.location.href = "/provider-portal/dashboard";
                 } else {
                     window.location.href = "/";
                 }

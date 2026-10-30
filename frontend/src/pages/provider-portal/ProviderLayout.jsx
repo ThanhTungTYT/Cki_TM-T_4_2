@@ -1,5 +1,6 @@
 import { NavLink, useNavigate, Outlet } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { providerDashboardApi } from '../../services/providerApi';
 import './ProviderPortal.css';
 
 // Icons (SVG inline để không phụ thuộc thêm thư viện)
@@ -69,29 +70,43 @@ function ProviderLayout() {
     const [userName, setUserName] = useState('');
 
     useEffect(() => {
-        // Lấy thông tin từ localStorage (được lưu lúc login)
-        const stored = localStorage.getItem('userInfo') || sessionStorage.getItem('userInfo');
+        // Lấy thông tin từ storage
+        const stored = localStorage.getItem('user') || sessionStorage.getItem('user') || localStorage.getItem('userInfo') || sessionStorage.getItem('userInfo');
         if (stored) {
             try {
                 const info = JSON.parse(stored);
                 setUserName(info.fullName || info.name || info.email || '');
-                setBusinessName(info.businessName || '');
+                if (info.businessName) {
+                    setBusinessName(info.businessName);
+                }
             } catch {
                 // ignore
             }
         }
 
-        // Kiểm tra đăng nhập và role
+        // Kiểm tra đăng nhập
         const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
         if (!token) {
             navigate('/login', { replace: true });
+            return;
         }
+
+        // Tải businessName chuẩn từ hồ sơ đối tác
+        providerDashboardApi.get()
+            .then((res) => {
+                if (res?.businessName) {
+                    setBusinessName(res.businessName);
+                }
+            })
+            .catch(() => {});
     }, [navigate]);
 
     function handleLogout() {
         sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('user');
         sessionStorage.removeItem('userInfo');
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('user');
         localStorage.removeItem('userInfo');
         navigate('/login', { replace: true });
     }
