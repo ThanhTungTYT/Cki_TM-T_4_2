@@ -12,4 +12,6 @@ public interface ReportTicketRepository
     );
 
     List<ReportTicket> findTop200ByOrderByCreatedAtDesc();
+
+    List<ReportTicket> findByBooking_Partner_IdOrderByCreatedAtDesc(Long partnerId);
 }

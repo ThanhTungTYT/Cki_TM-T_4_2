@@ -77,7 +77,8 @@ public class SecurityConfig {
                                 "/api/admin/orders/**",
                                 "/api/admin/providers/**",
                                 "/api/admin/transactions/**",
-                                "/api/admin/statistics"
+                                "/api/admin/statistics",
+                                "/api/admin/provider-change-requests/**"
                         ).hasAnyRole("ADMIN", "STAFF")
 
                         .requestMatchers(

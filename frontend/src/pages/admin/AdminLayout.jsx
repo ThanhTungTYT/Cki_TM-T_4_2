@@ -11,6 +11,7 @@ import {
     faMoneyBillTransfer,
     faArrowRightFromBracket,
     faTriangleExclamation,
+    faClipboardCheck,
 } from "@fortawesome/free-solid-svg-icons";
 import "./AdminDashboard.css";
 
@@ -18,6 +19,7 @@ const menuItems = [
     { label: "Tổng quan", path: "/admin", icon: faHouse },
     { label: "Quản lý đơn hàng", path: "/admin/orders", icon: faClipboardList },
     { label: "Nhà cung cấp", path: "/admin/providers", icon: faStore },
+    { label: "Duyệt yêu cầu ĐT", path: "/admin/provider-requests", icon: faClipboardCheck },
     { label: "Quản lý tài khoản", path: "/admin/accounts", icon: faUsers },
     { label: "Quản lý dịch vụ", path: "/admin/services", icon: faTags },
     { label: "Quản lý giao dịch", path: "/admin/transactions", icon: faCreditCard },

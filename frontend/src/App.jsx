@@ -21,6 +21,7 @@ import AdminTransactions from './pages/admin/AdminTransactions';
 import AdminComplaintManagement from './pages/admin/AdminComplaintManagement';
 import ForgotPassword from './pages/forgot-password';
 import AdminRefundManagement from './pages/admin/AdminRefundManagement';
+import AdminProviderChangeRequests from './pages/admin/AdminProviderChangeRequests';
 import PaymentResult from './pages/PaymentResult';
 
 // F01 — Cổng thông tin Đối tác
@@ -30,7 +31,8 @@ import ProviderBookings from './pages/provider-portal/ProviderBookings';
 import ProviderBookingDetail from './pages/provider-portal/ProviderBookingDetail';
 import ProviderEmployees from './pages/provider-portal/ProviderEmployees';
 import ProviderSchedule from './pages/provider-portal/ProviderSchedule';
-import ProviderRevenue from './pages/provider-portal/ProviderRevenue';
+import ProviderServices from './pages/provider-portal/ProviderServices';
+import ProviderComplaints from './pages/provider-portal/ProviderComplaints';
 
 function App() {
     return (
@@ -59,6 +61,7 @@ function App() {
                 <Route path="/admin/accounts" element={<AdminAccounts />} />
                 <Route path="/admin/services" element={<AdminServices />} />
                 <Route path="/admin/providers" element={<AdminProviders />} />
+                <Route path="/admin/provider-requests" element={<AdminProviderChangeRequests />} />
                 <Route path="/admin/orders" element={<AdminOrders />} />
                 <Route path="/admin/transactions" element={<AdminTransactions />} />
                 <Route path="/admin/complaints" element={<AdminComplaintManagement />} />
@@ -70,9 +73,11 @@ function App() {
                     <Route path="dashboard" element={<ProviderDashboard />} />
                     <Route path="bookings" element={<ProviderBookings />} />
                     <Route path="bookings/:id" element={<ProviderBookingDetail />} />
+                    <Route path="services" element={<ProviderServices />} />
                     <Route path="employees" element={<ProviderEmployees />} />
                     <Route path="schedule" element={<ProviderSchedule />} />
-                    <Route path="revenue" element={<ProviderRevenue />} />
+                    <Route path="complaints" element={<ProviderComplaints />} />
+                    <Route path="revenue" element={<Navigate to="/provider-portal/dashboard" replace />} />
                 </Route>
             </Routes>
         </BrowserRouter>

@@ -40,6 +40,19 @@ public class Partner {
     @Column(name = "total_completed_jobs")
     private Integer totalCompletedJobs;
 
+    @Column(name = "address")
+    private String address;
+
+    @Column(precision = 10, scale = 7)
+    private BigDecimal latitude;
+
+    @Column(precision = 10, scale = 7)
+    private BigDecimal longitude;
+
+    @Builder.Default
+    @Column(name = "version")
+    private Integer version = 1;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
