@@ -21,6 +21,7 @@ import AdminTransactions from './pages/admin/AdminTransactions';
 import AdminComplaintManagement from './pages/admin/AdminComplaintManagement';
 import ForgotPassword from './pages/forgot-password';
 import AdminRefundManagement from './pages/admin/AdminRefundManagement';
+import AdminProviderChangeRequests from './pages/admin/AdminProviderChangeRequests';
 import PaymentResult from './pages/PaymentResult';
 
 // F01 — Cổng thông tin Đối tác
@@ -60,6 +61,7 @@ function App() {
                 <Route path="/admin/accounts" element={<AdminAccounts />} />
                 <Route path="/admin/services" element={<AdminServices />} />
                 <Route path="/admin/providers" element={<AdminProviders />} />
+                <Route path="/admin/provider-requests" element={<AdminProviderChangeRequests />} />
                 <Route path="/admin/orders" element={<AdminOrders />} />
                 <Route path="/admin/transactions" element={<AdminTransactions />} />
                 <Route path="/admin/complaints" element={<AdminComplaintManagement />} />
