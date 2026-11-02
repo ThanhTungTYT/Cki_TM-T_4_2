@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -26,4 +27,6 @@ public class ServiceDetailResponseDto {
     private String categoryName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private List<ServicePackageListItemDto> packages;
+    private List<ServiceDetailProviderDto> providers;
 }

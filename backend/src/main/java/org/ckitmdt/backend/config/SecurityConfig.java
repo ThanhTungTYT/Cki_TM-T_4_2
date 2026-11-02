@@ -20,7 +20,6 @@ import java.util.List;
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
-
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
@@ -29,21 +28,15 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http
-    ) throws Exception {
-
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .cors(cors ->
-                        cors.configurationSource(corsConfigurationSource())
-                )
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
-                        )
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/services",
@@ -51,7 +44,6 @@ public class SecurityConfig {
                                 "/api/v1/services/*",
                                 "/api/v1/services/*/reviews"
                         ).permitAll()
-
                         .requestMatchers(
                                 "/api/auth/login",
                                 "/api/auth/register",
@@ -60,64 +52,119 @@ public class SecurityConfig {
                                 "/api/auth/register/request-otp",
                                 "/api/auth/register/verify-otp",
                                 "/api/auth/register/resend-otp",
-                                "/api/bookings/quote",
                                 "/api/auth/forgot-password",
                                 "/api/auth/verify-reset-password",
                                 "/api/auth/reset-password"
                         ).permitAll()
-
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/payments/vnpay/ipn"
                         ).permitAll()
-
                         .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/admin/operations/staff",
+                                "/api/admin/operations/audit-logs",
+                                "/api/admin/operations/unassigned-tickets"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/admin/operations/assignments",
+                                "/api/admin/operations/notifications"
+                        ).hasAnyRole("ADMIN", "STAFF")
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/admin/operations/notifications/*/read"
+                        ).hasAnyRole("ADMIN", "STAFF")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/admin/operations/assignments"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                "/api/admin/operations/**"
+                        ).denyAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/admin/provider-change-requests",
+                                "/api/admin/provider-change-requests/**",
                                 "/api/admin/accounts/**",
                                 "/api/admin/services/**",
-                                "/api/admin/orders/**",
                                 "/api/admin/providers/**",
-                                "/api/admin/transactions/**",
-                                "/api/admin/statistics",
-                                "/api/admin/provider-change-requests/**"
-                        ).hasAnyRole("ADMIN", "STAFF")
-
+                                "/api/admin/transactions/**"
+                        ).hasRole("ADMIN")
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/refunds/admin"
+                                "/api/admin/orders/**"
                         ).hasAnyRole("ADMIN", "STAFF")
-
-                        .requestMatchers(
-                                HttpMethod.PUT,
-                                "/api/refunds/*/review"
-                        ).hasAnyRole("ADMIN", "STAFF")
-
-                        .requestMatchers(
-                                "/api/refunds/bookings/*/request"
-                        ).authenticated()
-
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/reports/admin"
+                                "/api/admin/dashboard/overview",
+                                "/api/admin/statistics"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/admin/orders/*/actions/*"
                         ).hasAnyRole("ADMIN", "STAFF")
-
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/api/reports/*/status"
                         ).hasAnyRole("ADMIN", "STAFF")
-
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/reports/admin"
+                        ).hasAnyRole("ADMIN", "STAFF")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/refunds/admin"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/admin/provider-change-requests/*/approve",
+                                "/api/admin/provider-change-requests/*/reject",
+                                "/api/admin/provider-change-requests/*/request-info",
+                                "/api/admin/providers/*/approve",
+                                "/api/admin/providers/*/reject"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/admin/accounts/**",
+                                "/api/admin/providers/**",
+                                "/api/refunds/*/review"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/admin/accounts/**"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/admin/accounts/**"
+                        ).hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/provider/services"
+                        ).denyAll()
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/provider/services/*"
+                        ).denyAll()
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/provider/services/*/status",
+                                "/api/provider/services/*/resume"
+                        ).denyAll()
+                        .requestMatchers(
+                                "/api/refunds/bookings/*/request"
+                        ).authenticated()
                         .requestMatchers(
                                 "/api/admin/**"
                         ).hasRole("ADMIN")
-
                         .requestMatchers(
                                 "/api/refunds/**",
                                 "/api/reports/**",
                                 "/api/users/**",
-                                "/api/payments/**"
+                                "/api/payments/**",
+                                "/api/provider/**"
                         ).authenticated()
-
-                        .anyRequest()
-                        .authenticated()
+                        .anyRequest().authenticated()
                 )
                 .addFilterBefore(
                         jwtAuthenticationFilter,
@@ -130,33 +177,23 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-
-        config.setAllowedOrigins(
-                List.of(
-                        "http://localhost:5173",
-                        "https://handmade-opponent-punk.ngrok-free.dev"
-                )
-        );
-
-        config.setAllowedMethods(
-                List.of(
-                        "GET",
-                        "POST",
-                        "PUT",
-                        "PATCH",
-                        "DELETE",
-                        "OPTIONS"
-                )
-        );
-
+        config.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "https://handmade-opponent-punk.ngrok-free.dev"
+        ));
+        config.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS"
+        ));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
-
         return source;
     }
 }

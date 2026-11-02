@@ -1,4 +1,3 @@
-
 package org.ckitmdt.backend.repository;
 
 import jakarta.persistence.LockModeType;
@@ -17,7 +16,6 @@ import java.util.Optional;
 
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
-
     Optional<Booking> findByBookingCode(String bookingCode);
 
     Optional<Booking> findByIdempotencyKey(String idempotencyKey);
@@ -92,4 +90,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     );
 
     List<Booking> findByStatusAndHoldExpiresAtBefore(String status, LocalDateTime expiresAt);
+
+    List<Booking> findByStatusIn(List<String> statuses);
+
+    long countByStatusIgnoreCase(String status);
 }

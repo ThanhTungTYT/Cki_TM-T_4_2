@@ -1030,40 +1030,70 @@ public class ProviderManagementController {
             @PathVariable Long id,
             @RequestBody Map<String, Object> body,
             Authentication auth) {
+
         User user = currentUser(auth);
         Partner partner = currentPartner(auth);
 
         ReportTicket ticket = reportTicketRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khiếu nại."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy khiếu nại."
+                ));
 
-        if (ticket.getBooking() == null || ticket.getBooking().getPartner() == null
+        if (ticket.getBooking() == null
+                || ticket.getBooking().getPartner() == null
                 || !ticket.getBooking().getPartner().getId().equals(partner.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền phản hồi khiếu nại này.");
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Bạn không có quyền phản hồi khiếu nại này."
+            );
+        }
+
+        String currentStatus = normalize(ticket.getStatus());
+
+        if ("RESOLVED".equals(currentStatus) || "REJECTED".equals(currentStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Khiếu nại đã kết thúc xử lý, không thể gửi giải trình mới."
+            );
         }
 
         String content = text(body.get("content"));
+        String evidenceUrl = text(body.get("evidenceUrl"));
+
         if (content.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nội dung giải trình không được để trống.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Nội dung giải trình không được để trống."
+            );
+        }
+
+        if (content.length() > 10000 || evidenceUrl.length() > 1000) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Nội dung hoặc liên kết bằng chứng vượt quá giới hạn cho phép."
+            );
         }
 
         LocalDateTime now = LocalDateTime.now();
-        ComplaintResponse resp = ComplaintResponse.builder()
+
+        ComplaintResponse response = ComplaintResponse.builder()
                 .ticket(ticket)
                 .author(user)
                 .authorName(partner.getBusinessName())
                 .authorRole("PROVIDER")
                 .content(content)
-                .evidenceUrl(text(body.get("evidenceUrl")))
+                .evidenceUrl(evidenceUrl.isBlank() ? null : evidenceUrl)
                 .createdAt(now)
                 .build();
-        complaintResponseRepository.save(resp);
 
-        // Update ticket status to PROVIDER_RESPONDED
+        ComplaintResponse saved = complaintResponseRepository.save(response);
+
         ticket.setStatus("PROVIDER_RESPONDED");
         ticket.setUpdatedAt(now);
         reportTicketRepository.save(ticket);
 
-        return complaintResponseRow(resp);
+        return complaintResponseRow(saved);
     }
 
     // =========================================================

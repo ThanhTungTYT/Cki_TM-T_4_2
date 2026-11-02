@@ -1,0 +1,319 @@
+
+/* =========================================
+   ADMIN OVERVIEW CARDS
+   CleanMate - Dashboard Style
+========================================= */
+
+.admin-overview-section {
+    width: 100%;
+    margin: 24px 0;
+    color: #1e293b;
+    box-sizing: border-box;
+}
+
+/* Heading */
+
+.admin-overview-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.admin-overview-heading h2 {
+    margin: 0 0 5px;
+    color: #1e385c;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.admin-overview-heading p {
+    margin: 0;
+    color: #8290a5;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* Refresh button */
+
+.admin-overview-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 9px 15px;
+    border: 1px solid #dbe5f1;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+            background 0.2s ease,
+            border-color 0.2s ease,
+            color 0.2s ease,
+            box-shadow 0.2s ease;
+}
+
+.admin-overview-refresh:hover:not(:disabled) {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.admin-overview-refresh:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.2);
+    outline-offset: 2px;
+}
+
+.admin-overview-refresh:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Error */
+
+.admin-overview-error {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 16px;
+    padding: 12px 15px;
+    border: 1px solid #fecaca;
+    border-radius: 9px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* Overview grid */
+
+.admin-overview-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+}
+
+/* Overview card */
+
+.admin-overview-card {
+    position: relative;
+    display: block;
+    width: 100%;
+    min-width: 0;
+    padding: 20px;
+    overflow: hidden;
+    border: 1px solid #e8edf5;
+    border-radius: 13px;
+    background: #ffffff;
+    color: #1e293b;
+    text-align: left;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition:
+            transform 0.2s ease,
+            border-color 0.2s ease,
+            box-shadow 0.2s ease;
+}
+
+.admin-overview-card:hover:not(:disabled) {
+    transform: translateY(-3px);
+    border-color: #cbdcf5;
+    box-shadow: 0 8px 24px rgba(30, 56, 92, 0.09);
+}
+
+.admin-overview-card:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.2);
+    outline-offset: 3px;
+}
+
+.admin-overview-card:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+/* Card top */
+
+.admin-overview-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 17px;
+}
+
+/* Icon */
+
+.admin-overview-icon {
+    display: flex;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    font-size: 18px;
+}
+
+.admin-overview-icon.blue {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.admin-overview-icon.purple {
+    background: #f5f3ff;
+    color: #7c3aed;
+}
+
+.admin-overview-icon.orange {
+    background: #fffbeb;
+    color: #d97706;
+}
+
+.admin-overview-icon.red {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+/* Arrow */
+
+.admin-overview-arrow {
+    color: #9aa8ba;
+    font-size: 18px;
+    transition:
+            color 0.2s ease,
+            transform 0.2s ease;
+}
+
+.admin-overview-card:hover:not(:disabled) .admin-overview-arrow {
+    color: #2563eb;
+    transform: translateX(3px);
+}
+
+/* Card content */
+
+.admin-overview-label {
+    display: block;
+    margin-bottom: 7px;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+.admin-overview-value {
+    display: block;
+    margin: 0 0 8px;
+    color: #1e385c;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-overview-description {
+    display: block;
+    color: #8290a5;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.6;
+}
+
+/* Tablet */
+
+@media (max-width: 1100px) {
+    .admin-overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+}
+
+/* Mobile */
+
+@media (max-width: 560px) {
+    .admin-overview-section {
+        margin: 20px 0;
+    }
+
+    .admin-overview-heading {
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .admin-overview-heading h2 {
+        font-size: 18px;
+    }
+
+    .admin-overview-heading p {
+        font-size: 12px;
+    }
+
+    .admin-overview-refresh {
+        min-height: 35px;
+        padding: 8px 11px;
+        font-size: 12px;
+    }
+
+    .admin-overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .admin-overview-card {
+        padding: 15px;
+        border-radius: 11px;
+    }
+
+    .admin-overview-card-top {
+        margin-bottom: 13px;
+    }
+
+    .admin-overview-icon {
+        width: 38px;
+        height: 38px;
+        font-size: 16px;
+    }
+
+    .admin-overview-value {
+        font-size: 23px;
+    }
+
+    .admin-overview-label {
+        font-size: 12px;
+    }
+
+    .admin-overview-description {
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 360px) {
+    .admin-overview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-overview-heading {
+        flex-wrap: wrap;
+    }
+}
+
+/* Reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-overview-card,
+    .admin-overview-refresh,
+    .admin-overview-arrow {
+        transition: none;
+    }
+
+    .admin-overview-card:hover:not(:disabled) {
+        transform: none;
+    }
+}

@@ -1,5 +1,7 @@
 package org.ckitmdt.backend.controller;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.entity.BusinessChangeRequest;
 import org.ckitmdt.backend.entity.Partner;
@@ -28,139 +30,94 @@ public class AdminProviderChangeRequestController {
     private final PartnerRepository partnerRepository;
     private final PartnerServiceRepository partnerServiceRepository;
     private final ServiceRepository serviceRepository;
+    private final ObjectMapper objectMapper;
+
+    private static final Set<String> VALID_STATUSES = Set.of(
+            "PENDING_REVIEW",
+            "NEEDS_INFORMATION",
+            "APPROVED",
+            "REJECTED",
+            "WITHDRAWN"
+    );
 
     @GetMapping
     @Transactional(readOnly = true)
     public List<Map<String, Object>> listRequests(
             @RequestParam(required = false) String status) {
 
-        List<BusinessChangeRequest> list;
-        if (status != null && !status.isBlank()) {
-            list = requestRepository.findByStatusOrderByCreatedAtDesc(status.trim().toUpperCase());
+        List<BusinessChangeRequest> requests;
+
+        if (status == null || status.isBlank()) {
+            requests = requestRepository.findAllByOrderByCreatedAtDesc();
         } else {
-            list = requestRepository.findAllByOrderByCreatedAtDesc();
+            String normalizedStatus = status.trim().toUpperCase();
+
+            if (!VALID_STATUSES.contains(normalizedStatus)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Trạng thái yêu cầu không hợp lệ."
+                );
+            }
+
+            requests = requestRepository.findByStatusOrderByCreatedAtDesc(normalizedStatus);
         }
 
-        return list.stream().map(this::row).toList();
+        return requests.stream().map(this::toResponse).toList();
     }
 
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
     public Map<String, Object> getRequest(@PathVariable Long id) {
-        BusinessChangeRequest req = requestRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu xét duyệt."));
-        return row(req);
+        BusinessChangeRequest request = requestRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy yêu cầu xét duyệt."
+                ));
+
+        return toResponse(request);
     }
 
     @PostMapping("/{id}/approve")
     @Transactional
     public Map<String, Object> approveRequest(
             @PathVariable Long id,
-            Authentication auth) {
+            Authentication authentication) {
 
-        BusinessChangeRequest req = requestRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu xét duyệt."));
+        BusinessChangeRequest request = getRequestForUpdate(id);
+        ensurePending(request);
 
-        if (!"PENDING_REVIEW".equalsIgnoreCase(req.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yêu cầu đã được xử lý trước đó.");
+        Partner partner = partnerRepository.findByIdForUpdate(request.getPartner().getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy hồ sơ doanh nghiệp."
+                ));
+
+        String type = normalize(request.getRequestType());
+        Map<String, String> oldValues = parseSnapshot(request.getOldSnapshot());
+        Map<String, String> newValues = parseSnapshot(request.getProposedSnapshot());
+
+        switch (type) {
+            case "LOCATION_UPDATE" -> applyLocationUpdate(partner, oldValues, newValues);
+            case "PROFILE_UPDATE" -> applyProfileUpdate(partner, oldValues, newValues);
+            case "SERVICE_REGISTER" -> applyServiceRegister(request, partner, newValues);
+            case "SERVICE_UPDATE" -> applyServiceUpdate(partner, oldValues, newValues);
+            case "SERVICE_PAUSE" -> applyServiceStatus(partner, newValues, "PAUSED");
+            case "SERVICE_RETIRE" -> applyServiceStatus(partner, newValues, "INACTIVE");
+            default -> throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Loại yêu cầu chưa được hỗ trợ: " + type
+            );
         }
 
-        Partner partner = req.getPartner();
-        String type = req.getRequestType().toUpperCase();
+        request.setStatus("APPROVED");
+        request.setRejectReason(null);
+        request.setReviewedBy(getActor(authentication));
+        request.setReviewedAt(LocalDateTime.now());
+        request.setUpdatedAt(LocalDateTime.now());
 
-        // Áp dụng thay đổi tương ứng loại yêu cầu
-        if ("LOCATION_UPDATE".equals(type)) {
-            // Snapshot parse đơn giản từ proposedSnapshot
-            Map<String, String> values = parseSnapshot(req.getProposedSnapshot());
-            if (values.containsKey("latitude") && !values.get("latitude").isBlank()) {
-                partner.setLatitude(new BigDecimal(values.get("latitude")));
-            }
-            if (values.containsKey("longitude") && !values.get("longitude").isBlank()) {
-                partner.setLongitude(new BigDecimal(values.get("longitude")));
-            }
-            if (values.containsKey("address") && !values.get("address").isBlank()) {
-                partner.setAddress(values.get("address"));
-            }
-            partner.setVersion((partner.getVersion() == null ? 1 : partner.getVersion()) + 1);
-            partner.setUpdatedAt(LocalDateTime.now());
-            partnerRepository.save(partner);
+        requestRepository.save(request);
 
-        } else if ("PROFILE_UPDATE".equals(type)) {
-            Map<String, String> values = parseSnapshot(req.getProposedSnapshot());
-            if (values.containsKey("businessName") && !values.get("businessName").isBlank()) {
-                partner.setBusinessName(values.get("businessName"));
-            }
-            if (values.containsKey("description")) {
-                partner.setDescription(values.get("description"));
-            }
-            if (values.containsKey("taxCode")) {
-                partner.setTaxCode(values.get("taxCode"));
-            }
-            partner.setVersion((partner.getVersion() == null ? 1 : partner.getVersion()) + 1);
-            partner.setUpdatedAt(LocalDateTime.now());
-            partnerRepository.save(partner);
-
-        } else if ("SERVICE_REGISTER".equals(type)) {
-            Map<String, String> values = parseSnapshot(req.getProposedSnapshot());
-            Long sId = req.getTargetId();
-            if (sId == null && values.containsKey("serviceId")) {
-                sId = Long.valueOf(values.get("serviceId"));
-            }
-            if (sId != null) {
-                final Long finalServiceId = sId;
-                Service service = serviceRepository.findById(finalServiceId)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Dịch vụ sàn không tồn tại."));
-                BigDecimal price = values.containsKey("price")
-                        ? new BigDecimal(values.get("price"))
-                        : service.getBasePrice();
-
-                Optional<PartnerService> existing = partnerServiceRepository.findByPartner_Id(partner.getId())
-                        .stream()
-                        .filter(ps -> ps.getService().getId().equals(finalServiceId))
-                        .findFirst();
-
-                if (existing.isPresent()) {
-                    PartnerService ps = existing.get();
-                    ps.setStatus("ACTIVE");
-                    ps.setPrice(price);
-                    ps.setUpdatedAt(LocalDateTime.now());
-                    partnerServiceRepository.save(ps);
-                } else {
-                    LocalDateTime now = LocalDateTime.now();
-                    PartnerService ps = PartnerService.builder()
-                            .partner(partner)
-                            .service(service)
-                            .price(price)
-                            .status("ACTIVE")
-                            .createdAt(now)
-                            .updatedAt(now)
-                            .build();
-                    partnerServiceRepository.save(ps);
-                }
-            }
-
-        } else if ("SERVICE_UPDATE".equals(type)) {
-            Map<String, String> values = parseSnapshot(req.getProposedSnapshot());
-            if (req.getTargetId() != null) {
-                partnerServiceRepository.findById(req.getTargetId()).ifPresent(ps -> {
-                    if (values.containsKey("price") && !values.get("price").isBlank()) {
-                        ps.setPrice(new BigDecimal(values.get("price")));
-                    }
-                    if (values.containsKey("status") && !values.get("status").isBlank()) {
-                        ps.setStatus(values.get("status").toUpperCase());
-                    }
-                    ps.setUpdatedAt(LocalDateTime.now());
-                    partnerServiceRepository.save(ps);
-                });
-            }
-        }
-
-        req.setStatus("APPROVED");
-        req.setReviewedBy(auth != null ? auth.getName() : "admin");
-        req.setReviewedAt(LocalDateTime.now());
-        req.setUpdatedAt(LocalDateTime.now());
-
-        return row(requestRepository.save(req));
+        return toResponse(request);
     }
 
     @PostMapping("/{id}/reject")
@@ -168,67 +125,491 @@ public class AdminProviderChangeRequestController {
     public Map<String, Object> rejectRequest(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, Object> body,
-            Authentication auth) {
+            Authentication authentication) {
 
-        BusinessChangeRequest req = requestRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu xét duyệt."));
+        BusinessChangeRequest request = getRequestForUpdate(id);
+        ensurePending(request);
 
-        if (!"PENDING_REVIEW".equalsIgnoreCase(req.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yêu cầu đã được xử lý trước đó.");
+        String reason = body == null || body.get("rejectReason") == null
+                ? ""
+                : String.valueOf(body.get("rejectReason")).trim();
+
+        if (reason.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vui lòng nhập lý do từ chối."
+            );
         }
 
-        String reason = body != null && body.get("rejectReason") != null
-                ? String.valueOf(body.get("rejectReason")).trim()
-                : "Không đáp ứng quy định kiểm duyệt của sàn CleanMate.";
+        request.setStatus("REJECTED");
+        request.setRejectReason(reason);
+        request.setReviewedBy(getActor(authentication));
+        request.setReviewedAt(LocalDateTime.now());
+        request.setUpdatedAt(LocalDateTime.now());
 
-        req.setStatus("REJECTED");
-        req.setRejectReason(reason);
-        req.setReviewedBy(auth != null ? auth.getName() : "admin");
-        req.setReviewedAt(LocalDateTime.now());
-        req.setUpdatedAt(LocalDateTime.now());
+        requestRepository.save(request);
 
-        return row(requestRepository.save(req));
+        return toResponse(request);
+    }
+
+    @PostMapping("/{id}/request-info")
+    @Transactional
+    public Map<String, Object> requestMoreInformation(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            Authentication authentication) {
+
+        BusinessChangeRequest request = getRequestForUpdate(id);
+        ensurePending(request);
+
+        String note = body == null || body.get("requestInfo") == null
+                ? ""
+                : String.valueOf(body.get("requestInfo")).trim();
+
+        if (note.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vui lòng ghi rõ thông tin hoặc tài liệu cần bổ sung."
+            );
+        }
+
+        request.setStatus("NEEDS_INFORMATION");
+        request.setRejectReason(note);
+        request.setReviewedBy(getActor(authentication));
+        request.setReviewedAt(LocalDateTime.now());
+        request.setUpdatedAt(LocalDateTime.now());
+
+        requestRepository.save(request);
+
+        return toResponse(request);
+    }
+
+    private BusinessChangeRequest getRequestForUpdate(Long id) {
+        return requestRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy yêu cầu xét duyệt."
+                ));
+    }
+
+    private void ensurePending(BusinessChangeRequest request) {
+        if (!"PENDING_REVIEW".equalsIgnoreCase(request.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Yêu cầu không còn ở trạng thái chờ duyệt. Vui lòng tải lại danh sách."
+            );
+        }
+    }
+
+    private void applyLocationUpdate(
+            Partner partner,
+            Map<String, String> oldValues,
+            Map<String, String> newValues) {
+
+        checkOldValue(oldValues, "address", partner.getAddress());
+        checkOldValue(oldValues, "latitude", partner.getLatitude());
+        checkOldValue(oldValues, "longitude", partner.getLongitude());
+
+        String address = newValues.get("address");
+        String latitude = newValues.get("latitude");
+        String longitude = newValues.get("longitude");
+
+        if (address == null || address.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Địa chỉ hoạt động không được để trống."
+            );
+        }
+
+        BigDecimal lat = parseDecimal(latitude, "Latitude");
+        BigDecimal lon = parseDecimal(longitude, "Longitude");
+
+        if (lat.compareTo(BigDecimal.valueOf(-90)) < 0
+                || lat.compareTo(BigDecimal.valueOf(90)) > 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Latitude phải nằm trong khoảng -90 đến 90."
+            );
+        }
+
+        if (lon.compareTo(BigDecimal.valueOf(-180)) < 0
+                || lon.compareTo(BigDecimal.valueOf(180)) > 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Longitude phải nằm trong khoảng -180 đến 180."
+            );
+        }
+
+        if (lat.compareTo(BigDecimal.ZERO) == 0
+                && lon.compareTo(BigDecimal.ZERO) == 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Tọa độ (0,0) không được chấp nhận."
+            );
+        }
+
+        partner.setAddress(address.trim());
+        partner.setLatitude(lat);
+        partner.setLongitude(lon);
+        updatePartnerVersion(partner);
+    }
+
+    private void applyProfileUpdate(
+            Partner partner,
+            Map<String, String> oldValues,
+            Map<String, String> newValues) {
+
+        checkOldValue(oldValues, "businessName", partner.getBusinessName());
+        checkOldValue(oldValues, "description", partner.getDescription());
+        checkOldValue(oldValues, "taxCode", partner.getTaxCode());
+
+        String businessName = newValues.get("businessName");
+
+        if (businessName == null || businessName.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Tên doanh nghiệp không được để trống."
+            );
+        }
+
+        partner.setBusinessName(businessName.trim());
+
+        if (newValues.containsKey("description")) {
+            partner.setDescription(newValues.get("description"));
+        }
+
+        if (newValues.containsKey("taxCode")) {
+            partner.setTaxCode(newValues.get("taxCode"));
+        }
+
+        updatePartnerVersion(partner);
+    }
+
+    private void applyServiceRegister(
+            BusinessChangeRequest request,
+            Partner partner,
+            Map<String, String> values) {
+
+        Long serviceId = getServiceId(request, values);
+
+        Service service = serviceRepository.findById(serviceId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Dịch vụ sàn không tồn tại."
+                ));
+
+        if (!"ACTIVE".equalsIgnoreCase(service.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Dịch vụ sàn hiện không hoạt động nên không thể đăng ký."
+            );
+        }
+
+        BigDecimal price = values.containsKey("price")
+                ? parseDecimal(values.get("price"), "Giá dịch vụ")
+                : service.getBasePrice();
+
+        validatePrice(price);
+
+        Optional<PartnerService> existing = findPartnerService(partner.getId(), serviceId);
+        LocalDateTime now = LocalDateTime.now();
+
+        if (existing.isPresent()) {
+            PartnerService partnerService = existing.get();
+            partnerService.setPrice(price);
+            partnerService.setStatus("ACTIVE");
+            partnerService.setUpdatedAt(now);
+            partnerServiceRepository.save(partnerService);
+            return;
+        }
+
+        PartnerService partnerService = PartnerService.builder()
+                .partner(partner)
+                .service(service)
+                .price(price)
+                .status("ACTIVE")
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+
+        partnerServiceRepository.save(partnerService);
+    }
+
+    private void applyServiceUpdate(
+            Partner partner,
+            Map<String, String> oldValues,
+            Map<String, String> newValues) {
+
+        Long serviceId = getServiceId(oldValues, newValues);
+
+        PartnerService partnerService = findPartnerService(partner.getId(), serviceId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Provider không có dịch vụ tương ứng với yêu cầu này."
+                ));
+
+        if (oldValues.containsKey("price")) {
+            BigDecimal oldPrice = parseDecimal(oldValues.get("price"), "Giá cũ");
+
+            if (partnerService.getPrice() == null
+                    || partnerService.getPrice().compareTo(oldPrice) != 0) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Giá dịch vụ đã thay đổi sau khi gửi yêu cầu. Không thể áp dụng yêu cầu cũ."
+                );
+            }
+        }
+
+        if (newValues.containsKey("price")) {
+            BigDecimal newPrice = parseDecimal(newValues.get("price"), "Giá đề xuất");
+            validatePrice(newPrice);
+            partnerService.setPrice(newPrice);
+        }
+
+        if (newValues.containsKey("status")) {
+            String status = normalize(newValues.get("status"));
+
+            if (!Set.of("ACTIVE", "PAUSED", "INACTIVE").contains(status)) {
+                throw new ResponseStatusException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Trạng thái dịch vụ đề xuất không hợp lệ."
+                );
+            }
+
+            partnerService.setStatus(status);
+        }
+
+        partnerService.setUpdatedAt(LocalDateTime.now());
+        partnerServiceRepository.save(partnerService);
+    }
+
+    private void applyServiceStatus(
+            Partner partner,
+            Map<String, String> values,
+            String targetStatus) {
+
+        Long serviceId = getServiceId(values, values);
+
+        PartnerService partnerService = findPartnerService(partner.getId(), serviceId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy dịch vụ Provider cần cập nhật."
+                ));
+
+        partnerService.setStatus(targetStatus);
+        partnerService.setUpdatedAt(LocalDateTime.now());
+
+        partnerServiceRepository.save(partnerService);
+    }
+
+    private Optional<PartnerService> findPartnerService(Long partnerId, Long serviceId) {
+        return partnerServiceRepository.findByPartner_Id(partnerId)
+                .stream()
+                .filter(item -> item.getService() != null
+                        && Objects.equals(item.getService().getId(), serviceId))
+                .findFirst();
+    }
+
+    private Long getServiceId(
+            BusinessChangeRequest request,
+            Map<String, String> values) {
+
+        if (values.containsKey("serviceId")) {
+            return parseLong(values.get("serviceId"), "Mã dịch vụ");
+        }
+
+        if (request.getTargetId() != null
+                && !Objects.equals(request.getTargetId(), request.getPartner().getId())) {
+            return request.getTargetId();
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                "Yêu cầu không có mã dịch vụ hợp lệ."
+        );
+    }
+
+    private Long getServiceId(
+            Map<String, String> oldValues,
+            Map<String, String> newValues) {
+
+        String serviceId = newValues.get("serviceId");
+
+        if (serviceId == null || serviceId.isBlank()) {
+            serviceId = oldValues.get("serviceId");
+        }
+
+        if (serviceId == null || serviceId.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Yêu cầu không có mã dịch vụ."
+            );
+        }
+
+        return parseLong(serviceId, "Mã dịch vụ");
+    }
+
+    private void checkOldValue(
+            Map<String, String> oldValues,
+            String key,
+            Object currentValue) {
+
+        if (!oldValues.containsKey(key)) {
+            return;
+        }
+
+        String expected = oldValues.get(key);
+        String current = currentValue == null ? "" : String.valueOf(currentValue);
+
+        if ("latitude".equals(key) || "longitude".equals(key)) {
+            if (expected.isBlank() && current.isBlank()) {
+                return;
+            }
+
+            try {
+                if (new BigDecimal(expected).compareTo(new BigDecimal(current)) == 0) {
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
+        } else if (Objects.equals(expected, current)) {
+            return;
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Thông tin hiện tại đã thay đổi sau khi Provider gửi yêu cầu. Vui lòng kiểm tra lại."
+        );
+    }
+
+    private void updatePartnerVersion(Partner partner) {
+        partner.setVersion(
+                partner.getVersion() == null ? 2 : partner.getVersion() + 1
+        );
+        partner.setUpdatedAt(LocalDateTime.now());
+        partnerRepository.save(partner);
+    }
+
+    private BigDecimal parseDecimal(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    fieldName + " không được để trống."
+            );
+        }
+
+        try {
+            return new BigDecimal(value.trim());
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    fieldName + " không hợp lệ."
+            );
+        }
+    }
+
+    private Long parseLong(String value, String fieldName) {
+        try {
+            return Long.parseLong(value.trim());
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    fieldName + " không hợp lệ."
+            );
+        }
+    }
+
+    private void validatePrice(BigDecimal price) {
+        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Giá dịch vụ phải lớn hơn 0."
+            );
+        }
     }
 
     private Map<String, String> parseSnapshot(String snapshot) {
-        Map<String, String> map = new HashMap<>();
-        if (snapshot == null || snapshot.isBlank()) return map;
+        Map<String, String> values = new LinkedHashMap<>();
 
-        // Parse key-value strings format: key=value;key=value or json format
-        String clean = snapshot.trim();
-        if (clean.startsWith("{") && clean.endsWith("}")) {
-            clean = clean.substring(1, clean.length() - 1);
+        if (snapshot == null || snapshot.isBlank()) {
+            return values;
         }
-        String[] pairs = clean.split("[,;]");
-        for (String pair : pairs) {
-            String[] kv = pair.split("[:=]", 2);
-            if (kv.length == 2) {
-                String k = kv[0].trim().replace("\"", "");
-                String v = kv[1].trim().replace("\"", "");
-                map.put(k, v);
+
+        String clean = snapshot.trim();
+
+        if (clean.startsWith("{") && clean.endsWith("}")) {
+            try {
+                JsonNode node = objectMapper.readTree(clean);
+
+                if (node.isObject()) {
+                    node.properties().forEach(entry -> {
+                        JsonNode value = entry.getValue();
+
+                        values.put(
+                                entry.getKey(),
+                                value == null || value.isNull()
+                                        ? ""
+                                        : value.isValueNode()
+                                        ? value.asText()
+                                        : value.toString()
+                        );
+                    });
+
+                    return values;
+                }
+            } catch (Exception ignored) {
             }
         }
-        return map;
+
+        String[] pairs = clean.split(";");
+
+        for (String pair : pairs) {
+            int separator = pair.indexOf('=');
+
+            if (separator < 1) {
+                continue;
+            }
+
+            String key = pair.substring(0, separator).trim();
+            String value = pair.substring(separator + 1).trim();
+
+            if (!key.isBlank()) {
+                values.put(key, value);
+            }
+        }
+
+        return values;
     }
 
-    private Map<String, Object> row(BusinessChangeRequest r) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("id", r.getId());
-        map.put("partnerId", r.getPartner().getId());
-        map.put("businessName", r.getPartner().getBusinessName());
-        map.put("requestType", r.getRequestType());
-        map.put("status", r.getStatus());
-        map.put("targetId", r.getTargetId());
-        map.put("targetName", r.getTargetName());
-        map.put("oldSnapshot", r.getOldSnapshot());
-        map.put("proposedSnapshot", r.getProposedSnapshot());
-        map.put("reason", r.getReason());
-        map.put("evidenceUrl", r.getEvidenceUrl());
-        map.put("rejectReason", r.getRejectReason());
-        map.put("submittedBy", r.getSubmittedBy());
-        map.put("reviewedBy", r.getReviewedBy());
-        map.put("createdAt", r.getCreatedAt());
-        map.put("reviewedAt", r.getReviewedAt());
-        return map;
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toUpperCase();
+    }
+
+    private String getActor(Authentication authentication) {
+        return authentication == null ? "admin" : authentication.getName();
+    }
+
+    private Map<String, Object> toResponse(BusinessChangeRequest request) {
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        result.put("id", request.getId());
+        result.put("partnerId", request.getPartner().getId());
+        result.put("businessName", request.getPartner().getBusinessName());
+        result.put("requestType", request.getRequestType());
+        result.put("status", request.getStatus());
+        result.put("targetId", request.getTargetId());
+        result.put("targetName", request.getTargetName());
+        result.put("oldSnapshot", request.getOldSnapshot());
+        result.put("proposedSnapshot", request.getProposedSnapshot());
+        result.put("reason", request.getReason());
+        result.put("evidenceUrl", request.getEvidenceUrl());
+        result.put("rejectReason", request.getRejectReason());
+        result.put("submittedBy", request.getSubmittedBy());
+        result.put("reviewedBy", request.getReviewedBy());
+        result.put("createdAt", request.getCreatedAt());
+        result.put("updatedAt", request.getUpdatedAt());
+        result.put("reviewedAt", request.getReviewedAt());
+
+        return result;
     }
 }

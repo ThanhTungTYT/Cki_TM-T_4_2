@@ -1,6 +1,7 @@
 package org.ckitmdt.backend.dto.booking;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
@@ -14,7 +15,6 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class CreateBookingRequest {
-
     @NotNull(message = "partnerId is required")
     private Long partnerId;
 
@@ -29,10 +29,10 @@ public class CreateBookingRequest {
     private LocalDateTime scheduledStart;
 
     private String customerNote;
-
     private String voucherCode;
-
     private String paymentMethod;
-
     private String idempotencyKey;
+
+    @Min(value = 0, message = "redeemPoints cannot be negative")
+    private Integer redeemPoints;
 }

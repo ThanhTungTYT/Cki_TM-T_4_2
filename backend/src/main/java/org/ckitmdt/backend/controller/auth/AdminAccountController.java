@@ -1,12 +1,15 @@
-
 package org.ckitmdt.backend.controller.auth;
 
 import lombok.RequiredArgsConstructor;
+import org.ckitmdt.backend.entity.AccountStatusHistory;
 import org.ckitmdt.backend.entity.User;
+import org.ckitmdt.backend.repository.AccountStatusHistoryRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -24,16 +27,12 @@ import java.util.stream.Collectors;
 public class AdminAccountController {
 
     private final UserRepository userRepository;
+    private final AccountStatusHistoryRepository historyRepository;
     private final PasswordEncoder passwordEncoder;
 
-    private static final DateTimeFormatter DATE_FORMAT =
-            DateTimeFormatter.ofPattern("dd/MM/yyyy");
-
-    private static final List<String> ALLOWED_ROLES =
-            List.of("CUSTOMER", "PROVIDER", "CLEANER", "STAFF", "ADMIN");
-
-    private static final List<String> ALLOWED_STATUSES =
-            List.of("ACTIVE", "LOCKED");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+    private static final List<String> ALLOWED_ROLES = List.of("CUSTOMER", "PROVIDER", "CLEANER", "STAFF", "ADMIN");
 
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getAccounts(
@@ -45,42 +44,22 @@ public class AdminAccountController {
         String searchRole = normalize(role);
         String searchStatus = normalize(status);
 
-        if (!searchRole.isEmpty()
-                && !ALLOWED_ROLES.contains(searchRole)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Vai trò không hợp lệ."
-            );
+        if (!searchRole.isEmpty() && !ALLOWED_ROLES.contains(searchRole)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vai trò không hợp lệ.");
         }
 
-        if (!searchStatus.isEmpty()
-                && !ALLOWED_STATUSES.contains(searchStatus)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Trạng thái chỉ được là ACTIVE hoặc LOCKED."
-            );
+        if (!searchStatus.isEmpty() && !List.of("ACTIVE", "LOCKED").contains(searchStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái chỉ được là ACTIVE hoặc LOCKED.");
         }
 
-        List<Map<String, Object>> accounts = userRepository.findAll()
-                .stream()
-                .filter(user ->
-                        searchKeyword.isEmpty()
-                                || contains(user.getFullName(), searchKeyword)
-                                || contains(user.getEmail(), searchKeyword)
-                                || contains(user.getPhone(), searchKeyword)
-                )
-                .filter(user ->
-                        searchRole.isEmpty()
-                                || searchRole.equals(normalize(user.getRole()))
-                )
-                .filter(user ->
-                        searchStatus.isEmpty()
-                                || searchStatus.equals(normalize(user.getStatus()))
-                )
-                .sorted(Comparator.comparing(
-                        User::getCreatedAt,
-                        Comparator.nullsLast(Comparator.reverseOrder())
-                ))
+        List<Map<String, Object>> accounts = userRepository.findAll().stream()
+                .filter(user -> searchKeyword.isEmpty()
+                        || contains(user.getFullName(), searchKeyword)
+                        || contains(user.getEmail(), searchKeyword)
+                        || contains(user.getPhone(), searchKeyword))
+                .filter(user -> searchRole.isEmpty() || searchRole.equals(normalize(user.getRole())))
+                .filter(user -> searchStatus.isEmpty() || searchStatus.equals(normalize(user.getStatus())))
+                .sorted(Comparator.comparing(User::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(this::toAccountResponse)
                 .collect(Collectors.toList());
 
@@ -88,9 +67,7 @@ public class AdminAccountController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createAccount(
-            @RequestBody Map<String, String> request
-    ) {
+    public ResponseEntity<Map<String, Object>> createAccount(@RequestBody Map<String, String> request) {
         String name = trim(request.get("name"));
         String email = trim(request.get("email"));
         String phone = trim(request.get("phone"));
@@ -99,37 +76,28 @@ public class AdminAccountController {
         String status = normalize(request.get("status"));
 
         if (name.isEmpty()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Vui lòng nhập họ và tên."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập họ và tên.");
         }
 
-        if (email.isEmpty() || !email.matches(
-                "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
-        )) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Email không hợp lệ."
-            );
-        }
+        validateEmail(email);
 
         if (userRepository.existsByEmail(email)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Email này đã được sử dụng."
-            );
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email này đã được sử dụng.");
         }
 
         if (password == null || password.length() < 8) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Mật khẩu phải có ít nhất 8 ký tự."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu phải có ít nhất 8 ký tự.");
         }
 
         validateRole(role);
-        validateStatus(status);
+
+        if (status.isEmpty()) {
+            status = "ACTIVE";
+        }
+
+        if (!"ACTIVE".equals(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tài khoản mới phải ở trạng thái ACTIVE. Hãy tạo tài khoản rồi thực hiện khóa kèm lý do nếu cần.");
+        }
 
         User user = new User();
         user.setFullName(name);
@@ -137,7 +105,7 @@ public class AdminAccountController {
         user.setPhone(phone.isEmpty() ? null : phone);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setRole(role);
-        user.setStatus(status);
+        user.setStatus("ACTIVE");
         user.setEmailVerified(false);
 
         User savedUser = userRepository.save(user);
@@ -154,79 +122,43 @@ public class AdminAccountController {
             @PathVariable Long id,
             @RequestBody Map<String, String> request
     ) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy tài khoản."
-                ));
+        User user = findUser(id);
 
         String name = trim(request.get("name"));
         String email = trim(request.get("email"));
         String phone = trim(request.get("phone"));
 
         if (name.isEmpty()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Vui lòng nhập họ và tên."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập họ và tên.");
         }
 
-        if (email.isEmpty() || !email.matches(
-                "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
-        )) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Email không hợp lệ."
-            );
-        }
+        validateEmail(email);
 
-        userRepository.findByEmail(email)
-                .filter(existing -> !existing.getId().equals(id))
-                .ifPresent(existing -> {
-                    throw new ResponseStatusException(
-                            HttpStatus.CONFLICT,
-                            "Email này đã được sử dụng."
-                    );
-                });
+        userRepository.findByEmail(email).filter(existing -> !existing.getId().equals(id)).ifPresent(existing -> {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email này đã được sử dụng.");
+        });
 
         String role = normalize(request.get("role"));
-        String status = normalize(request.get("status"));
 
         if (!role.isEmpty()) {
             validateRole(role);
 
-            if ("ADMIN".equals(normalize(user.getRole()))
-                    && !"ADMIN".equals(role)) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Không thể đổi vai trò của tài khoản Admin tại đây."
-                );
+            if ("ADMIN".equals(normalize(user.getRole())) && !"ADMIN".equals(role)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể đổi vai trò của tài khoản Admin tại đây.");
             }
 
             user.setRole(role);
         }
 
-        if (!status.isEmpty()) {
-            validateStatus(status);
-
-            if ("ADMIN".equals(normalize(user.getRole()))) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Không thể đổi trạng thái tài khoản Admin."
-                );
-            }
-
-            user.setStatus(status);
+        if (request.containsKey("status")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hãy sử dụng chức năng khóa/mở khóa để thay đổi trạng thái và ghi nhận lý do.");
         }
 
         String password = request.get("password");
 
         if (password != null && !password.isBlank()) {
             if (password.length() < 8) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Mật khẩu mới phải có ít nhất 8 ký tự."
-                );
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu mới phải có ít nhất 8 ký tự.");
             }
 
             user.setPasswordHash(passwordEncoder.encode(password));
@@ -245,99 +177,108 @@ public class AdminAccountController {
         return ResponseEntity.ok(response);
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteAccount(
-            @PathVariable Long id
-    ) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy tài khoản."
-                ));
-
-        if ("ADMIN".equals(normalize(user.getRole()))) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Không thể xóa tài khoản Admin."
-            );
-        }
-
-        try {
-            userRepository.delete(user);
-            userRepository.flush();
-        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Không thể xóa tài khoản vì đang có dữ liệu liên quan. "
-                            + "Hãy khóa tài khoản thay vì xóa.",
-                    ex
-            );
-        }
-
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("message", "Xóa tài khoản thành công.");
-        response.put("id", id);
-
-        return ResponseEntity.ok(response);
-    }
-
     @PutMapping("/{id}/status")
+    @Transactional
     public ResponseEntity<Map<String, Object>> updateAccountStatus(
             @PathVariable Long id,
-            @RequestBody Map<String, String> request
+            @RequestBody Map<String, String> request,
+            Authentication authentication
     ) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy tài khoản."
-                ));
+        User user = findUser(id);
 
         String requestedStatus = normalize(request.get("status"));
+        String reason = trim(request.get("reason"));
 
-        validateStatus(requestedStatus);
+        if (!List.of("ACTIVE", "LOCKED").contains(requestedStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái chỉ được là ACTIVE hoặc LOCKED.");
+        }
+
+        if (reason.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do thay đổi trạng thái tài khoản.");
+        }
+
+        if (reason.length() > 2000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lý do không được vượt quá 2000 ký tự.");
+        }
 
         if ("ADMIN".equals(normalize(user.getRole()))) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Không thể thay đổi trạng thái tài khoản Admin."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể thay đổi trạng thái tài khoản Admin.");
+        }
+
+        String oldStatus = normalize(user.getStatus());
+
+        if (oldStatus.equals(requestedStatus)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Tài khoản đã ở trạng thái được chọn.");
+        }
+
+        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Không xác định được người thực hiện.");
         }
 
         user.setStatus(requestedStatus);
         User savedUser = userRepository.save(user);
 
+        historyRepository.save(AccountStatusHistory.builder()
+                .account(savedUser)
+                .oldStatus(oldStatus)
+                .newStatus(requestedStatus)
+                .reason(reason)
+                .changedByEmail(authentication.getName())
+                .build());
+
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put(
-                "message",
-                "Cập nhật trạng thái tài khoản thành công."
-        );
+        response.put("message", "Cập nhật trạng thái tài khoản thành công.");
         response.put("account", toAccountResponse(savedUser));
 
         return ResponseEntity.ok(response);
     }
 
-    private void validateRole(String role) {
-        if (!ALLOWED_ROLES.contains(role)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Vai trò không hợp lệ."
-            );
+    @GetMapping("/{id}/history")
+    @Transactional(readOnly = true)
+    public ResponseEntity<List<Map<String, Object>>> getStatusHistory(@PathVariable Long id) {
+        findUser(id);
+
+        List<Map<String, Object>> history = historyRepository.findByAccountIdOrderByChangedAtDesc(id).stream()
+                .map(item -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", item.getId());
+                    row.put("oldStatus", item.getOldStatus());
+                    row.put("newStatus", item.getNewStatus());
+                    row.put("reason", item.getReason());
+                    row.put("changedBy", item.getChangedByEmail());
+                    row.put("changedAt", item.getChangedAt() == null ? "" : item.getChangedAt().format(DATE_TIME_FORMAT));
+                    return row;
+                }).collect(Collectors.toList());
+
+        return ResponseEntity.ok(history);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> deleteAccount(@PathVariable Long id) {
+        findUser(id);
+
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "Hệ thống không xóa cứng tài khoản để bảo toàn lịch sử giao dịch. Hãy sử dụng chức năng khóa tài khoản.");
+    }
+
+    private User findUser(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy tài khoản."));
+    }
+
+    private void validateEmail(String email) {
+        if (email.isEmpty() || !email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email không hợp lệ.");
         }
     }
 
-    private void validateStatus(String status) {
-        if (!ALLOWED_STATUSES.contains(status)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Trạng thái chỉ được là ACTIVE hoặc LOCKED."
-            );
+    private void validateRole(String role) {
+        if (!ALLOWED_ROLES.contains(role)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vai trò không hợp lệ.");
         }
     }
 
     private String normalize(String value) {
-        return value == null
-                ? ""
-                : value.trim().toUpperCase(Locale.ROOT);
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
     }
 
     private String trim(String value) {
@@ -345,59 +286,38 @@ public class AdminAccountController {
     }
 
     private boolean contains(String value, String keyword) {
-        return value != null
-                && value.toLowerCase(Locale.ROOT).contains(keyword.toLowerCase(Locale.ROOT));
+        return value != null && value.toLowerCase(Locale.ROOT).contains(keyword.toLowerCase(Locale.ROOT));
     }
 
     private Map<String, Object> toAccountResponse(User user) {
         Map<String, Object> response = new LinkedHashMap<>();
-
         response.put("id", user.getId());
         response.put("name", user.getFullName());
         response.put("email", user.getEmail());
         response.put("phone", user.getPhone());
         response.put("role", normalizeRole(user.getRole()));
         response.put("status", normalizeStatus(user.getStatus()));
-        response.put(
-                "joinedAt",
-                user.getCreatedAt() == null
-                        ? ""
-                        : user.getCreatedAt().format(DATE_FORMAT)
-        );
+        response.put("joinedAt", user.getCreatedAt() == null ? "" : user.getCreatedAt().format(DATE_FORMAT));
 
         return response;
     }
 
     private String normalizeRole(String role) {
-        if (role == null) {
-            return "Customer";
-        }
+        if (role == null) return "Customer";
 
-        switch (role.toUpperCase(Locale.ROOT)) {
-            case "CUSTOMER":
-                return "Customer";
-            case "PROVIDER":
-                return "Provider";
-            case "CLEANER":
-                return "Cleaner";
-            case "STAFF":
-                return "Staff";
-            case "ADMIN":
-                return "Admin";
-            default:
-                return role;
-        }
+        return switch (role.toUpperCase(Locale.ROOT)) {
+            case "CUSTOMER" -> "Customer";
+            case "PROVIDER" -> "Provider";
+            case "CLEANER" -> "Cleaner";
+            case "STAFF" -> "Staff";
+            case "ADMIN" -> "Admin";
+            default -> role;
+        };
     }
 
     private String normalizeStatus(String status) {
-        if ("ACTIVE".equalsIgnoreCase(status)) {
-            return "active";
-        }
-
-        if ("LOCKED".equalsIgnoreCase(status)) {
-            return "locked";
-        }
-
+        if ("ACTIVE".equalsIgnoreCase(status)) return "active";
+        if ("LOCKED".equalsIgnoreCase(status)) return "locked";
         return "unknown";
     }
 }

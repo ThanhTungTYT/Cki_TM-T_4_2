@@ -1,352 +1,732 @@
-import { useEffect, useState } from 'react';
-import AdminLayout from './AdminLayout';
-import { adminProviderChangeRequestApi } from '../../services/providerApi';
+import { useCallback, useEffect, useState } from "react";
+import AdminLayout from "./AdminLayout";
+import { adminProviderChangeRequestApi } from "../../services/providerApi";
+import "./AdminProviderChangeRequests.css";
+
+const STATUS_OPTIONS = [
+    { value: "", label: "Tất cả trạng thái" },
+    { value: "PENDING_REVIEW", label: "Chờ duyệt" },
+    { value: "NEEDS_INFORMATION", label: "Cần bổ sung thông tin" },
+    { value: "APPROVED", label: "Đã phê duyệt" },
+    { value: "REJECTED", label: "Đã từ chối" },
+    { value: "WITHDRAWN", label: "Đã rút yêu cầu" },
+];
+
+const STATUS_CONFIG = {
+    PENDING_REVIEW: {
+        label: "Chờ duyệt",
+        className: "badge-warning",
+    },
+    NEEDS_INFORMATION: {
+        label: "Cần bổ sung thông tin",
+        className: "badge-info",
+    },
+    APPROVED: {
+        label: "Đã phê duyệt",
+        className: "badge-success",
+    },
+    REJECTED: {
+        label: "Đã từ chối",
+        className: "badge-danger",
+    },
+    WITHDRAWN: {
+        label: "Đã rút yêu cầu",
+        className: "badge-secondary",
+    },
+};
+
+const TYPE_LABELS = {
+    LOCATION_UPDATE: "Thay đổi vị trí / Tọa độ",
+    PROFILE_UPDATE: "Thay đổi thông tin doanh nghiệp",
+    SERVICE_REGISTER: "Đăng ký dịch vụ mới",
+    SERVICE_UPDATE: "Điều chỉnh giá dịch vụ",
+    SERVICE_PAUSE: "Tạm dừng dịch vụ",
+    SERVICE_RETIRE: "Ngừng cung cấp dịch vụ",
+};
+
+const FIELD_LABELS = {
+    address: "Địa chỉ hoạt động",
+    latitude: "Vĩ độ",
+    longitude: "Kinh độ",
+    businessName: "Tên doanh nghiệp",
+    description: "Mô tả doanh nghiệp",
+    taxCode: "Mã số thuế",
+    serviceId: "Mã dịch vụ",
+    price: "Giá dịch vụ",
+    basePrice: "Giá nền",
+    status: "Trạng thái",
+    name: "Tên dịch vụ",
+    categoryId: "Danh mục",
+    categoryName: "Tên danh mục",
+    serviceName: "Tên dịch vụ",
+    packageId: "Mã gói dịch vụ",
+    packageName: "Tên gói dịch vụ",
+};
+
+function formatDate(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "—";
+
+    return date.toLocaleString("vi-VN");
+}
+
+function parseSnapshot(snapshot) {
+    if (!snapshot) return {};
+
+    if (typeof snapshot === "object" && !Array.isArray(snapshot)) {
+        return snapshot;
+    }
+
+    const text = String(snapshot).trim();
+
+    if (!text) return {};
+
+    try {
+        const parsed = JSON.parse(text);
+
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            return parsed;
+        }
+    } catch {
+        // Tiếp tục thử định dạng key=value.
+    }
+
+    const result = {};
+
+    text.replace(/^\{|\}$/g, "").split(";").forEach((item) => {
+        const separator = item.indexOf("=");
+
+        if (separator < 1) return;
+
+        const key = item.substring(0, separator).trim();
+        const value = item.substring(separator + 1).trim();
+
+        if (key) result[key] = value;
+    });
+
+    return result;
+}
+
+function displayValue(value) {
+    if (value === null || value === undefined || value === "") {
+        return "—";
+    }
+
+    if (typeof value === "object") {
+        return JSON.stringify(value);
+    }
+
+    return String(value);
+}
+
+function StatusBadge({ status }) {
+    const normalized = String(status || "").toUpperCase();
+
+    const config = STATUS_CONFIG[normalized] || {
+        label: status || "Không xác định",
+        className: "badge-secondary",
+    };
+
+    return (
+        <span className={`badge ${config.className}`}>
+            {config.label}
+        </span>
+    );
+}
 
 function AdminProviderChangeRequests() {
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [msg, setMsg] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
+    const [error, setError] = useState("");
+    const [message, setMessage] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
 
-    // Modal detail & action
     const [selectedRequest, setSelectedRequest] = useState(null);
-    const [rejectReason, setRejectReason] = useState('');
-    const [showRejectInput, setShowRejectInput] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [modalError, setModalError] = useState('');
+    const [detailLoading, setDetailLoading] = useState(false);
 
-    function loadRequests() {
+    const [actionType, setActionType] = useState("");
+    const [actionReason, setActionReason] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [modalError, setModalError] = useState("");
+
+    const loadRequests = useCallback(async () => {
         setLoading(true);
-        setError('');
-        adminProviderChangeRequestApi
-            .list(statusFilter)
-            .then((data) => setRequests(Array.isArray(data) ? data : []))
-            .catch((e) => setError(e.message))
-            .finally(() => setLoading(false));
-    }
+        setError("");
+
+        try {
+            const data = await adminProviderChangeRequestApi.list(statusFilter);
+            setRequests(Array.isArray(data) ? data : []);
+        } catch (err) {
+            setError(err.message || "Không thể tải danh sách yêu cầu.");
+            setRequests([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [statusFilter]);
 
     useEffect(() => {
         loadRequests();
-    }, [statusFilter]); // eslint-disable-line
+    }, [loadRequests]);
 
-    function openModal(req) {
-        setSelectedRequest(req);
-        setRejectReason('');
-        setShowRejectInput(false);
-        setModalError('');
-    }
+    const openDetail = async (request) => {
+        setSelectedRequest(request);
+        setActionType("");
+        setActionReason("");
+        setModalError("");
+        setDetailLoading(true);
 
-    async function handleApprove() {
-        if (!window.confirm(`Xác nhận PHÊ DUYỆT yêu cầu #${selectedRequest.id} và cập nhật hồ sơ đối tác?`)) return;
-        setSubmitting(true);
-        setModalError('');
         try {
-            await adminProviderChangeRequestApi.approve(selectedRequest.id);
-            setMsg(`✅ Đã phê duyệt yêu cầu #${selectedRequest.id} thành công!`);
-            setSelectedRequest(null);
-            loadRequests();
-        } catch (e) {
-            setModalError(e.message);
+            const detail = await adminProviderChangeRequestApi.get(request.id);
+            setSelectedRequest(detail);
+        } catch (err) {
+            setModalError(err.message || "Không thể tải chi tiết yêu cầu.");
         } finally {
-            setSubmitting(false);
+            setDetailLoading(false);
         }
-    }
+    };
 
-    async function handleReject() {
-        if (!rejectReason.trim()) {
-            setModalError('Vui lòng nhập lý do từ chối.');
+    const closeModal = () => {
+        if (submitting) return;
+
+        setSelectedRequest(null);
+        setActionType("");
+        setActionReason("");
+        setModalError("");
+    };
+
+    const closeModalAfterSuccess = () => {
+        setSelectedRequest(null);
+        setActionType("");
+        setActionReason("");
+        setModalError("");
+    };
+
+    const submitRequestInfo = async () => {
+        if (!actionReason.trim()) {
+            setModalError("Vui lòng ghi rõ thông tin hoặc tài liệu cần Provider bổ sung.");
             return;
         }
+
+        if (actionReason.trim().length < 5) {
+            setModalError("Nội dung yêu cầu bổ sung quá ngắn.");
+            return;
+        }
+
         setSubmitting(true);
-        setModalError('');
+        setModalError("");
+
         try {
-            await adminProviderChangeRequestApi.reject(selectedRequest.id, rejectReason.trim());
-            setMsg(`Đã từ chối yêu cầu #${selectedRequest.id}.`);
-            setSelectedRequest(null);
-            loadRequests();
-        } catch (e) {
-            setModalError(e.message);
+            const requestId = selectedRequest.id;
+
+            await adminProviderChangeRequestApi.requestInfo(
+                requestId,
+                actionReason.trim()
+            );
+
+            setMessage(
+                `Đã yêu cầu Provider bổ sung thông tin cho yêu cầu #${requestId}.`
+            );
+
+            closeModalAfterSuccess();
+            await loadRequests();
+        } catch (err) {
+            setModalError(err.message || "Không thể yêu cầu bổ sung thông tin.");
         } finally {
             setSubmitting(false);
         }
-    }
+    };
 
-    function statusBadge(s) {
-        const map = {
-            PENDING_REVIEW: { cls: 'badge-warning', label: 'Chờ duyệt' },
-            APPROVED:       { cls: 'badge-success', label: 'Đã duyệt' },
-            REJECTED:       { cls: 'badge-danger',  label: 'Bị từ chối' },
-            WITHDRAWN:      { cls: 'badge-secondary', label: 'Đã rút' },
-        };
-        const cfg = map[(s || '').toUpperCase()] || { cls: '', label: s || '—' };
-        return <span className={`badge ${cfg.cls}`}>{cfg.label}</span>;
-    }
-
-    function formatType(type) {
-        switch (type) {
-            case 'LOCATION_UPDATE': return '📍 Thay đổi vị trí / Tọa độ';
-            case 'PROFILE_UPDATE':  return '🏢 Thay đổi thông tin công ty';
-            case 'SERVICE_REGISTER':return '➕ Đăng ký dịch vụ mới';
-            case 'SERVICE_UPDATE':  return '💵 Điều chỉnh giá dịch vụ';
-            default: return type;
+    const submitReject = async () => {
+        if (!actionReason.trim()) {
+            setModalError("Vui lòng nhập lý do từ chối.");
+            return;
         }
-    }
 
-    function renderSnapshotTable(oldStr, newStr) {
-        const parsePairs = (str) => {
-            const map = {};
-            if (!str) return map;
-            str.replace(/[{}]/g, '').split(';').forEach(p => {
-                const [k, v] = p.split('=');
-                if (k && v !== undefined) map[k.trim()] = v.trim();
-            });
-            return map;
-        };
+        if (actionReason.trim().length < 5) {
+            setModalError("Lý do từ chối phải có ít nhất 5 ký tự.");
+            return;
+        }
 
-        const oldMap = parsePairs(oldStr);
-        const newMap = parsePairs(newStr);
-        const keys = Array.from(new Set([...Object.keys(oldMap), ...Object.keys(newMap)]));
+        setSubmitting(true);
+        setModalError("");
+
+        try {
+            const requestId = selectedRequest.id;
+
+            await adminProviderChangeRequestApi.reject(
+                requestId,
+                actionReason.trim()
+            );
+
+            setMessage(`Đã từ chối yêu cầu #${requestId}.`);
+
+            closeModalAfterSuccess();
+            await loadRequests();
+        } catch (err) {
+            setModalError(err.message || "Không thể từ chối yêu cầu.");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const submitApprove = async () => {
+        const confirmed = window.confirm(
+            `Bạn có chắc chắn muốn phê duyệt yêu cầu #${selectedRequest.id}? Dữ liệu đề xuất sẽ được áp dụng vào hồ sơ Provider.`
+        );
+
+        if (!confirmed) return;
+
+        setSubmitting(true);
+        setModalError("");
+
+        try {
+            const requestId = selectedRequest.id;
+
+            await adminProviderChangeRequestApi.approve(requestId);
+
+            setMessage(`Đã phê duyệt yêu cầu #${requestId} thành công.`);
+
+            closeModalAfterSuccess();
+            await loadRequests();
+        } catch (err) {
+            setModalError(err.message || "Không thể phê duyệt yêu cầu.");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const renderSnapshotTable = (oldSnapshot, proposedSnapshot) => {
+        const oldValues = parseSnapshot(oldSnapshot);
+        const newValues = parseSnapshot(proposedSnapshot);
+
+        const keys = Array.from(
+            new Set([
+                ...Object.keys(oldValues),
+                ...Object.keys(newValues),
+            ])
+        );
+
+        if (keys.length === 0) {
+            return (
+                <div className="provider-snapshot-empty">
+                    Không có dữ liệu snapshot để so sánh.
+                </div>
+            );
+        }
 
         return (
-            <table className="admin-table" style={{ fontSize: 13, marginTop: 8 }}>
-                <thead>
+            <div className="provider-snapshot-table-wrap">
+                <table className="admin-table">
+                    <thead>
                     <tr>
-                        <th>Trường thông tin</th>
-                        <th>Dữ liệu hiện hành (Trước)</th>
-                        <th>Dữ liệu đề xuất (Sau)</th>
+                        <th>Thông tin</th>
+                        <th>Dữ liệu hiện tại</th>
+                        <th>Dữ liệu đề xuất</th>
                     </tr>
-                </thead>
-                <tbody>
-                    {keys.map((k) => (
-                        <tr key={k}>
-                            <td><strong>{k}</strong></td>
-                            <td style={{ color: '#b91c1c', textDecoration: 'line-through' }}>{oldMap[k] || '—'}</td>
-                            <td style={{ color: '#15803d', fontWeight: 600 }}>{newMap[k] || '—'}</td>
+                    </thead>
+                    <tbody>
+                    {keys.map((key) => (
+                        <tr key={key}>
+                            <td>
+                                <strong>{FIELD_LABELS[key] || key}</strong>
+                            </td>
+                            <td className="provider-old-value">
+                                {displayValue(oldValues[key])}
+                            </td>
+                            <td className="provider-new-value">
+                                {displayValue(newValues[key])}
+                            </td>
                         </tr>
                     ))}
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         );
-    }
+    };
+
+    const pendingCount = requests.filter(
+        (item) => item.status === "PENDING_REVIEW"
+    ).length;
+
+    const needInfoCount = requests.filter(
+        (item) => item.status === "NEEDS_INFORMATION"
+    ).length;
+
+    const approvedCount = requests.filter(
+        (item) => item.status === "APPROVED"
+    ).length;
 
     return (
         <AdminLayout>
-            <div className="admin-header">
-                <div>
-                    <h1>Xét duyệt yêu cầu từ Đối tác</h1>
-                    <p>Phê duyệt hoặc từ chối các đề xuất thay đổi vị trí, thông tin công ty và dịch vụ của đối tác</p>
-                </div>
-            </div>
+            <div className="admin-provider-change-page">
+                <header className="admin-header">
+                    <div>
+                        <h1>Xét duyệt yêu cầu từ Provider</h1>
+                        <p>
+                            Kiểm tra và xử lý các đề xuất thay đổi hồ sơ,
+                            vị trí và dịch vụ của doanh nghiệp.
+                        </p>
+                    </div>
 
-            {msg && <div className="alert alert-success" style={{ padding: '12px 18px', borderRadius: 8, background: '#dcfce7', color: '#166534', marginBottom: 16 }}>{msg}</div>}
-            {error && <div className="alert alert-danger" style={{ padding: '12px 18px', borderRadius: 8, background: '#fee2e2', color: '#991b1b', marginBottom: 16 }}>⚠️ {error}</div>}
-
-            {/* Filter toolbar */}
-            <div className="admin-card" style={{ marginBottom: 16, padding: '14px 20px' }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>Trạng thái:</span>
-                    <select
-                        className="admin-select"
-                        style={{ maxWidth: 220 }}
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
+                    <button
+                        type="button"
+                        className="admin-btn admin-btn-outline"
+                        onClick={loadRequests}
+                        disabled={loading}
                     >
-                        <option value="">Tất cả trạng thái</option>
-                        <option value="PENDING_REVIEW">Chờ duyệt (PENDING_REVIEW)</option>
-                        <option value="APPROVED">Đã phê duyệt (APPROVED)</option>
-                        <option value="REJECTED">Bị từ chối (REJECTED)</option>
-                        <option value="WITHDRAWN">Đã rút (WITHDRAWN)</option>
-                    </select>
-                    <button className="admin-btn admin-btn-outline" onClick={loadRequests}>
-                        Làm mới
+                        {loading ? "Đang tải..." : "Làm mới"}
                     </button>
-                </div>
-            </div>
+                </header>
 
-            {loading && <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Đang tải danh sách yêu cầu...</div>}
+                {message && (
+                    <div className="provider-alert provider-alert-success">
+                        {message}
+                    </div>
+                )}
 
-            {!loading && (
-                <div className="admin-card" style={{ padding: 0 }}>
-                    {requests.length === 0 ? (
-                        <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
-                            Không có yêu cầu nào phù hợp bộ lọc.
+                {error && (
+                    <div className="provider-alert provider-alert-error">
+                        {error}
+                    </div>
+                )}
+
+                <section className="provider-summary-grid">
+                    <div className="admin-card provider-summary-card">
+                        <span className="provider-summary-label">
+                            Tổng yêu cầu
+                        </span>
+                        <strong>{requests.length}</strong>
+                    </div>
+
+                    <div className="admin-card provider-summary-card">
+                        <span className="provider-summary-label warning">
+                            Đang chờ duyệt
+                        </span>
+                        <strong>{pendingCount}</strong>
+                    </div>
+
+                    <div className="admin-card provider-summary-card">
+                        <span className="provider-summary-label info">
+                            Cần bổ sung thông tin
+                        </span>
+                        <strong>{needInfoCount}</strong>
+                    </div>
+
+                    <div className="admin-card provider-summary-card">
+                        <span className="provider-summary-label success">
+                            Đã phê duyệt
+                        </span>
+                        <strong>{approvedCount}</strong>
+                    </div>
+                </section>
+
+                <section className="admin-card provider-filter-card">
+                    <label htmlFor="provider-request-status">
+                        Trạng thái:
+                    </label>
+
+                    <select
+                        id="provider-request-status"
+                        className="admin-select"
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value)}
+                    >
+                        {STATUS_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </section>
+
+                <section className="admin-card provider-request-table-card">
+                    {loading ? (
+                        <div className="provider-table-state">
+                            Đang tải danh sách yêu cầu...
+                        </div>
+                    ) : requests.length === 0 ? (
+                        <div className="provider-table-state">
+                            Không có yêu cầu nào phù hợp.
                         </div>
                     ) : (
-                        <div style={{ overflowX: 'auto' }}>
+                        <div className="provider-main-table-wrap">
                             <table className="admin-table">
                                 <thead>
-                                    <tr>
-                                        <th>Mã #</th>
-                                        <th>Đối tác</th>
-                                        <th>Loại thay đổi</th>
-                                        <th>Lý do đề nghị</th>
-                                        <th>Ngày gửi</th>
-                                        <th>Trạng thái</th>
-                                        <th>Xử lý</th>
-                                        <th>Thao tác</th>
-                                    </tr>
+                                <tr>
+                                    <th>Mã yêu cầu</th>
+                                    <th>Doanh nghiệp</th>
+                                    <th>Loại yêu cầu</th>
+                                    <th>Lý do</th>
+                                    <th>Ngày gửi</th>
+                                    <th>Trạng thái</th>
+                                    <th>Người xử lý</th>
+                                    <th>Thao tác</th>
+                                </tr>
                                 </thead>
                                 <tbody>
-                                    {requests.map((r) => (
-                                        <tr key={r.id}>
-                                            <td><strong>#{r.id}</strong></td>
-                                            <td>
-                                                <strong>{r.businessName || '—'}</strong>
-                                                <div style={{ fontSize: 11, color: '#64748b' }}>Mã đối tác: #{r.partnerId}</div>
-                                            </td>
-                                            <td>{formatType(r.requestType)}</td>
-                                            <td style={{ maxWidth: 240 }}>{r.reason}</td>
-                                            <td>{r.createdAt ? new Date(r.createdAt).toLocaleString('vi-VN') : '—'}</td>
-                                            <td>{statusBadge(r.status)}</td>
-                                            <td>
-                                                {r.reviewedBy && (
-                                                    <span style={{ fontSize: 12, color: '#64748b' }}>
-                                                        {r.reviewedBy} • {r.reviewedAt ? new Date(r.reviewedAt).toLocaleDateString('vi-VN') : ''}
-                                                    </span>
-                                                )}
-                                                {r.rejectReason && (
-                                                    <div style={{ fontSize: 11, color: '#dc2626' }}>
-                                                        {r.rejectReason}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td>
-                                                <button
-                                                    className="admin-btn admin-btn-sm"
-                                                    onClick={() => openModal(r)}
-                                                >
-                                                    Chi tiết & Duyệt →
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                {requests.map((request) => (
+                                    <tr key={request.id}>
+                                        <td>
+                                            <strong>#{request.id}</strong>
+                                        </td>
+                                        <td>
+                                            <strong>
+                                                {request.businessName || "—"}
+                                            </strong>
+                                            <small className="provider-table-subtext">
+                                                Provider #{request.partnerId ?? "—"}
+                                            </small>
+                                        </td>
+                                        <td>
+                                            {TYPE_LABELS[request.requestType] ||
+                                                request.requestType ||
+                                                "—"}
+                                        </td>
+                                        <td className="provider-reason-cell">
+                                            {request.reason || "—"}
+                                        </td>
+                                        <td>{formatDate(request.createdAt)}</td>
+                                        <td>
+                                            <StatusBadge status={request.status} />
+                                        </td>
+                                        <td>
+                                            {request.reviewedBy || "—"}
+                                            {request.reviewedAt && (
+                                                <small className="provider-table-subtext">
+                                                    {formatDate(request.reviewedAt)}
+                                                </small>
+                                            )}
+                                        </td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                className="admin-btn admin-btn-sm"
+                                                onClick={() => openDetail(request)}
+                                            >
+                                                Xem chi tiết
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
                                 </tbody>
                             </table>
                         </div>
                     )}
-                </div>
-            )}
+                </section>
 
-            {/* MODAL CHI TIẾT & XÉT DUYỆT */}
-            {selectedRequest && (
-                <div style={{
-                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20
-                }}>
-                    <div style={{
-                        background: '#fff', borderRadius: 12, width: '100%', maxWidth: 640,
-                        maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', padding: 24
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: 14, marginBottom: 16 }}>
-                            <div>
-                                <h3 style={{ margin: 0, fontSize: 18, color: '#1e385c' }}>
-                                    Xét duyệt yêu cầu #{selectedRequest.id}
-                                </h3>
-                                <span style={{ fontSize: 12, color: '#64748b' }}>
-                                    Đối tác: <strong>{selectedRequest.businessName}</strong> • {formatType(selectedRequest.requestType)}
-                                </span>
-                            </div>
-                            <button
-                                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#64748b' }}
-                                onClick={() => setSelectedRequest(null)}
-                            >×</button>
-                        </div>
+                {selectedRequest && (
+                    <div
+                        className="provider-modal-backdrop"
+                        onClick={(event) => {
+                            if (event.target === event.currentTarget) {
+                                closeModal();
+                            }
+                        }}
+                    >
+                        <div className="provider-modal">
+                            <div className="provider-modal-header">
+                                <div>
+                                    <h2>
+                                        Chi tiết yêu cầu #{selectedRequest.id}
+                                    </h2>
+                                    <p>
+                                        {selectedRequest.businessName || "Doanh nghiệp"}
+                                        {" · "}
+                                        {TYPE_LABELS[selectedRequest.requestType] ||
+                                            selectedRequest.requestType}
+                                    </p>
+                                </div>
 
-                        {modalError && (
-                            <div style={{ padding: '10px 14px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, marginBottom: 14 }}>
-                                ⚠️ {modalError}
-                            </div>
-                        )}
-
-                        <div style={{ marginBottom: 14 }}>
-                            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 4 }}>Lý do đề nghị từ Đối tác:</div>
-                            <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 6, fontSize: 13.5, fontStyle: 'italic', border: '1px solid #e2e8f0' }}>
-                                "{selectedRequest.reason}"
-                            </div>
-                        </div>
-
-                        {/* So sánh trước vs sau */}
-                        <div style={{ marginBottom: 16 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e385c', marginBottom: 6 }}>
-                                Bảng đối chiếu thay đổi (Trước → Sau):
-                            </div>
-                            {renderSnapshotTable(selectedRequest.oldSnapshot, selectedRequest.proposedSnapshot)}
-                        </div>
-
-                        {selectedRequest.evidenceUrl && (
-                            <div style={{ marginBottom: 16 }}>
-                                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 4 }}>Bằng chứng đính kèm:</div>
-                                <a
-                                    href={selectedRequest.evidenceUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ fontSize: 13, color: '#2563eb', textDecoration: 'underline' }}
+                                <button
+                                    type="button"
+                                    className="provider-modal-close"
+                                    onClick={closeModal}
+                                    disabled={submitting}
+                                    aria-label="Đóng"
                                 >
-                                    📎 Mở tệp bằng chứng của đối tác
-                                </a>
+                                    ×
+                                </button>
                             </div>
-                        )}
 
-                        {/* Ô nhập lý do từ chối nếu bấm từ chối */}
-                        {showRejectInput && (
-                            <div style={{ marginBottom: 16, background: '#fff5f5', padding: 14, borderRadius: 8, border: '1px solid #fecaca' }}>
-                                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>
-                                    Lý do từ chối đề nghị *
-                                </label>
-                                <textarea
-                                    style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #fca5a5', fontSize: 13, boxSizing: 'border-box' }}
-                                    rows={3}
-                                    placeholder="Nêu rõ lý do từ chối để đối tác nắm rõ..."
-                                    value={rejectReason}
-                                    onChange={(e) => setRejectReason(e.target.value)}
-                                />
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
-                            <button
-                                className="admin-btn admin-btn-ghost"
-                                onClick={() => setSelectedRequest(null)}
-                            >
-                                Đóng
-                            </button>
-
-                            {selectedRequest.status === 'PENDING_REVIEW' && (
+                            {detailLoading ? (
+                                <div className="provider-modal-loading">
+                                    Đang tải chi tiết...
+                                </div>
+                            ) : (
                                 <>
-                                    {!showRejectInput ? (
-                                        <button
-                                            className="admin-btn admin-btn-danger"
-                                            onClick={() => setShowRejectInput(true)}
-                                            disabled={submitting}
-                                        >
-                                            Từ chối...
-                                        </button>
-                                    ) : (
-                                        <button
-                                            className="admin-btn admin-btn-danger"
-                                            onClick={handleReject}
-                                            disabled={submitting}
-                                        >
-                                            {submitting ? 'Đang xử lý...' : 'Xác nhận Từ chối'}
-                                        </button>
+                                    {modalError && (
+                                        <div className="provider-alert provider-alert-error">
+                                            {modalError}
+                                        </div>
                                     )}
 
-                                    {!showRejectInput && (
-                                        <button
-                                            className="admin-btn admin-btn-success"
-                                            onClick={handleApprove}
-                                            disabled={submitting}
-                                        >
-                                            {submitting ? 'Đang duyệt...' : '✓ Phê duyệt yêu cầu'}
-                                        </button>
+                                    <div className="provider-detail-meta">
+                                        <StatusBadge status={selectedRequest.status} />
+                                        <span>
+                                            Ngày gửi: {formatDate(selectedRequest.createdAt)}
+                                        </span>
+                                    </div>
+
+                                    <section className="provider-detail-section">
+                                        <h3>Lý do Provider gửi yêu cầu</h3>
+                                        <div className="provider-detail-content">
+                                            {selectedRequest.reason || "Không có nội dung."}
+                                        </div>
+                                    </section>
+
+                                    <section className="provider-detail-section">
+                                        <h3>So sánh thông tin trước và sau</h3>
+                                        {renderSnapshotTable(
+                                            selectedRequest.oldSnapshot,
+                                            selectedRequest.proposedSnapshot
+                                        )}
+                                    </section>
+
+                                    {selectedRequest.evidenceUrl && (
+                                        <section className="provider-detail-section">
+                                            <h3>Bằng chứng đính kèm</h3>
+                                            <a
+                                                href={selectedRequest.evidenceUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                Mở tài liệu / hình ảnh đính kèm
+                                            </a>
+                                        </section>
+                                    )}
+
+                                    {selectedRequest.rejectReason && (
+                                        <section className="provider-previous-note">
+                                            <strong>Ghi chú xử lý trước đó</strong>
+                                            <p>{selectedRequest.rejectReason}</p>
+                                        </section>
+                                    )}
+
+                                    {selectedRequest.reviewedBy && (
+                                        <div className="provider-reviewed-info">
+                                            Người xử lý: {selectedRequest.reviewedBy}
+                                            {" · "}
+                                            {formatDate(selectedRequest.reviewedAt)}
+                                        </div>
+                                    )}
+
+                                    {selectedRequest.status === "PENDING_REVIEW" ? (
+                                        <>
+                                            {actionType && (
+                                                <div className="provider-action-reason">
+                                                    <label>
+                                                        {actionType === "REJECT"
+                                                            ? "Lý do từ chối *"
+                                                            : "Thông tin cần Provider bổ sung *"}
+                                                    </label>
+
+                                                    <textarea
+                                                        value={actionReason}
+                                                        onChange={(event) =>
+                                                            setActionReason(event.target.value)
+                                                        }
+                                                        rows={4}
+                                                        maxLength={2000}
+                                                        placeholder={
+                                                            actionType === "REJECT"
+                                                                ? "Nêu rõ lý do từ chối yêu cầu..."
+                                                                : "Nêu rõ giấy tờ, thông tin hoặc nội dung cần bổ sung..."
+                                                        }
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <div className="provider-modal-actions">
+                                                <button
+                                                    type="button"
+                                                    className="admin-btn admin-btn-ghost"
+                                                    onClick={closeModal}
+                                                    disabled={submitting}
+                                                >
+                                                    Đóng
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    className="admin-btn admin-btn-outline"
+                                                    onClick={() => {
+                                                        setActionType("REQUEST_INFO");
+                                                        setActionReason("");
+                                                        setModalError("");
+                                                    }}
+                                                    disabled={submitting}
+                                                >
+                                                    Yêu cầu bổ sung
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    className="admin-btn admin-btn-danger"
+                                                    onClick={() => {
+                                                        if (actionType === "REJECT") {
+                                                            submitReject();
+                                                        } else {
+                                                            setActionType("REJECT");
+                                                            setActionReason("");
+                                                            setModalError("");
+                                                        }
+                                                    }}
+                                                    disabled={submitting}
+                                                >
+                                                    {submitting && actionType === "REJECT"
+                                                        ? "Đang xử lý..."
+                                                        : actionType === "REJECT"
+                                                            ? "Xác nhận từ chối"
+                                                            : "Từ chối"}
+                                                </button>
+
+                                                {actionType === "REQUEST_INFO" && (
+                                                    <button
+                                                        type="button"
+                                                        className="admin-btn admin-btn-outline"
+                                                        onClick={submitRequestInfo}
+                                                        disabled={submitting}
+                                                    >
+                                                        {submitting
+                                                            ? "Đang gửi..."
+                                                            : "Gửi yêu cầu bổ sung"}
+                                                    </button>
+                                                )}
+
+                                                {!actionType && (
+                                                    <button
+                                                        type="button"
+                                                        className="admin-btn admin-btn-success"
+                                                        onClick={submitApprove}
+                                                        disabled={submitting}
+                                                    >
+                                                        {submitting
+                                                            ? "Đang duyệt..."
+                                                            : "Phê duyệt"}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="provider-modal-actions provider-modal-actions-end">
+                                            <button
+                                                type="button"
+                                                className="admin-btn admin-btn-ghost"
+                                                onClick={closeModal}
+                                            >
+                                                Đóng
+                                            </button>
+                                        </div>
                                     )}
                                 </>
                             )}
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </AdminLayout>
     );
 }

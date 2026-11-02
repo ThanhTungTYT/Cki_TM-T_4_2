@@ -1,0 +1,229 @@
+.customer-report-conversation-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 16px;
+    padding: 9px 13px;
+    border: 1px solid #cfe8dc;
+    border-radius: 8px;
+    background: #f1faf5;
+    color: #13845f;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.customer-report-conversation-toggle:hover {
+    border-color: #15966f;
+    background: #e6f5ed;
+}
+
+.customer-report-conversation-toggle span {
+    display: inline-flex;
+    margin-left: 4px;
+}
+
+.customer-report-conversation {
+    margin-top: 16px;
+    padding: 18px;
+    border: 1px solid #e0ece5;
+    border-radius: 10px;
+    background: #fbfdfc;
+}
+
+.customer-report-conversation-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.customer-report-conversation-heading h5 {
+    margin: 0;
+    color: #173b2f;
+    font-size: 15px;
+}
+
+.customer-report-conversation-heading > span {
+    padding: 5px 10px;
+    border-radius: 20px;
+    background: #e8f5ed;
+    color: #13845f;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.customer-report-conversation-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 65px;
+    padding: 14px;
+    border: 1px dashed #d5e5dc;
+    border-radius: 8px;
+    color: #78877f;
+    font-size: 13px;
+    text-align: center;
+}
+
+.customer-report-response-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 340px;
+    overflow-y: auto;
+}
+
+.customer-report-response {
+    padding: 14px;
+    border: 1px solid #e4ede7;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.customer-report-response-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 9px;
+}
+
+.customer-report-response-header > div {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.customer-report-response-header strong {
+    color: #244238;
+    font-size: 13px;
+}
+
+.customer-report-response-header span {
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: #edf4f0;
+    color: #587267;
+    font-size: 11px;
+}
+
+.customer-report-response-header time {
+    flex-shrink: 0;
+    color: #89958f;
+    font-size: 11px;
+}
+
+.customer-report-response > p {
+    margin: 0;
+    color: #43564e;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.customer-report-response > a {
+    display: inline-block;
+    margin-top: 9px;
+    color: #13845f;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.customer-report-response > a:hover {
+    text-decoration: underline;
+}
+
+.customer-report-reply-form {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-top: 16px;
+    padding: 15px;
+    border-radius: 9px;
+    background: #f0f8f3;
+}
+
+.customer-report-reply-form label {
+    color: #244238;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.customer-report-reply-form textarea {
+    width: 100%;
+    min-height: 75px;
+    padding: 11px 12px;
+    border: 1px solid #d5e5dc;
+    border-radius: 8px;
+    outline: none;
+    background: #fff;
+    color: #29443a;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.customer-report-reply-form textarea:focus {
+    border-color: #15966f;
+    box-shadow: 0 0 0 3px rgba(21, 150, 111, 0.1);
+}
+
+.customer-report-reply-form textarea:disabled {
+    background: #f0f3f1;
+    cursor: not-allowed;
+}
+
+.customer-report-reply-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.customer-report-reply-actions small {
+    color: #819089;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.customer-report-spin {
+    animation: customerReportSpin 1s linear infinite;
+}
+
+@keyframes customerReportSpin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 600px) {
+    .customer-report-conversation {
+        padding: 13px;
+    }
+
+    .customer-report-response-header {
+        flex-direction: column;
+    }
+
+    .customer-report-reply-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .customer-report-reply-actions button {
+        width: 100%;
+        justify-content: center;
+    }
+}

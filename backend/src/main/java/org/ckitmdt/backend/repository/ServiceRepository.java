@@ -9,4 +9,6 @@ import java.util.Optional;
 @Repository
 public interface ServiceRepository extends JpaRepository<Service, Long> {
     Optional<Service> findByIdAndStatusNot(Long id, String status);
+    boolean existsBySlugIgnoreCase(String slug);
+    boolean existsBySlugIgnoreCaseAndIdNot(String slug, Long id);
 }

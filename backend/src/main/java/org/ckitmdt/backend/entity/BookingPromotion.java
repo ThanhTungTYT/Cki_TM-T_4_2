@@ -2,6 +2,7 @@ package org.ckitmdt.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -13,7 +14,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class BookingPromotion {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -31,4 +31,8 @@ public class BookingPromotion {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @Builder.Default
+    @Column(name = "released")
+    private Boolean released = false;
 }

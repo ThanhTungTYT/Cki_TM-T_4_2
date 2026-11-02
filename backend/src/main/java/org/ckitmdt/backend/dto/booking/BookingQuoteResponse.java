@@ -11,13 +11,16 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class BookingQuoteResponse {
-
     private Long partnerId;
     private String partnerName;
     private BigDecimal subtotal;
     private BigDecimal discountAmount;
+    private BigDecimal pointsDiscount;
     private BigDecimal platformFee;
     private BigDecimal totalAmount;
+    private Integer pointsUsed;
+    private Integer rewardBalance;
+    private String promotionCode;
     private int estimatedMinutes;
     private LocalDateTime scheduledStart;
     private LocalDateTime scheduledEnd;

@@ -1,14 +1,11 @@
-
 package org.ckitmdt.backend.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.ckitmdt.backend.entity.Partner;
-import org.ckitmdt.backend.entity.PartnerService;
 import org.ckitmdt.backend.entity.Service;
 import org.ckitmdt.backend.entity.ServiceCategory;
-import org.ckitmdt.backend.repository.PartnerRepository;
 import org.ckitmdt.backend.repository.PartnerServiceRepository;
 import org.ckitmdt.backend.repository.ServiceCategoryRepository;
+import org.ckitmdt.backend.repository.ServicePackageRepository;
 import org.ckitmdt.backend.repository.ServiceRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,11 +13,13 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin/services")
@@ -29,190 +28,78 @@ public class AdminServiceController {
 
     private final ServiceRepository serviceRepository;
     private final ServiceCategoryRepository categoryRepository;
-    private final PartnerRepository partnerRepository;
     private final PartnerServiceRepository partnerServiceRepository;
+    private final ServicePackageRepository servicePackageRepository;
 
     @GetMapping
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getAllServices() {
-        return partnerServiceRepository.findAll()
-                .stream()
-                .filter(ps -> ps.getService() != null && ps.getPartner() != null)
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return serviceRepository.findAll().stream()
+                .sorted(Comparator.comparing(Service::getDisplayOrder,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(Service::getId))
+                .map(this::serviceRow)
+                .toList();
     }
 
     @GetMapping("/options")
     @Transactional(readOnly = true)
     public Map<String, Object> getFormOptions() {
-        List<Map<String, Object>> categories = categoryRepository.findAll()
-                .stream()
-                .filter(category -> category.getStatus() == null
-                        || "ACTIVE".equalsIgnoreCase(category.getStatus()))
-                .map(category -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("id", category.getId());
-                    item.put("name", category.getName());
-                    return item;
-                })
-                .collect(Collectors.toList());
-
-        List<Map<String, Object>> partners = partnerRepository.findAll()
-                .stream()
-                .filter(partner -> partner.getUser() != null
-                        && !"LOCKED".equalsIgnoreCase(partner.getUser().getStatus()))
-                .map(partner -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("id", partner.getId());
-                    item.put("name", partner.getBusinessName());
-                    item.put("status", partner.getStatus());
-                    return item;
-                })
-                .collect(Collectors.toList());
-
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("categories", categories);
-        result.put("partners", partners);
+        result.put("categories", categoryRepository.findAll().stream()
+                .sorted(Comparator.comparing(ServiceCategory::getDisplayOrder,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(ServiceCategory::getId))
+                .map(this::categoryRow)
+                .toList());
+        result.put("pricingTypes", List.of("FIXED"));
         return result;
-    }
-
-    private Map<String, Object> toResponse(PartnerService ps) {
-        Service service = ps.getService();
-        Partner partner = ps.getPartner();
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("id", ps.getId());
-        result.put("serviceId", service.getId());
-        result.put("partnerId", partner.getId());
-        result.put("name", service.getName());
-        result.put("description",
-                service.getDescription() == null ? "" : service.getDescription());
-        result.put("category",
-                service.getCategory() == null ? "" : service.getCategory().getName());
-        result.put("categoryId",
-                service.getCategory() == null ? null : service.getCategory().getId());
-        result.put("provider", partner.getBusinessName());
-        result.put("price",
-                ps.getPrice() != null ? ps.getPrice() : service.getBasePrice());
-        result.put("estimatedMinutes", service.getEstimatedMinutes());
-        result.put("duration", formatDuration(service.getEstimatedMinutes()));
-        result.put("status", toVietnameseStatus(ps.getStatus()));
-
-        return result;
-    }
-
-    private String formatDuration(Integer minutes) {
-        if (minutes == null) {
-            return "";
-        }
-
-        if (minutes % 60 == 0) {
-            return (minutes / 60) + " giờ";
-        }
-
-        if (minutes > 60) {
-            return (minutes / 60) + " giờ " + (minutes % 60) + " phút";
-        }
-
-        return minutes + " phút";
-    }
-
-    private String toVietnameseStatus(String status) {
-        if (status == null) {
-            return "Tạm ngừng";
-        }
-
-        switch (status.toUpperCase()) {
-            case "ACTIVE":
-                return "Đang hoạt động";
-            case "PENDING":
-                return "Chờ duyệt";
-            default:
-                return "Tạm ngừng";
-        }
-    }
-
-    private String toDatabaseStatus(String status) {
-        if (status == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Thiếu trạng thái dịch vụ."
-            );
-        }
-
-        switch (status.trim().toUpperCase()) {
-            case "ĐANG HOẠT ĐỘNG":
-            case "ACTIVE":
-                return "ACTIVE";
-            case "CHỜ DUYỆT":
-            case "PENDING":
-                return "PENDING";
-            case "TẠM NGỪNG":
-            case "INACTIVE":
-                return "INACTIVE";
-            default:
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Trạng thái dịch vụ không hợp lệ."
-                );
-        }
     }
 
     @PostMapping
     @Transactional
-    public Map<String, Object> createService(
-            @RequestBody Map<String, Object> body) {
+    public Map<String, Object> createService(@RequestBody Map<String, Object> body) {
+        String name = requiredText(body.get("name"), "Tên dịch vụ không được để trống.");
+        ServiceCategory category = requireCategory(
+                requiredLong(body.get("categoryId"), "Vui lòng chọn danh mục.")
+        );
+        String slug = createUniqueSlug(
+                text(body.get("slug")).isBlank() ? name : text(body.get("slug")),
+                null
+        );
+        BigDecimal basePrice = optionalMoney(body.get("basePrice"));
+        Integer estimatedMinutes = optionalPositiveInteger(body.get("estimatedMinutes"));
+        String pricingType = normalize(text(body.get("pricingType")));
 
-        String name = getRequiredText(body, "name");
-        Long categoryId = getRequiredLong(body, "categoryId");
-        Long partnerId = getRequiredLong(body, "partnerId");
-        BigDecimal price = getRequiredPrice(body);
-        Integer minutes = getRequiredMinutes(body);
+        if (pricingType.isBlank()) {
+            pricingType = "FIXED";
+        }
 
-        ServiceCategory category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy danh mục dịch vụ."
-                ));
-
-        Partner partner = partnerRepository.findById(partnerId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy nhà cung cấp."
-                ));
-
-        validatePartner(partner);
+        if (!List.of("FIXED").contains(pricingType)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Loại giá hiện tại không được hỗ trợ."
+            );
+        }
 
         LocalDateTime now = LocalDateTime.now();
 
         Service service = Service.builder()
                 .category(category)
                 .name(name)
-                .description(getOptionalText(body, "description"))
-                .pricingType("FIXED")
-                .basePrice(price)
-                .estimatedMinutes(minutes)
+                .slug(slug)
+                .description(text(body.get("description")))
+                .thumbnailUrl(text(body.get("thumbnailUrl")))
+                .pricingType(pricingType)
+                .basePrice(basePrice)
+                .estimatedMinutes(estimatedMinutes)
+                .displayOrder(optionalInteger(body.get("displayOrder"), 0))
                 .status("ACTIVE")
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
 
-        service = serviceRepository.save(service);
-
-        PartnerService partnerService = PartnerService.builder()
-                .partner(partner)
-                .service(service)
-                .price(price)
-                .status(toDatabaseStatus(
-                        String.valueOf(body.getOrDefault("status", "Chờ duyệt"))
-                ))
-                .createdAt(now)
-                .updatedAt(now)
-                .build();
-
-        partnerService = partnerServiceRepository.save(partnerService);
-
-        return toResponse(partnerService);
+        return serviceRow(serviceRepository.save(service));
     }
 
     @PutMapping("/{id}")
@@ -221,243 +108,363 @@ public class AdminServiceController {
             @PathVariable Long id,
             @RequestBody Map<String, Object> body) {
 
-        PartnerService partnerService = findPartnerService(id);
-        Service service = partnerService.getService();
-
-        if (body.containsKey("name")) {
-            service.setName(getRequiredText(body, "name"));
-        }
-
-        if (body.containsKey("description")) {
-            service.setDescription(getOptionalText(body, "description"));
-        }
-
-        if (body.containsKey("categoryId")) {
-            Long categoryId = getRequiredLong(body, "categoryId");
-
-            ServiceCategory category = categoryRepository.findById(categoryId)
-                    .orElseThrow(() -> new ResponseStatusException(
-                            HttpStatus.NOT_FOUND,
-                            "Không tìm thấy danh mục dịch vụ."
-                    ));
-
-            service.setCategory(category);
-        }
-
-        if (body.containsKey("partnerId")) {
-            Long partnerId = getRequiredLong(body, "partnerId");
-
-            Partner partner = partnerRepository.findById(partnerId)
-                    .orElseThrow(() -> new ResponseStatusException(
-                            HttpStatus.NOT_FOUND,
-                            "Không tìm thấy nhà cung cấp."
-                    ));
-
-            validatePartner(partner);
-
-            boolean duplicate = partnerServiceRepository.findByPartner_Id(partnerId)
-                    .stream()
-                    .anyMatch(item ->
-                            !item.getId().equals(partnerService.getId())
-                                    && item.getService() != null
-                                    && item.getService().getId().equals(service.getId())
-                    );
-
-            if (duplicate) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Nhà cung cấp này đã có dịch vụ tương ứng."
-                );
-            }
-
-            partnerService.setPartner(partner);
-        }
-
-        if (body.containsKey("price")) {
-            partnerService.setPrice(getRequiredPrice(body));
-        }
-
-        if (body.containsKey("estimatedMinutes")) {
-            service.setEstimatedMinutes(getRequiredMinutes(body));
-        }
-
-        if (body.containsKey("status")) {
-            partnerService.setStatus(
-                    toDatabaseStatus(String.valueOf(body.get("status")))
-            );
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        service.setUpdatedAt(now);
-        partnerService.setUpdatedAt(now);
-
-        serviceRepository.save(service);
-        partnerServiceRepository.save(partnerService);
-
-        return toResponse(partnerService);
-    }
-
-    @PutMapping("/{id}/status")
-    @Transactional
-    public Map<String, Object> changeStatus(
-            @PathVariable Long id,
-            @RequestBody Map<String, Object> body) {
-
-        PartnerService partnerService = findPartnerService(id);
-
-        if (!body.containsKey("status") || body.get("status") == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Thiếu trạng thái dịch vụ."
-            );
-        }
-
-        partnerService.setStatus(
-                toDatabaseStatus(String.valueOf(body.get("status")))
-        );
-        partnerService.setUpdatedAt(LocalDateTime.now());
-
-        partnerServiceRepository.save(partnerService);
-
-        return toResponse(partnerService);
-    }
-
-    @DeleteMapping("/{id}")
-    @Transactional
-    public Map<String, Object> deleteService(@PathVariable Long id) {
-        PartnerService partnerService = findPartnerService(id);
-
-        partnerService.setStatus("INACTIVE");
-        partnerService.setUpdatedAt(LocalDateTime.now());
-        partnerServiceRepository.save(partnerService);
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("success", true);
-        result.put("message", "Đã ngừng dịch vụ.");
-        result.put("id", id);
-
-        return result;
-    }
-
-    private void validatePartner(Partner partner) {
-        if (partner.getUser() == null
-                || "LOCKED".equalsIgnoreCase(partner.getUser().getStatus())) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Nhà cung cấp đang bị khóa."
-            );
-        }
-    }
-
-    private PartnerService findPartnerService(Long id) {
-        return partnerServiceRepository.findById(id)
+        Service service = serviceRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy dịch vụ."
                 ));
-    }
 
-    private String getRequiredText(
-            Map<String, Object> body,
-            String key) {
+        String name = requiredText(body.get("name"), "Tên dịch vụ không được để trống.");
+        Long categoryId = requiredLong(body.get("categoryId"), "Vui lòng chọn danh mục.");
 
-        Object value = body.get(key);
+        ServiceCategory category = requireCategory(
+                categoryId,
+                service.getCategory() != null
+                        && service.getCategory().getId().equals(categoryId)
+        );
 
-        if (value == null || value.toString().trim().isEmpty()) {
+        String slug = createUniqueSlug(
+                text(body.get("slug")).isBlank() ? name : text(body.get("slug")),
+                id
+        );
+
+        String pricingType = normalize(text(body.get("pricingType")));
+
+        if (pricingType.isBlank()) {
+            pricingType = service.getPricingType();
+        }
+
+        if (!List.of("FIXED").contains(pricingType)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Trường " + key + " không được để trống."
+                    "Loại giá hiện tại không được hỗ trợ."
             );
         }
 
-        return value.toString().trim();
+        service.setName(name);
+        service.setCategory(category);
+        service.setSlug(slug);
+        service.setDescription(text(body.get("description")));
+        service.setThumbnailUrl(text(body.get("thumbnailUrl")));
+        service.setPricingType(pricingType);
+        service.setBasePrice(optionalMoney(body.get("basePrice")));
+        service.setEstimatedMinutes(optionalPositiveInteger(body.get("estimatedMinutes")));
+        service.setDisplayOrder(optionalInteger(body.get("displayOrder"), 0));
+        service.setUpdatedAt(LocalDateTime.now());
+
+        return serviceRow(serviceRepository.save(service));
     }
 
-    private String getOptionalText(
-            Map<String, Object> body,
-            String key) {
+    @PatchMapping("/{id}/status")
+    @Transactional
+    public Map<String, Object> updateServiceStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
 
-        Object value = body.get(key);
-        return value == null ? "" : value.toString().trim();
-    }
+        Service service = serviceRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy dịch vụ."
+                ));
 
-    private Long getRequiredLong(
-            Map<String, Object> body,
-            String key) {
+        String status = normalize(text(body.get("status")));
 
-        Object value = body.get(key);
-
-        if (value == null) {
+        if (!List.of("ACTIVE", "INACTIVE").contains(status)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Thiếu trường " + key + "."
+                    "Trạng thái chỉ được là ACTIVE hoặc INACTIVE."
             );
         }
 
+        service.setStatus(status);
+        service.setUpdatedAt(LocalDateTime.now());
+
+        return serviceRow(serviceRepository.save(service));
+    }
+
+    @GetMapping("/categories")
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getCategories() {
+        return categoryRepository.findAll().stream()
+                .sorted(Comparator.comparing(ServiceCategory::getDisplayOrder,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(ServiceCategory::getId))
+                .map(this::categoryRow)
+                .toList();
+    }
+
+    @PostMapping("/categories")
+    @Transactional
+    public Map<String, Object> createCategory(@RequestBody Map<String, Object> body) {
+        String name = requiredText(body.get("name"), "Tên danh mục không được để trống.");
+        ensureUniqueCategoryName(name, null);
+
+        LocalDateTime now = LocalDateTime.now();
+
+        ServiceCategory category = ServiceCategory.builder()
+                .name(name)
+                .description(text(body.get("description")))
+                .imageUrl(text(body.get("imageUrl")))
+                .displayOrder(optionalInteger(body.get("displayOrder"), 0))
+                .status("ACTIVE")
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+
+        return categoryRow(categoryRepository.save(category));
+    }
+
+    @PutMapping("/categories/{id}")
+    @Transactional
+    public Map<String, Object> updateCategory(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+
+        ServiceCategory category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy danh mục."
+                ));
+
+        String name = requiredText(body.get("name"), "Tên danh mục không được để trống.");
+        ensureUniqueCategoryName(name, id);
+
+        category.setName(name);
+        category.setDescription(text(body.get("description")));
+        category.setImageUrl(text(body.get("imageUrl")));
+        category.setDisplayOrder(optionalInteger(body.get("displayOrder"), 0));
+        category.setUpdatedAt(LocalDateTime.now());
+
+        return categoryRow(categoryRepository.save(category));
+    }
+
+    @PatchMapping("/categories/{id}/status")
+    @Transactional
+    public Map<String, Object> updateCategoryStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+
+        ServiceCategory category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy danh mục."
+                ));
+
+        String status = normalize(text(body.get("status")));
+
+        if (!List.of("ACTIVE", "INACTIVE").contains(status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Trạng thái chỉ được là ACTIVE hoặc INACTIVE."
+            );
+        }
+
+        category.setStatus(status);
+        category.setUpdatedAt(LocalDateTime.now());
+
+        return categoryRow(categoryRepository.save(category));
+    }
+
+    private ServiceCategory requireCategory(Long id) {
+        return requireCategory(id, false);
+    }
+
+    private ServiceCategory requireCategory(
+            Long id,
+            boolean allowInactiveCurrentCategory) {
+
+        ServiceCategory category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy danh mục dịch vụ."
+                ));
+
+        if (!allowInactiveCurrentCategory
+                && !"ACTIVE".equalsIgnoreCase(category.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Không thể gán dịch vụ vào danh mục đã ngừng hoạt động."
+            );
+        }
+
+        return category;
+    }
+
+    private void ensureUniqueCategoryName(String name, Long currentId) {
+        boolean exists = categoryRepository.findAll().stream()
+                .anyMatch(item -> item.getName() != null
+                        && item.getName().trim().equalsIgnoreCase(name.trim())
+                        && (currentId == null || !item.getId().equals(currentId)));
+
+        if (exists) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Tên danh mục đã tồn tại."
+            );
+        }
+    }
+
+    private String createUniqueSlug(String raw, Long currentId) {
+        String normalized = Normalizer.normalize(
+                        raw.trim().toLowerCase(Locale.ROOT),
+                        Normalizer.Form.NFD
+                )
+                .replaceAll("\\p{M}+", "")
+                .replace('đ', 'd')
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-|-$", "");
+
+        if (normalized.isBlank()) {
+            normalized = "service";
+        }
+
+        String candidate = normalized;
+        int suffix = 2;
+
+        while (currentId == null
+                ? serviceRepository.existsBySlugIgnoreCase(candidate)
+                : serviceRepository.existsBySlugIgnoreCaseAndIdNot(candidate, currentId)) {
+            candidate = normalized + "-" + suffix++;
+        }
+
+        return candidate;
+    }
+
+    private Map<String, Object> serviceRow(Service service) {
+        Map<String, Object> row = new LinkedHashMap<>();
+
+        row.put("id", service.getId());
+        row.put("name", service.getName());
+        row.put("slug", service.getSlug());
+        row.put("description", service.getDescription());
+        row.put("thumbnailUrl", service.getThumbnailUrl());
+        row.put("categoryId", service.getCategory() == null
+                ? null
+                : service.getCategory().getId());
+        row.put("category", service.getCategory() == null
+                ? ""
+                : service.getCategory().getName());
+        row.put("pricingType", service.getPricingType());
+        row.put("basePrice", service.getBasePrice());
+        row.put("price", service.getBasePrice());
+        row.put("estimatedMinutes", service.getEstimatedMinutes());
+        row.put("duration", service.getEstimatedMinutes());
+        row.put("displayOrder", service.getDisplayOrder());
+        row.put("status", normalize(service.getStatus()));
+        row.put("partnerOfferCount",
+                partnerServiceRepository.findByService_Id(service.getId()).size());
+        row.put("packageCount",
+                servicePackageRepository.findByServiceId(service.getId()).size());
+        row.put("createdAt", service.getCreatedAt());
+        row.put("updatedAt", service.getUpdatedAt());
+
+        return row;
+    }
+
+    private Map<String, Object> categoryRow(ServiceCategory category) {
+        Map<String, Object> row = new LinkedHashMap<>();
+
+        row.put("id", category.getId());
+        row.put("name", category.getName());
+        row.put("description", category.getDescription());
+        row.put("imageUrl", category.getImageUrl());
+        row.put("displayOrder", category.getDisplayOrder());
+        row.put("status", normalize(category.getStatus()));
+        row.put("serviceCount", serviceRepository.findAll().stream()
+                .filter(service -> service.getCategory() != null
+                        && service.getCategory().getId().equals(category.getId()))
+                .count());
+        row.put("createdAt", category.getCreatedAt());
+        row.put("updatedAt", category.getUpdatedAt());
+
+        return row;
+    }
+
+    private String requiredText(Object value, String message) {
+        String result = text(value);
+
+        if (result.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+
+        return result;
+    }
+
+    private String text(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private Long requiredLong(Object value, String message) {
         try {
-            long result = new BigDecimal(value.toString()).longValueExact();
+            long result = Long.parseLong(text(value));
 
             if (result <= 0) {
-                throw new ArithmeticException();
+                throw new NumberFormatException();
             }
 
             return result;
-        } catch (NumberFormatException | ArithmeticException e) {
+        } catch (NumberFormatException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+    }
+
+    private BigDecimal optionalMoney(Object value) {
+        if (value == null || text(value).isBlank()) {
+            return null;
+        }
+
+        try {
+            BigDecimal result = new BigDecimal(text(value));
+
+            if (result.signum() < 0) {
+                throw new NumberFormatException();
+            }
+
+            return result;
+        } catch (NumberFormatException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Trường " + key + " không hợp lệ."
+                    "Giá dịch vụ không hợp lệ."
             );
         }
     }
 
-    private BigDecimal getRequiredPrice(Map<String, Object> body) {
-        Object value = body.get("price");
-
-        if (value == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Thiếu giá dịch vụ."
-            );
+    private Integer optionalPositiveInteger(Object value) {
+        if (value == null || text(value).isBlank()) {
+            return null;
         }
 
         try {
-            BigDecimal price = new BigDecimal(value.toString());
+            int result = Integer.parseInt(text(value));
 
-            if (price.compareTo(BigDecimal.ZERO) <= 0) {
+            if (result <= 0) {
                 throw new NumberFormatException();
             }
 
-            return price;
-        } catch (NumberFormatException e) {
+            return result;
+        } catch (NumberFormatException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Giá dịch vụ phải lớn hơn 0."
+                    "Thời lượng phải là số nguyên dương."
             );
         }
     }
 
-    private Integer getRequiredMinutes(Map<String, Object> body) {
-        Object value = body.get("estimatedMinutes");
-
-        if (value == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Thiếu thời lượng dịch vụ."
-            );
+    private Integer optionalInteger(Object value, int defaultValue) {
+        if (value == null || text(value).isBlank()) {
+            return defaultValue;
         }
 
         try {
-            int minutes = new BigDecimal(value.toString()).intValueExact();
-
-            if (minutes <= 0) {
-                throw new NumberFormatException();
-            }
-
-            return minutes;
-        } catch (NumberFormatException | ArithmeticException e) {
+            return Integer.parseInt(text(value));
+        } catch (NumberFormatException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Thời lượng phải là số nguyên lớn hơn 0."
+                    "Thứ tự hiển thị không hợp lệ."
             );
         }
     }

@@ -1,4 +1,3 @@
-
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -12,7 +11,11 @@ import {
     faArrowRightFromBracket,
     faTriangleExclamation,
     faClipboardCheck,
+    faGift,
+    faUserGear,
+    faBell
 } from "@fortawesome/free-solid-svg-icons";
+import AdminNotificationRealtime from "../../components/AdminNotificationRealtime";
 import "./AdminDashboard.css";
 
 const menuItems = [
@@ -25,93 +28,79 @@ const menuItems = [
     { label: "Quản lý giao dịch", path: "/admin/transactions", icon: faCreditCard },
     { label: "Quản lý hoàn tiền", path: "/admin/refunds", icon: faMoneyBillTransfer },
     { label: "Quản lý khiếu nại", path: "/admin/complaints", icon: faTriangleExclamation },
+    { label: "Ưu đãi & điểm thưởng", path: "/admin/promotions", icon: faGift },
+    { label: "Nhân sự & vận hành", path: "/admin/staff-operations", icon: faUserGear },
+    { label: "Giám sát thông báo", path: "/admin/outbox", icon: faBell }
 ];
 
 function AdminLayout({ children }) {
     const location = useLocation();
     const navigate = useNavigate();
 
+    let currentUser = {};
+
+    try {
+        currentUser = JSON.parse(sessionStorage.getItem("user") || localStorage.getItem("user") || "{}");
+    } catch {}
+
+    const currentRole = String(currentUser.role || "").replace(/^ROLE_/i, "").toUpperCase();
+    const isStaff = currentRole === "STAFF";
+    const isAdmin = currentRole === "ADMIN";
+
+    const visibleMenuItems = isStaff
+        ? menuItems.filter(item => ["/admin/orders", "/admin/complaints", "/admin/staff-operations"].includes(item.path))
+        : menuItems;
+
     const handleLogout = () => {
         localStorage.removeItem("token");
         localStorage.removeItem("accessToken");
         sessionStorage.removeItem("token");
         sessionStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+        sessionStorage.removeItem("user");
         navigate("/login");
     };
 
     return (
         <div className="admin-layout">
+            {(isAdmin || isStaff) && <AdminNotificationRealtime />}
             <aside className="admin-sidebar">
-                <Link
-                    to="/admin"
-                    className="admin-brand"
-                    style={{ textDecoration: "none", color: "inherit" }}
-                >
-                    <div className="admin-brand-icon">
-                        <FontAwesomeIcon icon={faHouse} />
-                    </div>
+                <Link to="/admin" className="admin-brand" style={{ textDecoration: "none", color: "inherit" }}>
+                    <div className="admin-brand-icon"><FontAwesomeIcon icon={faHouse} /></div>
                     <div>
                         <strong>CleanMate</strong>
                         <span>ADMIN PANEL</span>
                     </div>
                 </Link>
-
                 <div className="admin-menu-title">MENU QUẢN TRỊ</div>
-
                 <nav className="admin-menu">
-                    {menuItems.map((item) => {
-                        const isActive =
-                            item.path === "/admin"
-                                ? location.pathname === "/admin"
-                                : location.pathname === item.path ||
-                                location.pathname.startsWith(`${item.path}/`);
-
+                    {visibleMenuItems.map(item => {
+                        const isActive = item.path === "/admin"
+                            ? location.pathname === "/admin"
+                            : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
                         return (
-                            <Link
-                                key={item.path}
-                                to={item.path}
-                                className={`admin-menu-item ${
-                                    isActive ? "active" : ""
-                                }`}
-                            >
+                            <Link key={item.path} to={item.path} className={`admin-menu-item ${isActive ? "active" : ""}`}>
                                 <FontAwesomeIcon icon={item.icon} />
                                 <span>{item.label}</span>
                             </Link>
                         );
                     })}
                 </nav>
-
                 <div className="admin-sidebar-bottom">
                     <div className="admin-user">
-                        <div className="admin-avatar">AD</div>
+                        <div className="admin-avatar">{isStaff ? "ST" : "AD"}</div>
                         <div className="admin-user-info">
-                            <strong>Quản trị viên</strong>
-                            <span>Administrator</span>
+                            <strong>{currentUser.fullName || (isStaff ? "Nhân viên" : "Quản trị viên")}</strong>
+                            <span>{isStaff ? "Staff" : "Administrator"}</span>
                         </div>
                     </div>
-
-                    <button
-                        type="button"
-                        className="admin-menu-item logout"
-                        onClick={handleLogout}
-                        style={{
-                            border: 0,
-                            background: "transparent",
-                            width: "100%",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            font: "inherit",
-                        }}
-                    >
+                    <button type="button" className="admin-menu-item logout" onClick={handleLogout} style={{ border: 0, background: "transparent", width: "100%", cursor: "pointer", textAlign: "left", font: "inherit" }}>
                         <FontAwesomeIcon icon={faArrowRightFromBracket} />
                         <span>Đăng xuất</span>
                     </button>
                 </div>
             </aside>
-
-            <main className="admin-main">
-                {children}
-            </main>
+            <main className="admin-main">{children}</main>
         </div>
     );
 }

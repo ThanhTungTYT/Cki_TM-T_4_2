@@ -1,29 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import {
-    faBuilding,
-    faCalendarDays,
-    faClock,
-    faLocationDot,
-    faUser,
-    faPhone,
-    faShieldHalved,
-    faCheck,
-    faArrowLeft,
-    faCreditCard,
-    faMoneyBillWave,
-    faQrcode,
-    faTag,
-    faCircleCheck,
-    faSpinner,
-    faBroom,
-    faHourglassHalf,
-    faCircleExclamation,
-    faMapPin,
-    faCrosshairs,
-    faRoute
-} from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faBroom, faBuilding, faCalendarDays, faCheck, faCircleCheck, faCircleExclamation, faClock, faCrosshairs, faCreditCard, faLocationDot, faMapPin, faMoneyBillWave, faPhone, faQrcode, faRoute, faShieldHalved, faSpinner, faTag, faUser } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useCart, useCartDispatch } from '../context/CartContext';
@@ -32,47 +10,33 @@ import { createVNPayPayment } from '../services/paymentService';
 import './checkout.css';
 
 function formatPrice(amount) {
-    return (amount || 0).toLocaleString('vi-VN') + 'đ';
+    return Number(amount || 0).toLocaleString('vi-VN') + 'đ';
 }
 
 function formatDateString(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-const TIME_SLOTS = [
-    { id: '08:00', label: '08:00 - Sáng sớm', period: 'morning' },
-    { id: '09:30', label: '09:30 - Buổi sáng', period: 'morning' },
-    { id: '11:00', label: '11:00 - Trưa', period: 'morning' },
-    { id: '13:30', label: '13:30 - Đầu chiều', period: 'afternoon' },
-    { id: '15:00', label: '15:00 - Chiều', period: 'afternoon' },
-    { id: '16:30', label: '16:30 - Cuối chiều', period: 'afternoon' },
-    { id: '18:00', label: '18:00 - Buổi tối', period: 'evening' }
-];
+const TIME_SLOTS = ['08:00', '09:30', '11:00', '13:30', '15:00', '16:30', '18:00'];
 
 export default function Checkout() {
     const [searchParams] = useSearchParams();
+    const { cartItems } = useCart();
+    const dispatch = useCartDispatch();
     const providerIdParam = searchParams.get('providerId');
     const providerNameParam = searchParams.get('providerName');
 
-    const navigate = useNavigate();
-    const { cartItems } = useCart();
-    const dispatch = useCartDispatch();
-
-    // 1. Lọc các item thuộc về Provider được chọn
-    const activeProviderId = providerIdParam ? String(providerIdParam) : null;
     const checkoutItems = useMemo(() => {
-        if (!cartItems || cartItems.length === 0) return [];
-        if (activeProviderId) {
-            const matched = cartItems.filter(i => String(i.providerId || 1) === activeProviderId);
-            if (matched.length > 0) return matched;
+        if (!cartItems?.length) return [];
+        if (providerIdParam) {
+            const matched = cartItems.filter(item => String(item.providerId ?? '') === String(providerIdParam));
+            if (matched.length) return matched;
         }
-        // Nếu không có param hoặc không khớp, lấy nhóm provider đầu tiên
-        const firstPId = String(cartItems[0]?.providerId || 1);
-        return cartItems.filter(i => String(i.providerId || 1) === firstPId);
-    }, [cartItems, activeProviderId]);
+        const firstProviderId = String(cartItems[0]?.providerId ?? '');
+        return cartItems.filter(item => String(item.providerId ?? '') === firstProviderId);
+    }, [cartItems, providerIdParam]);
+
+    const partnerId = Number(checkoutItems[0]?.providerId);
 
     const currentProviderName = useMemo(() => {
         if (providerNameParam) {
@@ -82,201 +46,281 @@ export default function Checkout() {
                 return providerNameParam;
             }
         }
-        if (checkoutItems.length > 0) return checkoutItems[0].providerName || 'Đơn vị vệ sinh CleanMate';
-        return 'Đơn vị vệ sinh CleanMate';
+        return checkoutItems[0]?.providerName || 'Đơn vị vệ sinh CleanMate';
     }, [providerNameParam, checkoutItems]);
 
-    // 2. Thông tin khách hàng & Địa chỉ
+    const quoteItems = useMemo(() => checkoutItems.map(item => ({
+        serviceId: Number(item.serviceId),
+        packageId: item.packageId ? Number(item.packageId) : null,
+        quantity: Number(item.quantity) || 1,
+        note: item.notes || ''
+    })), [checkoutItems]);
+
     const [customerInfo, setCustomerInfo] = useState(() => {
         try {
             const stored = localStorage.getItem('user') || sessionStorage.getItem('user');
-            if (stored) {
-                const u = JSON.parse(stored);
-                return {
-                    fullName: u.fullName || '',
-                    phone: u.phone || '',
-                    email: u.email || ''
-                };
-            }
+            const user = stored ? JSON.parse(stored) : {};
+            return {
+                fullName: user.fullName || '',
+                phone: user.phone || '',
+                email: user.email || ''
+            };
         } catch {
-            // ignore
+            return { fullName: '', phone: '', email: '' };
         }
-        return { fullName: '', phone: '', email: '' };
     });
 
-    const [addressForm, setAddressForm] = useState({ city: '', district: '', ward: '', streetAddress: '', lat: null, lng: null });
+    const [addressForm, setAddressForm] = useState({
+        city: '',
+        district: '',
+        ward: '',
+        streetAddress: '',
+        lat: null,
+        lng: null
+    });
+
     const [defaultAddressId, setDefaultAddressId] = useState(null);
     const [addressLoading, setAddressLoading] = useState(true);
     const [defaultAddressError, setDefaultAddressError] = useState('');
+    const [specialNotes, setSpecialNotes] = useState('');
+
+    const todayStr = useMemo(() => formatDateString(new Date()), []);
+    const tomorrowStr = useMemo(() => {
+        const date = new Date();
+        date.setDate(date.getDate() + 1);
+        return formatDateString(date);
+    }, []);
+
+    const [selectedDate, setSelectedDate] = useState(() =>
+        checkoutItems[0]?.scheduledDate || checkoutItems[0]?.date || tomorrowStr
+    );
+
+    const [selectedTimeSlot, setSelectedTimeSlot] = useState(() =>
+        checkoutItems[0]?.scheduledTime || checkoutItems[0]?.time || '08:00'
+    );
+
+    const [paymentMethod, setPaymentMethod] = useState('VNPAY');
+    const [voucherCode, setVoucherCode] = useState('');
+    const [appliedVoucherCode, setAppliedVoucherCode] = useState('');
+    const [redeemPoints, setRedeemPoints] = useState(0);
+    const [quote, setQuote] = useState(null);
+    const [quoteLoading, setQuoteLoading] = useState(false);
+    const [quoteError, setQuoteError] = useState('');
+    const [voucherMessage, setVoucherMessage] = useState({ type: '', text: '' });
+    const [agreePolicy, setAgreePolicy] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isPaying, setIsPaying] = useState(false);
+    const [bookingSuccessData, setBookingSuccessData] = useState(null);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [holdSecondsLeft, setHoldSecondsLeft] = useState(15 * 60);
+    const [idempotencyKey] = useState(() =>
+        `IDEM-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    );
+
+    useEffect(() => {
+        if (!checkoutItems.length) return;
+
+        const firstItem = checkoutItems[0];
+        const date = firstItem.scheduledDate || firstItem.date;
+        const time = firstItem.scheduledTime || firstItem.time;
+
+        if (date) setSelectedDate(date);
+        if (time && TIME_SLOTS.includes(time)) setSelectedTimeSlot(time);
+    }, [checkoutItems]);
 
     useEffect(() => {
         const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+
         if (!token) {
             setAddressLoading(false);
             setDefaultAddressError('Vui lòng đăng nhập để tải địa chỉ mặc định.');
             return;
         }
+
         fetch('http://localhost:8080/api/users/me/addresses', {
             headers: { Authorization: `Bearer ${token}` }
-        }).then(async (response) => {
-            const addresses = await response.json().catch(() => []);
-            if (!response.ok) throw new Error(addresses.message || addresses.detail || 'Không thể tải địa chỉ đã lưu.');
-            const address = addresses.find((item) => item.isDefault);
-            if (!address) {
-                setDefaultAddressError('Bạn chưa có địa chỉ mặc định. Hãy đặt một địa chỉ mặc định trong hồ sơ trước khi đặt lịch.');
-                return;
-            }
-            setDefaultAddressId(address.id);
-            setAddressForm({
-                city: address.province || '',
-                district: address.district || '',
-                ward: address.ward || '',
-                streetAddress: address.streetAddress || '',
-                lat: address.latitude ?? null,
-                lng: address.longitude ?? null
-            });
-            setCustomerInfo((current) => ({
-                ...current,
-                fullName: current.fullName || address.receiverName || '',
-                phone: current.phone || address.phone || ''
-            }));
-        }).catch((err) => setDefaultAddressError(err.message)).finally(() => setAddressLoading(false));
+        })
+            .then(async response => {
+                const data = await response.json().catch(() => []);
+
+                if (!response.ok) {
+                    throw new Error(data.message || data.detail || 'Không thể tải địa chỉ đã lưu.');
+                }
+
+                const address = data.find(item => item.isDefault);
+
+                if (!address) {
+                    setDefaultAddressError('Bạn chưa có địa chỉ mặc định. Hãy đặt một địa chỉ mặc định trong hồ sơ trước khi đặt lịch.');
+                    return;
+                }
+
+                setDefaultAddressId(address.id);
+                setAddressForm({
+                    city: address.province || '',
+                    district: address.district || '',
+                    ward: address.ward || '',
+                    streetAddress: address.streetAddress || '',
+                    lat: address.latitude ?? null,
+                    lng: address.longitude ?? null
+                });
+
+                setCustomerInfo(current => ({
+                    ...current,
+                    fullName: current.fullName || address.receiverName || '',
+                    phone: current.phone || address.phone || ''
+                }));
+            })
+            .catch(error => setDefaultAddressError(error.message))
+            .finally(() => setAddressLoading(false));
     }, []);
-
-    const [specialNotes, setSpecialNotes] = useState('');
-
-    // 3. Ngày & Khung giờ thực hiện
-    const todayStr = useMemo(() => formatDateString(new Date()), []);
-    const tomorrowStr = useMemo(() => {
-        const d = new Date();
-        d.setDate(d.getDate() + 1);
-        return formatDateString(d);
-    }, []);
-
-    const [selectedDate, setSelectedDate] = useState(() => {
-        return checkoutItems[0]?.scheduledDate || checkoutItems[0]?.date || tomorrowStr;
-    });
-
-    const [selectedTimeSlot, setSelectedTimeSlot] = useState(() => {
-        return checkoutItems[0]?.scheduledTime || checkoutItems[0]?.time || '08:00';
-    });
 
     useEffect(() => {
-        if (checkoutItems.length > 0) {
-            const d = checkoutItems[0]?.scheduledDate || checkoutItems[0]?.date;
-            const t = checkoutItems[0]?.scheduledTime || checkoutItems[0]?.time;
-            if (d) setSelectedDate(d);
-            if (t) setSelectedTimeSlot(t);
-        }
-    }, [checkoutItems]);
+        let cancelled = false;
+        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
 
-    // 4. Tính toán thời lượng & giờ kết thúc dự kiến
-    const totalDurationHours = useMemo(() => {
-        if (checkoutItems.length === 0) return 3;
-        return checkoutItems.reduce((sum, item) => sum + (item.durationHours || 3) * (item.quantity || 1), 0);
-    }, [checkoutItems]);
-
-    const calculatedEndTime = useMemo(() => {
-        if (!selectedTimeSlot || typeof selectedTimeSlot !== 'string' || !selectedTimeSlot.includes(':')) {
-            return '11:00';
-        }
-        const [h, m] = selectedTimeSlot.split(':').map(Number);
-        const validH = isNaN(h) ? 8 : h;
-        const validM = isNaN(m) ? 0 : m;
-        const totalMinutes = validH * 60 + validM + Math.round((totalDurationHours || 3) * 60);
-        const endH = Math.floor(totalMinutes / 60) % 24;
-        const endM = totalMinutes % 60;
-        return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
-    }, [selectedTimeSlot, totalDurationHours]);
-
-    // 5. Phương thức thanh toán
-    const [paymentMethod, setPaymentMethod] = useState('VNPAY'); // 'VNPAY', 'CASH', 'BANK_TRANSFER'
-
-    // 6. Voucher / Khuyến mãi
-    const [voucherCode, setVoucherCode] = useState('');
-    const [appliedDiscount, setAppliedDiscount] = useState(0);
-    const [voucherMessage, setVoucherMessage] = useState({ type: '', text: '' });
-
-    const handleApplyVoucher = (e) => {
-        e.preventDefault();
-        const code = voucherCode.trim().toUpperCase();
-        if (!code) {
-            setVoucherMessage({ type: 'error', text: 'Vui lòng nhập mã giảm giá' });
+        if (!token) {
+            setQuoteLoading(false);
+            setQuote(null);
+            setQuoteError('Vui lòng đăng nhập để xem báo giá chính xác.');
             return;
         }
-        if (code === 'CLEANMATE20') {
-            setAppliedDiscount(50000);
-            setVoucherMessage({ type: 'success', text: 'Áp dụng mã CLEANMATE20 thành công! Giảm 50.000đ' });
-        } else if (code === 'BANMOI') {
-            setAppliedDiscount(30000);
-            setVoucherMessage({ type: 'success', text: 'Áp dụng mã BẠN MỚI thành công! Giảm 30.000đ' });
-        } else {
-            setVoucherMessage({ type: 'error', text: 'Mã giảm giá không hợp lệ hoặc đã hết lượt dùng' });
-            setAppliedDiscount(0);
+
+        if (
+            !Number.isInteger(partnerId)
+            || partnerId <= 0
+            || !quoteItems.length
+            || quoteItems.some(item => !Number.isInteger(item.serviceId) || item.serviceId <= 0)
+        ) {
+            setQuoteLoading(false);
+            setQuote(null);
+            setQuoteError('Thông tin nhà cung cấp hoặc dịch vụ trong giỏ hàng không hợp lệ.');
+            return;
         }
-    };
 
-    // 7. Tính tổng tiền
-    const subtotal = useMemo(() => {
-        return checkoutItems.reduce((sum, item) => sum + (item.estimatedPrice || 0), 0);
-    }, [checkoutItems]);
+        const timer = setTimeout(async () => {
+            setQuoteLoading(true);
+            setQuoteError('');
 
-    const shippingFee = 0; // Miễn phí di chuyển
-    const finalTotal = Math.max(0, subtotal + shippingFee - appliedDiscount);
+            try {
+                const result = await bookingApi.getQuote({
+                    partnerId,
+                    addressId: defaultAddressId ? Number(defaultAddressId) : null,
+                    items: quoteItems,
+                    scheduledStart: `${selectedDate}T${selectedTimeSlot}:00`,
+                    voucherCode: appliedVoucherCode || null,
+                    redeemPoints: Number(redeemPoints) || 0
+                });
 
-    // 8. Đồng ý điều khoản
-    const [agreePolicy, setAgreePolicy] = useState(true);
+                if (cancelled) return;
 
-    // 9. Trạng thái đặt đơn & Chống lặp (Idempotency)
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isPaying, setIsPaying] = useState(false);
-    const [bookingSuccessData, setBookingSuccessData] = useState(null);
-    const [errorMessage, setErrorMessage] = useState('');
-    const [idempotencyKey] = useState(() => 'IDEM-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+                setQuote(result);
+                setRedeemPoints(current =>
+                    Math.min(current, Number(result.rewardBalance || 0))
+                );
 
-    // 10. Đồng hồ đếm ngược giữ chỗ (Capacity Hold Timer)
-    const [holdSecondsLeft, setHoldSecondsLeft] = useState(15 * 60); // 15 phút
+                if (appliedVoucherCode) {
+                    setVoucherMessage({
+                        type: 'success',
+                        text: `Áp dụng mã ${result.promotionCode || appliedVoucherCode} thành công. Giảm ${formatPrice(result.discountAmount || 0)}.`
+                    });
+                } else {
+                    setVoucherMessage({ type: '', text: '' });
+                }
+            } catch (error) {
+                if (cancelled) return;
+
+                setQuote(null);
+                setQuoteError(error.message || 'Không thể tính báo giá.');
+
+                if (appliedVoucherCode) {
+                    setVoucherMessage({
+                        type: 'error',
+                        text: error.message || 'Mã khuyến mãi không hợp lệ.'
+                    });
+                }
+            } finally {
+                if (!cancelled) setQuoteLoading(false);
+            }
+        }, 250);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [
+        partnerId,
+        quoteItems,
+        selectedDate,
+        selectedTimeSlot,
+        appliedVoucherCode,
+        redeemPoints,
+        defaultAddressId
+    ]);
+
     useEffect(() => {
-        if (!bookingSuccessData) return;
-        const timer = setInterval(() => {
-            setHoldSecondsLeft(prev => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-        return () => clearInterval(timer);
-    }, [bookingSuccessData]);
+        if (!bookingSuccessData || paymentMethod !== 'VNPAY') return undefined;
 
-    const formatTimer = (sec) => {
-        const m = Math.floor(sec / 60);
-        const s = sec % 60;
-        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        const timer = setInterval(() => {
+            setHoldSecondsLeft(previous => Math.max(0, previous - 1));
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [bookingSuccessData, paymentMethod]);
+
+    const totalDurationHours = useMemo(() =>
+            checkoutItems.reduce(
+                (total, item) =>
+                    total + (Number(item.durationHours) || 1) * (Number(item.quantity) || 1),
+                0
+            ),
+        [checkoutItems]
+    );
+
+    const calculatedEndTime = useMemo(() => {
+        const [hour, minute] = selectedTimeSlot.split(':').map(Number);
+        const totalMinutes = hour * 60 + minute + Math.round(totalDurationHours * 60);
+
+        return `${String(Math.floor(totalMinutes / 60) % 24).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
+    }, [selectedTimeSlot, totalDurationHours]);
+
+    const subtotal = Number(quote?.subtotal || 0);
+    const appliedDiscount = Number(quote?.discountAmount || 0);
+    const pointsDiscount = Number(quote?.pointsDiscount || 0);
+    const platformFee = Number(quote?.platformFee || 0);
+    const finalTotal = Number(quote?.totalAmount || 0);
+    const rewardBalance = Number(quote?.rewardBalance || 0);
+    const pointsUsed = Number(quote?.pointsUsed || 0);
+
+    const handleApplyVoucher = () => {
+        const code = voucherCode.trim().toUpperCase();
+
+        if (!code) {
+            setAppliedVoucherCode('');
+            setVoucherMessage({
+                type: 'error',
+                text: 'Vui lòng nhập mã giảm giá.'
+            });
+            return;
+        }
+
+        setAppliedVoucherCode(code);
+        setVoucherMessage({
+            type: '',
+            text: 'Đang kiểm tra mã khuyến mãi...'
+        });
     };
 
-    // Định vị GPS giả lập
     const handleGetLocation = () => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    setAddressForm(prev => ({
-                        ...prev,
-                        lat: Number(pos.coords.latitude.toFixed(4)),
-                        lng: Number(pos.coords.longitude.toFixed(4))
-                    }));
-                },
-                () => {
-                    // Fallback to random coordinate around HCMC center
-                    setAddressForm(prev => ({
-                        ...prev,
-                        lat: null,
-                        lng: null
-                    }));
-                }
-            );
-        }
+        if (!navigator.geolocation) return;
+
+        navigator.geolocation.getCurrentPosition(
+            position => setAddressForm(current => ({
+                ...current,
+                lat: Number(position.coords.latitude.toFixed(6)),
+                lng: Number(position.coords.longitude.toFixed(6))
+            })),
+            () => setErrorMessage('Không thể lấy tọa độ GPS. Bạn vẫn có thể tiếp tục bằng địa chỉ mặc định.')
+        );
     };
 
     const handleVNPayPayment = async () => {
@@ -287,8 +331,6 @@ export default function Checkout() {
             return;
         }
 
-        if (isPaying) return;
-
         setIsPaying(true);
         setErrorMessage('');
 
@@ -296,40 +338,33 @@ export default function Checkout() {
             const data = await createVNPayPayment(bookingId);
 
             if (!data.txnRef || !data.paymentUrl) {
-                throw new Error('Backend trả về thông tin thanh toán không hợp lệ');
+                throw new Error('Backend trả về thông tin thanh toán không hợp lệ.');
             }
 
             sessionStorage.setItem('pendingPaymentRef', data.txnRef);
-
             window.location.assign(data.paymentUrl);
-
-        } catch (err) {
-            setErrorMessage(err.message);
+        } catch (error) {
+            setErrorMessage(error.message);
             setIsPaying(false);
         }
     };
 
-    // Xử lý tạo đơn đặt lịch
-    const handleConfirmBooking = async (e) => {
-        e.preventDefault();
+    const handleConfirmBooking = async event => {
+        event.preventDefault();
         setErrorMessage('');
 
-        if (checkoutItems.length === 0) {
-            setErrorMessage('Giỏ dịch vụ của đơn vị này đang trống. Vui lòng chọn lại.');
+        if (!checkoutItems.length) {
+            setErrorMessage('Giỏ dịch vụ đang trống.');
             return;
         }
 
         if (!customerInfo.fullName.trim() || !customerInfo.phone.trim()) {
-            setErrorMessage('Vui lòng điền họ tên và số điện thoại liên hệ nhận việc.');
+            setErrorMessage('Vui lòng điền họ tên và số điện thoại liên hệ.');
             return;
         }
 
-        if (!addressForm.streetAddress.trim()) {
-            setErrorMessage('Vui lòng nhập địa chỉ cụ thể nơi thực hiện dịch vụ.');
-            return;
-        }
-        if (!defaultAddressId) {
-            setErrorMessage('Cần có địa chỉ mặc định trong hồ sơ để tiếp tục đặt lịch.');
+        if (!addressForm.streetAddress.trim() || !defaultAddressId) {
+            setErrorMessage('Cần có địa chỉ mặc định hợp lệ trong hồ sơ để tiếp tục đặt lịch.');
             return;
         }
 
@@ -338,13 +373,59 @@ export default function Checkout() {
             return;
         }
 
+        if (!quote || quoteLoading) {
+            setErrorMessage('Vui lòng chờ hệ thống tính báo giá trước khi xác nhận.');
+            return;
+        }
+
+        if (!quote.capacityAvailable) {
+            setErrorMessage(quote.capacityMessage || 'Khung giờ này không còn khả dụng.');
+            return;
+        }
+
+        if (
+            !Number.isInteger(partnerId)
+            || partnerId <= 0
+            || quoteItems.some(item => !Number.isInteger(item.serviceId) || item.serviceId <= 0)
+        ) {
+            setErrorMessage('Thông tin dịch vụ hoặc nhà cung cấp không hợp lệ. Vui lòng kiểm tra lại giỏ hàng.');
+            return;
+        }
+
+        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+
+        if (!token) {
+            setErrorMessage('Vui lòng đăng nhập để đặt dịch vụ.');
+            return;
+        }
+
         setIsSubmitting(true);
 
         try {
-            // Giả lập gửi request tạo đơn với Idempotency Key (CN07)
+            const apiRequest = {
+                partnerId,
+                addressId: Number(defaultAddressId),
+                paymentMethod,
+                items: quoteItems,
+                scheduledStart: `${selectedDate}T${selectedTimeSlot}:00`,
+                customerNote: specialNotes || '',
+                voucherCode: appliedVoucherCode || null,
+                redeemPoints: Number(redeemPoints) || 0,
+                idempotencyKey
+            };
+
+            const apiResponse = await bookingApi.createBooking(
+                apiRequest,
+                idempotencyKey
+            );
+
+            if (!apiResponse?.id || !apiResponse?.bookingCode) {
+                throw new Error('Backend không trả về thông tin đơn hàng hợp lệ.');
+            }
+
             const bookingPayload = {
                 idempotencyKey,
-                providerId: checkoutItems[0]?.providerId || 1,
+                providerId: partnerId,
                 providerName: currentProviderName,
                 customer: customerInfo,
                 address: {
@@ -371,100 +452,69 @@ export default function Checkout() {
                 pricing: {
                     subtotal,
                     discount: appliedDiscount,
+                    pointsDiscount,
+                    platformFee,
+                    pointsUsed,
                     totalAmount: finalTotal
                 },
                 paymentMethod
             };
 
-            console.log('Tạo đơn dịch vụ (CN07 payload):', bookingPayload);
-
-            let generatedBookingCode = 'CM-' + new Date().getFullYear() + '-' + Math.floor(100000 + Math.random() * 900000);
-            let backendBookingId = null;
-
-            // Gọi API Backend nếu đã đăng nhập
-            const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
-            if (token) {
-                try {
-                    const scheduledStart = `${selectedDate}T${selectedTimeSlot}:00`;
-                    const apiReq = {
-                        partnerId: checkoutItems[0]?.providerId ? Number(checkoutItems[0].providerId) : 1,
-                        addressId: Number(defaultAddressId),
-                        paymentMethod,
-                        items: checkoutItems.map(item => ({
-                            serviceId: item.serviceId ? Number(item.serviceId) : 1,
-                            packageId: item.packageId ? Number(item.packageId) : null,
-                            quantity: item.quantity || 1,
-                            note: item.notes || ''
-                        })),
-                        scheduledStart,
-                        customerNote: specialNotes || '',
-                        voucherCode: voucherCode || null,
-                        idempotencyKey
-                    };
-
-                    const apiRes = await bookingApi.createBooking(apiReq, idempotencyKey);
-                    if (!apiRes?.id || !apiRes?.bookingCode) {
-                        throw new Error('Backend không trả về Booking hợp lệ');
-                    }
-                    generatedBookingCode = apiRes.bookingCode;
-                    backendBookingId = apiRes.id;
-                } catch (apiErr) {
-                    throw new Error('Không thể tạo đơn hàng: ' + apiErr.message, { cause: apiErr });
-                }
-            } else {
-                throw new Error('Vui lòng đăng nhập để đặt dịch vụ');
-            }
-
             const newBookingRecord = {
-                id: generatedBookingCode,
-                dbId: backendBookingId,
+                id: apiResponse.bookingCode,
+                dbId: apiResponse.id,
                 ...bookingPayload,
-                status: 'PENDING_PROVIDER', // Sau khi giữ chỗ/đặt, chuyển sang chờ đối tác
-                createdAt: new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-                history: [
-                    {
-                        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date().toLocaleDateString('vi-VN'),
-                        actor: 'Khách hàng',
-                        text: 'Tạo đơn đặt lịch và giữ chỗ thành công.'
-                    }
-                ]
+                status: apiResponse.status || (
+                    paymentMethod === 'CASH'
+                        ? 'PENDING_PROVIDER'
+                        : 'PENDING_PAYMENT'
+                ),
+                createdAt: new Date().toLocaleString('vi-VN'),
+                history: [{
+                    time: new Date().toLocaleString('vi-VN'),
+                    actor: 'Khách hàng',
+                    text: 'Tạo đơn đặt lịch thành công.'
+                }]
             };
 
-            // Lưu vào danh sách đơn hàng cho CN17 /customer/bookings
             try {
-                const prevBookings = JSON.parse(localStorage.getItem('cleanmate_bookings') || '[]');
-                localStorage.setItem('cleanmate_bookings', JSON.stringify([newBookingRecord, ...prevBookings]));
-            } catch {
-                // ignore
-            }
+                const previous = JSON.parse(
+                    localStorage.getItem('cleanmate_bookings') || '[]'
+                );
+
+                localStorage.setItem(
+                    'cleanmate_bookings',
+                    JSON.stringify([newBookingRecord, ...previous])
+                );
+            } catch {}
 
             setBookingSuccessData({
-                bookingCode: generatedBookingCode,
-                backendBookingId,
+                bookingCode: apiResponse.bookingCode,
+                backendBookingId: apiResponse.id,
                 ...bookingPayload
             });
 
-            // Xóa các mặt hàng của Provider này khỏi Giỏ
             dispatch({
                 type: 'REMOVE_PROVIDER_ITEMS',
-                payload: checkoutItems[0]?.providerId || 1
+                payload: partnerId
             });
-
-        } catch (err) {
-            setErrorMessage('Có lỗi xảy ra trong quá trình đặt lịch: ' + err.message);
+        } catch (error) {
+            setErrorMessage(`Không thể tạo đơn hàng: ${error.message}`);
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // Nếu không có dịch vụ nào để checkout và chưa đặt thành công
-    if (checkoutItems.length === 0 && !bookingSuccessData) {
+    const formatTimer = seconds =>
+        `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+
+    if (!checkoutItems.length && !bookingSuccessData) {
         return (
             <div className="checkout-page">
                 <Header />
                 <div className="checkout-empty-container">
                     <div className="empty-icon-circle">
-                        <FontAwesomeIcon icon={faHourglassHalf} />
+                        <FontAwesomeIcon icon={faBroom} />
                     </div>
                     <h2>Chưa có dịch vụ nào được chọn để đặt lịch</h2>
                     <p>Hãy chọn dịch vụ vệ sinh từ trang tìm kiếm hoặc kiểm tra giỏ hàng của bạn.</p>
@@ -472,33 +522,6 @@ export default function Checkout() {
                         <Link to="/cart" className="btn-back-cart">
                             <FontAwesomeIcon icon={faArrowLeft} /> Xem giỏ hàng
                         </Link>
-                        <button
-                            type="button"
-                            className="btn-back-cart"
-                            style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe', cursor: 'pointer' }}
-                            onClick={() => {
-                                dispatch({
-                                    type: 'ADD_ITEM',
-                                    payload: {
-                                        serviceId: 1,
-                                        serviceName: 'Dịch vụ dọn dẹp nhà tiêu chuẩn',
-                                        providerId: 1,
-                                        providerName: 'Công ty TNHH Vệ sinh CleanHome Pro',
-                                        packageId: 2,
-                                        packageName: 'Chuyên sâu (3-4 giờ)',
-                                        quantity: 1,
-                                        unitPrice: 350000,
-                                        estimatedPrice: 350000,
-                                        durationHours: 3,
-                                        scheduledDate: '2026-10-17',
-                                        scheduledTime: '08:30',
-                                        note: 'Lau dọn phòng khách và 2 phòng tắm'
-                                    }
-                                });
-                            }}
-                        >
-                            <FontAwesomeIcon icon={faBroom} /> Nạp dịch vụ mẫu thử nghiệm
-                        </button>
                         <Link to="/services" className="btn-explore">
                             Khám phá dịch vụ CleanMate
                         </Link>
@@ -509,7 +532,6 @@ export default function Checkout() {
         );
     }
 
-    // MÀN HÌNH XÁC NHẬN ĐƠN THÀNH CÔNG (GIỮ CHỖ THÀNH CÔNG)
     if (bookingSuccessData) {
         return (
             <div className="checkout-page">
@@ -519,90 +541,90 @@ export default function Checkout() {
                         <div className="success-badge-icon">
                             <FontAwesomeIcon icon={faCircleCheck} />
                         </div>
-                        <h1>Đặt lịch & Giữ chỗ thành công!</h1>
+                        <h1>Đặt lịch thành công!</h1>
                         <p className="order-code-text">
                             Mã đơn dịch vụ: <strong>#{bookingSuccessData.bookingCode}</strong>
                         </p>
-
-                        <div className="hold-timer-alert">
-                            <div className="timer-icon">
-                                <FontAwesomeIcon icon={faClock} />
+                        {paymentMethod === 'VNPAY' && (
+                            <div className="hold-timer-alert">
+                                <div className="timer-icon">
+                                    <FontAwesomeIcon icon={faClock} />
+                                </div>
+                                <div className="timer-info">
+                                    <strong>Thời gian giữ chỗ thanh toán còn:</strong>
+                                    <span className="timer-countdown">{formatTimer(holdSecondsLeft)}</span>
+                                    <small>Vui lòng hoàn tất thanh toán trước khi thời gian giữ chỗ kết thúc.</small>
+                                </div>
                             </div>
-                            <div className="timer-info">
-                                <strong>Suất làm việc đang được giữ chỗ độc quyền trong:</strong>
-                                <span className="timer-countdown">{formatTimer(holdSecondsLeft)}</span>
-                                <small>Vui lòng hoàn tất thanh toán trước khi thời gian giữ chỗ kết thúc để đối tác sắp xếp nhân sự.</small>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     <div className="success-details-card">
-                        <h3>Thông tin lịch hẹn đã chốt (Snapshot)</h3>
-
+                        <h3>Thông tin lịch hẹn</h3>
                         <div className="info-grid">
                             <div className="info-item">
                                 <span className="label">Đơn vị cung cấp:</span>
-                                <strong>{bookingSuccessData.providerName || 'Đơn vị vệ sinh CleanMate'}</strong>
+                                <strong>{bookingSuccessData.providerName}</strong>
                             </div>
                             <div className="info-item">
                                 <span className="label">Khách hàng:</span>
-                                <strong>{bookingSuccessData.customer?.fullName || 'Khách hàng'} - {bookingSuccessData.customer?.phone || ''}</strong>
+                                <strong>{bookingSuccessData.customer.fullName} - {bookingSuccessData.customer.phone}</strong>
                             </div>
                             <div className="info-item">
-                                <span className="label">Địa điểm thực hiện:</span>
-                                <strong>{bookingSuccessData.address?.formattedAddress || 'Địa chỉ thực hiện'}</strong>
+                                <span className="label">Địa điểm:</span>
+                                <strong>{bookingSuccessData.address.formattedAddress}</strong>
                             </div>
                             <div className="info-item">
-                                <span className="label">Tọa độ ghim:</span>
-                                <code>Lat: {bookingSuccessData.address?.lat || 10.7769}, Lng: {bookingSuccessData.address?.lng || 106.7009}</code>
+                                <span className="label">Tọa độ:</span>
+                                <code>Lat: {bookingSuccessData.address.lat ?? 'Chưa có'}, Lng: {bookingSuccessData.address.lng ?? 'Chưa có'}</code>
                             </div>
                             <div className="info-item">
                                 <span className="label">Lịch thực hiện:</span>
-                                <strong>{bookingSuccessData.schedule?.date || 'Hôm nay'} ({bookingSuccessData.schedule?.startTime || '08:00'} - {bookingSuccessData.schedule?.endTime || '11:00'})</strong>
+                                <strong>{bookingSuccessData.schedule.date} ({bookingSuccessData.schedule.startTime} - {bookingSuccessData.schedule.endTime})</strong>
                             </div>
                             <div className="info-item">
-                                <span className="label">Phương thức thanh toán:</span>
-                                <strong>
-                                    {bookingSuccessData.paymentMethod === 'VNPAY' && 'Cổng trực tuyến VNPAY QR'}
-                                    {bookingSuccessData.paymentMethod === 'CASH' && 'Thanh toán trực tiếp khi hoàn thành'}
-                                    {bookingSuccessData.paymentMethod === 'BANK_TRANSFER' && 'Chuyển khoản ngân hàng VietQR'}
-                                </strong>
+                                <span className="label">Thanh toán:</span>
+                                <strong>{paymentMethod === 'VNPAY' ? 'VNPAY' : 'Tiền mặt khi hoàn thành'}</strong>
                             </div>
-                            {bookingSuccessData.paymentMethod === 'CASH' && (
-                                <p className="cash-payment-note">Bạn thanh toán cho đối tác sau khi hoàn tất dịch vụ. Đối tác sẽ xác nhận đã thu tiền trên đơn hàng.</p>
-                            )}
                         </div>
 
                         <div className="success-items-list">
-                            <h4>Dịch vụ đã đặt ({(bookingSuccessData.items || []).length})</h4>
-                            {(bookingSuccessData.items || []).map((it, idx) => (
-                                <div key={idx} className="success-item-row">
+                            <h4>Dịch vụ đã đặt ({bookingSuccessData.items.length})</h4>
+                            {bookingSuccessData.items.map((item, index) => (
+                                <div key={`${item.serviceId}-${index}`} className="success-item-row">
                                     <div>
-                                        <strong>{it.serviceName}</strong>
-                                        <span className="sub-pkg">Gói: {it.packageName} (x{it.quantity})</span>
+                                        <strong>{item.serviceName}</strong>
+                                        <span className="sub-pkg">Gói: {item.packageName || 'Tiêu chuẩn'} (x{item.quantity})</span>
                                     </div>
-                                    <strong className="item-price">{formatPrice(it.estimatedPrice || it.unitPrice || 0)}</strong>
+                                    <strong className="item-price">
+                                        {formatPrice(item.estimatedPrice || item.unitPrice || 0)}
+                                    </strong>
                                 </div>
                             ))}
                             <div className="success-total-row">
                                 <span>Tổng thanh toán:</span>
-                                <span className="total-highlight">{formatPrice(bookingSuccessData.pricing?.totalAmount || 0)}</span>
+                                <span className="total-highlight">
+                                    {formatPrice(bookingSuccessData.pricing.totalAmount)}
+                                </span>
                             </div>
                         </div>
 
                         <div className="success-actions-block">
-                            {bookingSuccessData.paymentMethod === 'VNPAY' && (
-                                <button type="button" className="btn-pay-vnpay" onClick={handleVNPayPayment} disabled={isPaying || !bookingSuccessData.backendBookingId}>
+                            {paymentMethod === 'VNPAY' && (
+                                <button
+                                    type="button"
+                                    className="btn-pay-vnpay"
+                                    onClick={handleVNPayPayment}
+                                    disabled={isPaying || !bookingSuccessData.backendBookingId}
+                                >
                                     {isPaying ? (
                                         <>
-                                            <FontAwesomeIcon icon={faSpinner} spin />
-                                            Đang chuyển đến VNPay...
+                                            <FontAwesomeIcon icon={faSpinner} spin /> Đang chuyển đến VNPay...
                                         </>
                                     ) : (
                                         <>
                                             <FontAwesomeIcon icon={faQrcode} />
-                                            Thanh toán VNPAY ngay
-                                            ({formatPrice(bookingSuccessData.pricing?.totalAmount || 0)})
+                                            Thanh toán VNPAY ngay ({formatPrice(bookingSuccessData.pricing.totalAmount)})
                                         </>
                                     )}
                                 </button>
@@ -618,11 +640,10 @@ export default function Checkout() {
                                 className="btn-pay-vnpay"
                                 style={{ background: '#2563eb', textDecoration: 'none' }}
                             >
-                                <FontAwesomeIcon icon={faRoute} /> Xem tiến độ đơn hàng (CN17)
+                                <FontAwesomeIcon icon={faRoute} /> Xem tiến độ đơn hàng
                             </Link>
-
                             <Link to="/services" className="btn-secondary-link">
-                                Khám phá thêm dịch vụ khác
+                                Tiếp tục khám phá dịch vụ
                             </Link>
                         </div>
                     </div>
@@ -635,7 +656,6 @@ export default function Checkout() {
     return (
         <div className="checkout-page">
             <Header />
-
             <div className="breadcrumb">
                 <Link to="/">Trang chủ</Link>
                 <span>›</span>
@@ -648,7 +668,7 @@ export default function Checkout() {
                 <div className="checkout-header-title">
                     <div>
                         <h1>Đặt lịch & Xác nhận dịch vụ</h1>
-                        <p>Xác nhận địa chỉ, lịch thực hiện và khóa giữ chỗ cho đơn vị cung cấp</p>
+                        <p>Xác nhận địa chỉ, lịch thực hiện và báo giá trước khi đặt dịch vụ.</p>
                     </div>
                     <Link to="/cart" className="back-to-cart-link">
                         <FontAwesomeIcon icon={faArrowLeft} /> Quay lại giỏ hàng
@@ -663,16 +683,13 @@ export default function Checkout() {
                 )}
 
                 <form onSubmit={handleConfirmBooking} className="checkout-layout">
-                    {/* CỘT TRÁI: QUY TRÌNH THÔNG TIN CHÍNH */}
                     <div className="checkout-main-column">
-
-                        {/* MỤC 1: ĐƠN VỊ CUNG CẤP & SNAPSHOT DỊCH VỤ */}
                         <section className="checkout-section-card">
                             <div className="section-card-header">
                                 <div className="step-number">1</div>
                                 <div>
                                     <h2>Nhà cung cấp & Dịch vụ được chọn</h2>
-                                    <p>Chỉ thanh toán theo từng đối tác để đảm bảo tiến độ và bảo hành</p>
+                                    <p>Đơn hàng được tạo theo từng nhà cung cấp.</p>
                                 </div>
                             </div>
 
@@ -681,52 +698,54 @@ export default function Checkout() {
                                 <div>
                                     <strong>{currentProviderName}</strong>
                                     <span className="verified-tag">
-                                        <FontAwesomeIcon icon={faShieldHalved} /> Đối tác xác thực CleanMate
+                                        <FontAwesomeIcon icon={faShieldHalved} /> Đối tác CleanMate
                                     </span>
                                 </div>
                             </div>
 
                             <div className="checkout-items-list">
-                                {checkoutItems.map((item) => (
-                                    <div key={item.id} className="checkout-item-card">
+                                {checkoutItems.map((item, index) => (
+                                    <div key={item.id || `${item.serviceId}-${index}`} className="checkout-item-card">
                                         <div className="item-icon-box">
                                             <FontAwesomeIcon icon={faBroom} />
                                         </div>
                                         <div className="item-details">
                                             <h4>{item.serviceName}</h4>
                                             <div className="item-meta">
-                                                <span className="badge-package">Gói: {item.packageName}</span>
+                                                <span className="badge-package">Gói: {item.packageName || 'Tiêu chuẩn'}</span>
                                                 <span className="badge-duration">
-                                                    <FontAwesomeIcon icon={faClock} /> {item.durationHours || 3} giờ
+                                                    <FontAwesomeIcon icon={faClock} /> {item.durationHours || 1} giờ
                                                 </span>
-                                                <span>Số lượng: x{item.quantity}</span>
+                                                <span>Số lượng: x{item.quantity || 1}</span>
                                             </div>
-                                            {item.notes && (
-                                                <p className="item-user-notes">Ghi chú: {item.notes}</p>
-                                            )}
+                                            {item.notes && <p className="item-user-notes">Ghi chú: {item.notes}</p>}
                                         </div>
                                         <div className="item-pricing">
-                                            <strong>{formatPrice(item.estimatedPrice)}</strong>
-                                            <small>{formatPrice(item.unitPrice)}/lần</small>
+                                            <strong>{formatPrice(item.estimatedPrice || item.unitPrice || 0)}</strong>
+                                            <small>Giá tham khảo từ giỏ hàng</small>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </section>
 
-                        {/* MỤC 2: ĐỊA CHỈ & TỌA ĐỘ BẢN ĐỒ THỰC HIỆN */}
                         <section className="checkout-section-card">
                             <div className="section-card-header">
                                 <div className="step-number">2</div>
                                 <div>
-                                    <h2>Địa chỉ thực hiện dịch vụ & Tọa độ bản đồ</h2>
-                                    <p>Địa chỉ chính xác giúp kỹ thuật viên đến đúng giờ và chuẩn bị công cụ</p>
+                                    <h2>Địa chỉ thực hiện dịch vụ</h2>
+                                    <p>Sử dụng địa chỉ mặc định đã lưu trong hồ sơ.</p>
                                 </div>
                             </div>
 
                             {addressLoading && <p>Đang tải địa chỉ mặc định...</p>}
-                            {defaultAddressError && <p className="checkout-error-message">{defaultAddressError} <Link to="/profile">Mở hồ sơ</Link></p>}
+                            {defaultAddressError && (
+                                <p className="checkout-error-message">
+                                    {defaultAddressError} <Link to="/profile">Mở hồ sơ</Link>
+                                </p>
+                            )}
                             {defaultAddressId && <p>Địa chỉ đang dùng được lấy từ địa chỉ mặc định trong hồ sơ.</p>}
+
                             <div className="form-grid-2">
                                 <div className="form-group">
                                     <label htmlFor="customerFullName">
@@ -734,24 +753,26 @@ export default function Checkout() {
                                     </label>
                                     <input
                                         id="customerFullName"
-                                        type="text"
-                                        placeholder="Ví dụ: Nguyễn Văn An"
                                         value={customerInfo.fullName}
-                                        onChange={(e) => setCustomerInfo(prev => ({ ...prev, fullName: e.target.value }))}
+                                        onChange={event => setCustomerInfo(current => ({
+                                            ...current,
+                                            fullName: event.target.value
+                                        }))}
                                         required
                                     />
                                 </div>
-
                                 <div className="form-group">
                                     <label htmlFor="customerPhone">
-                                        <FontAwesomeIcon icon={faPhone} /> Số điện thoại liên hệ *
+                                        <FontAwesomeIcon icon={faPhone} /> Số điện thoại *
                                     </label>
                                     <input
                                         id="customerPhone"
                                         type="tel"
-                                        placeholder="Ví dụ: 0912345678"
                                         value={customerInfo.phone}
-                                        onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
+                                        onChange={event => setCustomerInfo(current => ({
+                                            ...current,
+                                            phone: event.target.value
+                                        }))}
                                         required
                                     />
                                 </div>
@@ -759,90 +780,55 @@ export default function Checkout() {
 
                             <div className="form-grid-3">
                                 <div className="form-group">
-                                    <label htmlFor="citySelect">Tỉnh / Thành phố *</label>
-                                    <input
-                                        id="citySelect"
-                                        type="text"
-                                        value={addressForm.city}
-                                        readOnly
-                                    />
+                                    <label htmlFor="citySelect">Tỉnh / Thành phố</label>
+                                    <input id="citySelect" value={addressForm.city} readOnly />
                                 </div>
-
                                 <div className="form-group">
-                                    <label htmlFor="districtSelect">Quận / Huyện *</label>
-                                    <input
-                                        id="districtSelect"
-                                        type="text"
-                                        value={addressForm.district}
-                                        readOnly
-                                    />
+                                    <label htmlFor="districtSelect">Quận / Huyện</label>
+                                    <input id="districtSelect" value={addressForm.district} readOnly />
                                 </div>
-
                                 <div className="form-group">
-                                    <label htmlFor="wardInput">Phường / Xã *</label>
-                                    <input
-                                        id="wardInput"
-                                        type="text"
-                                        value={addressForm.ward}
-                                        readOnly
-                                        placeholder="Ví dụ: Phường Bến Nghé"
-                                        required
-                                    />
+                                    <label htmlFor="wardInput">Phường / Xã</label>
+                                    <input id="wardInput" value={addressForm.ward} readOnly />
                                 </div>
                             </div>
 
                             <div className="form-group">
                                 <label htmlFor="streetInput">
-                                    <FontAwesomeIcon icon={faLocationDot} /> Số nhà, Tên đường, Tòa nhà/Căn hộ *
+                                    <FontAwesomeIcon icon={faLocationDot} /> Số nhà, tên đường *
                                 </label>
-                                <input
-                                    id="streetInput"
-                                    type="text"
-                                    value={addressForm.streetAddress}
-                                    readOnly
-                                    placeholder="Ví dụ: Tòa Landmark 81, Căn 24.08, 720A Điện Biên Phủ"
-                                    required
-                                />
+                                <input id="streetInput" value={addressForm.streetAddress} readOnly required />
                             </div>
 
-                            {/* Widget định vị ghim bản đồ & Tọa độ (CN07 & CN24 GPS) */}
                             <div className="map-pin-widget">
                                 <div className="map-widget-header">
                                     <div className="map-title">
                                         <FontAwesomeIcon icon={faMapPin} className="pin-icon" />
-                                        <span>Điểm ghim GPS nơi làm việc:</span>
-                                        <strong>Vĩ độ: {addressForm.lat} | Kinh độ: {addressForm.lng}</strong>
+                                        <span>Tọa độ GPS:</span>
+                                        <strong>{addressForm.lat ?? 'Chưa có'} | {addressForm.lng ?? 'Chưa có'}</strong>
                                     </div>
-                                    <button
-                                        type="button"
-                                        className="btn-detect-gps"
-                                        onClick={handleGetLocation}
-                                    >
+                                    <button type="button" className="btn-detect-gps" onClick={handleGetLocation}>
                                         <FontAwesomeIcon icon={faCrosshairs} /> Lấy tọa độ GPS
                                     </button>
                                 </div>
-
                                 <div className="map-visual-placeholder">
-                                    <div className="radar-sweep" />
                                     <div className="pin-marker">
                                         <FontAwesomeIcon icon={faLocationDot} />
-                                        <div className="pin-pulse" />
                                     </div>
                                     <div className="map-overlay-info">
                                         <FontAwesomeIcon icon={faCircleCheck} />
-                                        <span>Đã xác thực: Nằm trong vùng phục vụ 15km của đối tác {currentProviderName}</span>
+                                        <span>Địa chỉ lấy từ hồ sơ khách hàng.</span>
                                     </div>
                                 </div>
                             </div>
                         </section>
 
-                        {/* MỤC 3: LỊCH HẸN & NĂNG LỰC NHÂN SỰ */}
                         <section className="checkout-section-card">
                             <div className="section-card-header">
                                 <div className="step-number">3</div>
                                 <div>
-                                    <h2>Thời gian thực hiện & Năng lực nhân sự</h2>
-                                    <p>Hệ thống tự động tính giờ kết thúc và bảo đảm người làm rảnh lịch</p>
+                                    <h2>Thời gian thực hiện</h2>
+                                    <p>Hệ thống kiểm tra năng lực tiếp nhận theo khung giờ.</p>
                                 </div>
                             </div>
 
@@ -867,65 +853,71 @@ export default function Checkout() {
                                         type="date"
                                         min={todayStr}
                                         value={selectedDate}
-                                        onChange={(e) => setSelectedDate(e.target.value)}
-                                        aria-label="Chọn ngày khác"
+                                        onChange={event => setSelectedDate(event.target.value)}
                                     />
                                 </div>
                             </div>
 
                             <div className="time-slots-section">
-                                <span className="time-section-title">Chọn khung giờ bắt đầu:</span>
+                                <span className="time-section-title">Chọn giờ bắt đầu:</span>
                                 <div className="time-slots-grid">
-                                    {TIME_SLOTS.map(slot => (
+                                    {TIME_SLOTS.map(time => (
                                         <button
-                                            key={slot.id}
+                                            key={time}
                                             type="button"
-                                            className={`time-slot-btn ${selectedTimeSlot === slot.id ? 'active' : ''}`}
-                                            onClick={() => setSelectedTimeSlot(slot.id)}
+                                            className={`time-slot-btn ${selectedTimeSlot === time ? 'active' : ''}`}
+                                            onClick={() => setSelectedTimeSlot(time)}
                                         >
                                             <FontAwesomeIcon icon={faClock} />
-                                            <strong>{slot.id}</strong>
-                                            <small>{slot.label.split('-')[1]?.trim()}</small>
+                                            <strong>{time}</strong>
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Khối suy luận thời gian kết thúc & Năng lực */}
                             <div className="capacity-summary-box">
                                 <div className="capacity-stat">
-                                    <span className="stat-label">Thời gian làm việc dự kiến:</span>
-                                    <strong className="stat-value">{selectedTimeSlot} - {calculatedEndTime} ({totalDurationHours} tiếng)</strong>
+                                    <span className="stat-label">Thời gian dự kiến:</span>
+                                    <strong className="stat-value">
+                                        {selectedTimeSlot} - {calculatedEndTime} ({totalDurationHours} tiếng)
+                                    </strong>
                                 </div>
                                 <div className="capacity-stat">
-                                    <span className="stat-label">Năng lực nhân sự phục vụ:</span>
-                                    <span className="capacity-badge available">
-                                        <FontAwesomeIcon icon={faCircleCheck} /> Còn 4 nhân viên sẵn sàng ca này
+                                    <span className="stat-label">Kiểm tra lịch:</span>
+                                    <span
+                                        className="capacity-badge available"
+                                        style={quote && !quote.capacityAvailable ? {
+                                            color: '#dc2626',
+                                            background: '#fff5f5',
+                                            border: '1px solid #fecaca'
+                                        } : undefined}
+                                    >
+                                        <FontAwesomeIcon icon={quote?.capacityAvailable ? faCircleCheck : faCircleExclamation} />
+                                        {quoteLoading
+                                            ? 'Đang kiểm tra...'
+                                            : quote?.capacityMessage || quoteError || 'Đang chờ kết quả kiểm tra.'}
                                     </span>
                                 </div>
                             </div>
 
                             <div className="form-group" style={{ marginTop: '20px' }}>
-                                <label htmlFor="specialNotes">
-                                    Ghi chú bổ sung cho nhân viên vệ sinh (nếu có):
-                                </label>
+                                <label htmlFor="specialNotes">Ghi chú bổ sung (nếu có):</label>
                                 <textarea
                                     id="specialNotes"
                                     rows="2"
-                                    placeholder="Ví dụ: Nhà có em bé đang ngủ, vui lòng không bấm chuông cửa; hoặc gửi xe tại tầng hầm B1..."
                                     value={specialNotes}
-                                    onChange={(e) => setSpecialNotes(e.target.value)}
+                                    onChange={event => setSpecialNotes(event.target.value)}
+                                    placeholder="Ghi chú cho nhân viên vệ sinh..."
                                 />
                             </div>
                         </section>
 
-                        {/* MỤC 4: PHƯƠNG THỨC THANH TOÁN */}
                         <section className="checkout-section-card">
                             <div className="section-card-header">
                                 <div className="step-number">4</div>
                                 <div>
                                     <h2>Phương thức thanh toán</h2>
-                                    <p>An toàn, minh bạch, hoàn tiền tự động nếu đối tác không tiếp nhận</p>
+                                    <p>Chọn phương thức thanh toán cho đơn dịch vụ.</p>
                                 </div>
                             </div>
 
@@ -942,10 +934,9 @@ export default function Checkout() {
                                         <FontAwesomeIcon icon={faQrcode} />
                                     </div>
                                     <div className="method-info">
-                                        <strong>Cổng thanh toán điện tử VNPAY (Khuyên dùng)</strong>
-                                        <p>Quét mã VNPAY-QR, thẻ ATM nội địa 40+ ngân hàng hoặc Visa/Mastercard (Tích hợp CN08)</p>
+                                        <strong>Thanh toán VNPAY</strong>
+                                        <p>Thanh toán trực tuyến qua cổng VNPAY.</p>
                                     </div>
-                                    <span className="recommend-badge">Khuyên dùng</span>
                                 </label>
 
                                 <label className={`payment-method-item ${paymentMethod === 'CASH' ? 'active' : ''}`}>
@@ -960,49 +951,64 @@ export default function Checkout() {
                                         <FontAwesomeIcon icon={faMoneyBillWave} />
                                     </div>
                                     <div className="method-info">
-                                        <strong>Thanh toán tiền mặt khi hoàn thành (COD)</strong>
-                                        <p>Kiểm tra chất lượng vệ sinh sạch sẽ rồi thanh toán trực tiếp cho nhân viên</p>
+                                        <strong>Tiền mặt khi hoàn thành</strong>
+                                        <p>Thanh toán trực tiếp sau khi dịch vụ hoàn tất.</p>
                                     </div>
                                 </label>
 
-                                <label className={`payment-method-item ${paymentMethod === 'BANK_TRANSFER' ? 'active' : ''}`}>
-                                    <input
-                                        type="radio"
-                                        name="paymentMethod"
-                                        value="BANK_TRANSFER"
-                                        checked={paymentMethod === 'BANK_TRANSFER'}
-                                        disabled
-                                    />
+                                <label className="payment-method-item">
+                                    <input type="radio" name="bankTransfer" disabled />
                                     <div className="method-icon-box bank-icon">
                                         <FontAwesomeIcon icon={faCreditCard} />
                                     </div>
                                     <div className="method-info">
-                                        <strong>Chuyển khoản ngân hàng VietQR</strong>
-                                        <p>Phương thức này hiện chưa được hỗ trợ.</p>
+                                        <strong>Chuyển khoản ngân hàng</strong>
+                                        <p>Phương thức hiện chưa được hỗ trợ.</p>
                                     </div>
                                 </label>
                             </div>
                         </section>
                     </div>
 
-                    {/* CỘT PHẢI: BẢNG GIÁ CHỐT SNAPSHOT & XÁC NHẬN */}
                     <div className="checkout-summary-column">
                         <div className="summary-sticky-card">
                             <h3>Báo giá & Chốt đơn</h3>
 
-                            {/* Nhập mã giảm giá */}
                             <div className="voucher-input-block">
                                 <div className="voucher-input-group">
                                     <input
                                         type="text"
-                                        placeholder="Mã voucher (ví dụ: BANMOI)"
+                                        placeholder="Nhập mã khuyến mãi"
                                         value={voucherCode}
-                                        onChange={(e) => setVoucherCode(e.target.value)}
+                                        onChange={event => setVoucherCode(event.target.value)}
                                     />
-                                    <button type="button" onClick={handleApplyVoucher}>
+                                    <button
+                                        type="button"
+                                        onClick={handleApplyVoucher}
+                                        disabled={quoteLoading}
+                                    >
                                         <FontAwesomeIcon icon={faTag} /> Áp dụng
                                     </button>
                                 </div>
+                                {appliedVoucherCode && (
+                                    <button
+                                        type="button"
+                                        style={{
+                                            marginTop: '6px',
+                                            border: 0,
+                                            background: 'transparent',
+                                            color: '#dc2626',
+                                            cursor: 'pointer',
+                                            fontSize: '12px'
+                                        }}
+                                        onClick={() => {
+                                            setVoucherCode('');
+                                            setAppliedVoucherCode('');
+                                        }}
+                                    >
+                                        Bỏ mã {appliedVoucherCode}
+                                    </button>
+                                )}
                                 {voucherMessage.text && (
                                     <div className={`voucher-msg ${voucherMessage.type}`}>
                                         {voucherMessage.text}
@@ -1010,44 +1016,72 @@ export default function Checkout() {
                                 )}
                             </div>
 
-                            {/* Chi tiết thanh toán */}
+                            <div className="form-group" style={{ marginBottom: '18px' }}>
+                                <label htmlFor="redeemPoints">Đổi điểm thưởng</label>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: '#64748b',
+                                    margin: '5px 0'
+                                }}>
+                                    Số dư hiện tại: <strong>{rewardBalance.toLocaleString('vi-VN')} điểm</strong>
+                                </div>
+                                <input
+                                    id="redeemPoints"
+                                    type="number"
+                                    min="0"
+                                    max={rewardBalance}
+                                    step="1"
+                                    value={redeemPoints}
+                                    onChange={event => setRedeemPoints(
+                                        Math.max(0, Math.min(
+                                            rewardBalance,
+                                            Number(event.target.value) || 0
+                                        ))
+                                    )}
+                                />
+                                <small>Điểm đổi và số tiền giảm được kiểm tra theo chính sách hệ thống.</small>
+                            </div>
+
                             <div className="pricing-rows">
                                 <div className="price-row">
                                     <span>Tạm tính dịch vụ ({checkoutItems.length})</span>
-                                    <strong>{formatPrice(subtotal)}</strong>
+                                    <strong>{quote ? formatPrice(subtotal) : '--'}</strong>
                                 </div>
-
                                 <div className="price-row">
-                                    <span>Phí di chuyển nhân sự</span>
-                                    <strong className="free-tag">Miễn phí</strong>
+                                    <span>Phí nền tảng</span>
+                                    <strong>{quote ? formatPrice(platformFee) : '--'}</strong>
                                 </div>
-
                                 {appliedDiscount > 0 && (
                                     <div className="price-row discount-row">
                                         <span>Giảm giá khuyến mãi</span>
                                         <strong>-{formatPrice(appliedDiscount)}</strong>
                                     </div>
                                 )}
-
+                                {pointsDiscount > 0 && (
+                                    <div className="price-row discount-row">
+                                        <span>Giảm từ {pointsUsed.toLocaleString('vi-VN')} điểm</span>
+                                        <strong>-{formatPrice(pointsDiscount)}</strong>
+                                    </div>
+                                )}
                                 <div className="summary-divider" />
-
                                 <div className="price-row final-total-row">
-                                    <span>Tổng số tiền thanh toán:</span>
-                                    <strong className="final-price">{formatPrice(finalTotal)}</strong>
+                                    <span>Tổng thanh toán:</span>
+                                    <strong className="final-price">
+                                        {quote ? formatPrice(finalTotal) : '--'}
+                                    </strong>
                                 </div>
-                                <small className="price-note">Giá đã bao gồm dụng cụ, dung dịch tẩy rửa và bảo hiểm</small>
+                                {quoteLoading && <small className="price-note">Đang cập nhật báo giá từ hệ thống...</small>}
+                                {quoteError && <small className="checkout-error-message">{quoteError}</small>}
+                                {quote && <small className="price-note">Báo giá được tính từ backend và kiểm tra lại khi tạo đơn.</small>}
                             </div>
 
-                            {/* Cam kết & Chính sách hủy (CN07 Specification) */}
                             <div className="cancellation-policy-box">
                                 <h4>
                                     <FontAwesomeIcon icon={faShieldHalved} /> Chính sách hủy & Cam kết
                                 </h4>
                                 <ul>
-                                    <li><strong>Trước 24h:</strong> Miễn phí hủy, hoàn 100% tiền giữ chỗ.</li>
-                                    <li><strong>Trước 12h:</strong> Hỗ trợ phí hủy 30% cho đối tác điều phối.</li>
-                                    <li><strong>Dưới 12h:</strong> Không hoàn tiền giữ chỗ.</li>
-                                    <li><strong>Cam kết chất lượng:</strong> Làm sạch lại miễn phí nếu quý khách chưa hài lòng trong 24 giờ.</li>
+                                    <li><strong>Trước 24h:</strong> Miễn phí hủy theo chính sách áp dụng.</li>
+                                    <li><strong>Cam kết chất lượng:</strong> Gửi yêu cầu hỗ trợ nếu dịch vụ chưa đạt yêu cầu.</li>
                                 </ul>
                             </div>
 
@@ -1055,36 +1089,35 @@ export default function Checkout() {
                                 <input
                                     type="checkbox"
                                     checked={agreePolicy}
-                                    onChange={(e) => setAgreePolicy(e.target.checked)}
+                                    onChange={event => setAgreePolicy(event.target.checked)}
                                 />
                                 <span>Tôi đã đọc và đồng ý với Quy chế hoạt động & Chính sách hủy của CleanMate.</span>
                             </label>
 
-                            {/* Nút xác nhận đặt lịch */}
                             <button
                                 type="submit"
                                 className="btn-confirm-booking"
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || quoteLoading || !quote || !quote.capacityAvailable}
                             >
                                 {isSubmitting ? (
                                     <>
-                                        <FontAwesomeIcon icon={faSpinner} spin /> Đang xác nhận & Giữ chỗ...
+                                        <FontAwesomeIcon icon={faSpinner} spin /> Đang xác nhận...
                                     </>
                                 ) : (
                                     <>
-                                        <FontAwesomeIcon icon={faCheck} /> Xác nhận đặt lịch ({formatPrice(finalTotal)})
+                                        <FontAwesomeIcon icon={faCheck} />
+                                        Xác nhận đặt lịch ({quote ? formatPrice(finalTotal) : '--'})
                                     </>
                                 )}
                             </button>
 
                             <div className="secure-badge">
-                                <FontAwesomeIcon icon={faShieldHalved} /> Giao dịch được bảo vệ và mã hóa 256-bit
+                                <FontAwesomeIcon icon={faShieldHalved} /> Giao dịch được bảo vệ.
                             </div>
                         </div>
                     </div>
                 </form>
             </main>
-
             <Footer />
         </div>
     );
