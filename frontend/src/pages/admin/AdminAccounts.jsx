@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "./AdminLayout";
 import "./AdminAccounts.css";
@@ -22,14 +21,12 @@ function getToken() {
     );
 }
 
-// Chuẩn hóa trạng thái từ backend về active / locked.
 function normalizeStatus(status) {
     return String(status || "").toUpperCase() === "LOCKED"
         ? "locked"
         : "active";
 }
 
-// Chuẩn hóa vai trò để khớp với giao diện hiện tại.
 function normalizeRole(role) {
     const value = String(role || "").toUpperCase();
 
@@ -44,7 +41,6 @@ function normalizeRole(role) {
     return roles[value] || role || "Customer";
 }
 
-// Đọc thông báo lỗi từ backend.
 async function getErrorMessage(response) {
     try {
         const data = await response.json();
@@ -66,14 +62,11 @@ export default function AdminAccounts() {
     const [roleFilter, setRoleFilter] = useState("all");
     const [statusFilter, setStatusFilter] = useState("all");
     const [selectedAccount, setSelectedAccount] = useState(null);
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [updatingId, setUpdatingId] = useState(null);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
-    // =========================
-    // 1. TẢI DANH SÁCH TÀI KHOẢN
-    // =========================
     useEffect(() => {
         const controller = new AbortController();
 
@@ -101,15 +94,11 @@ export default function AdminAccounts() {
                     }
 
                     if (response.status === 403) {
-                        throw new Error(
-                            "Bạn không có quyền quản lý tài khoản."
-                        );
+                        throw new Error("Bạn không có quyền quản lý tài khoản.");
                     }
 
                     if (response.status === 404) {
-                        throw new Error(
-                            "Không tìm thấy API quản lý tài khoản. Kiểm tra backend."
-                        );
+                        throw new Error("Không tìm thấy API quản lý tài khoản. Kiểm tra backend.");
                     }
 
                     throw new Error(await getErrorMessage(response));
@@ -118,9 +107,7 @@ export default function AdminAccounts() {
                 const data = await response.json();
 
                 if (!Array.isArray(data)) {
-                    throw new Error(
-                        "Dữ liệu tài khoản từ backend không đúng định dạng."
-                    );
+                    throw new Error("Dữ liệu tài khoản từ backend không đúng định dạng.");
                 }
 
                 const normalizedAccounts = data.map((account) => ({
@@ -136,9 +123,7 @@ export default function AdminAccounts() {
                 setAccounts(normalizedAccounts);
             } catch (err) {
                 if (err.name !== "AbortError") {
-                    setError(
-                        err.message || "Không thể tải danh sách tài khoản."
-                    );
+                    setError(err.message || "Không thể tải danh sách tài khoản.");
                 }
             } finally {
                 if (!controller.signal.aborted) {
@@ -152,9 +137,6 @@ export default function AdminAccounts() {
         return () => controller.abort();
     }, []);
 
-    // =========================
-    // 2. THỐNG KÊ TÀI KHOẢN
-    // =========================
     const totalAccounts = accounts.length;
 
     const activeAccounts = accounts.filter(
@@ -165,9 +147,6 @@ export default function AdminAccounts() {
         (account) => account.status === "locked"
     ).length;
 
-    // =========================
-    // 3. TÌM KIẾM VÀ LỌC
-    // =========================
     const filteredAccounts = useMemo(() => {
         const search = keyword.trim().toLowerCase();
 
@@ -187,9 +166,45 @@ export default function AdminAccounts() {
         });
     }, [accounts, keyword, roleFilter, statusFilter]);
 
-    // =========================
-    // 4. KHÓA / MỞ KHÓA TÀI KHOẢN
-    // =========================
+    async function loadAccountHistory(id) {
+        setHistoryLoading(true);
+
+        try {
+            const token = getToken();
+
+            const response = await fetch(`${API_URL}/${id}/history`, {
+                headers: {
+                    Accept: "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(await getErrorMessage(response));
+            }
+
+            const history = await response.json();
+
+            setSelectedAccount((current) =>
+                current?.id === id
+                    ? {
+                        ...current,
+                        statusHistory: Array.isArray(history) ? history : [],
+                    }
+                    : current
+            );
+        } catch (err) {
+            setError(err.message || "Không thể tải lịch sử trạng thái tài khoản.");
+        } finally {
+            setHistoryLoading(false);
+        }
+    }
+
+    async function openAccountDetails(account) {
+        setSelectedAccount({ ...account, statusHistory: [] });
+        await loadAccountHistory(account.id);
+    }
+
     async function toggleAccountStatus(id) {
         const account = accounts.find((item) => item.id === id);
 
@@ -197,20 +212,29 @@ export default function AdminAccounts() {
             return;
         }
 
-        // Không cho khóa tài khoản Admin.
         if (account.role === "Admin") {
             alert("Không thể thay đổi trạng thái tài khoản quản trị viên.");
             return;
         }
 
-        const nextStatus =
-            account.status === "active" ? "LOCKED" : "ACTIVE";
+        const nextStatus = account.status === "active" ? "LOCKED" : "ACTIVE";
+        const action = nextStatus === "LOCKED" ? "khóa" : "mở khóa";
 
-        const action =
-            nextStatus === "LOCKED" ? "khóa" : "mở khóa";
+        const reason = window.prompt(
+            `Nhập lý do ${action} tài khoản "${account.name}":`
+        );
+
+        if (reason === null) {
+            return;
+        }
+
+        if (!reason.trim()) {
+            setError("Vui lòng nhập lý do thay đổi trạng thái tài khoản.");
+            return;
+        }
 
         const confirmed = window.confirm(
-            `Bạn có chắc muốn ${action} tài khoản "${account.name}"?`
+            `Xác nhận ${action} tài khoản "${account.name}"?`
         );
 
         if (!confirmed) {
@@ -234,6 +258,7 @@ export default function AdminAccounts() {
                 },
                 body: JSON.stringify({
                     status: nextStatus,
+                    reason: reason.trim(),
                 }),
             });
 
@@ -243,89 +268,70 @@ export default function AdminAccounts() {
                 }
 
                 if (response.status === 403) {
-                    throw new Error(
-                        "Bạn không có quyền thay đổi trạng thái tài khoản."
-                    );
+                    throw new Error("Bạn không có quyền thay đổi trạng thái tài khoản.");
                 }
 
                 throw new Error(await getErrorMessage(response));
             }
 
             const data = await response.json();
-
-            // Backend có thể trả về { account: {...} }.
             const responseAccount = data.account || data;
 
-            // Chuẩn hóa dữ liệu trả về từ backend.
             const updatedAccount = {
                 ...account,
                 ...responseAccount,
-                role: normalizeRole(
-                    responseAccount.role ?? account.role
-                ),
-                status: normalizeStatus(
-                    responseAccount.status ?? nextStatus
-                ),
+                role: normalizeRole(responseAccount.role ?? account.role),
+                status: normalizeStatus(responseAccount.status ?? nextStatus),
             };
 
-            // Cập nhật danh sách sau khi backend xác nhận thành công.
             setAccounts((currentAccounts) =>
                 currentAccounts.map((item) =>
                     item.id === id ? updatedAccount : item
                 )
             );
 
-            // Cập nhật cả cửa sổ chi tiết nếu đang mở.
             setSelectedAccount((current) =>
-                current?.id === id ? updatedAccount : current
+                current?.id === id
+                    ? {
+                        ...updatedAccount,
+                        statusHistory: current.statusHistory || [],
+                    }
+                    : current
             );
+
+            if (selectedAccount?.id === id) {
+                await loadAccountHistory(id);
+            }
         } catch (err) {
-            setError(
-                err.message || "Không thể cập nhật trạng thái tài khoản."
-            );
+            setError(err.message || "Không thể cập nhật trạng thái tài khoản.");
         } finally {
             setUpdatingId(null);
         }
     }
 
-    // =========================
-    // 5. ĐẶT LẠI BỘ LỌC
-    // =========================
     function resetFilters() {
         setKeyword("");
         setRoleFilter("all");
         setStatusFilter("all");
     }
 
-    // =========================
-    // 6. GIAO DIỆN
-    // =========================
     return (
         <AdminLayout>
             <div className="admin-accounts-page">
                 <div className="accounts-page-heading">
                     <div>
                         <h1>Quản lý tài khoản</h1>
-
                         <p className="accounts-subtitle">
-                            Theo dõi thông tin, vai trò và trạng thái tài khoản
-                            CleanMate.
+                            Theo dõi thông tin, vai trò và trạng thái tài khoản CleanMate.
                         </p>
                     </div>
 
-                    <span className="accounts-demo-label">
-                        DỮ LIỆU THỰC
-                    </span>
+                    <span className="accounts-demo-label">DỮ LIỆU THỰC</span>
                 </div>
 
-                {/* Thông báo lỗi */}
                 {error && (
-                    <div
-                        className="accounts-error"
-                        role="alert"
-                    >
+                    <div className="accounts-error" role="alert">
                         <span>{error}</span>
-
                         <button
                             type="button"
                             onClick={() => setError("")}
@@ -336,13 +342,9 @@ export default function AdminAccounts() {
                     </div>
                 )}
 
-                {/* Thống kê */}
                 <section className="accounts-stats">
                     <article className="accounts-stat-card">
-                        <div className="accounts-stat-icon total-icon">
-                            ♙
-                        </div>
-
+                        <div className="accounts-stat-icon total-icon">♙</div>
                         <div>
                             <p>Tổng tài khoản</p>
                             <strong>{totalAccounts}</strong>
@@ -351,10 +353,7 @@ export default function AdminAccounts() {
                     </article>
 
                     <article className="accounts-stat-card">
-                        <div className="accounts-stat-icon active-icon">
-                            ✓
-                        </div>
-
+                        <div className="accounts-stat-icon active-icon">✓</div>
                         <div>
                             <p>Đang hoạt động</p>
                             <strong>{activeAccounts}</strong>
@@ -363,10 +362,7 @@ export default function AdminAccounts() {
                     </article>
 
                     <article className="accounts-stat-card">
-                        <div className="accounts-stat-icon locked-icon">
-                            ⊘
-                        </div>
-
+                        <div className="accounts-stat-icon locked-icon">⊘</div>
                         <div>
                             <p>Đã khóa</p>
                             <strong>{lockedAccounts}</strong>
@@ -375,34 +371,25 @@ export default function AdminAccounts() {
                     </article>
                 </section>
 
-                {/* Danh sách tài khoản */}
                 <section className="accounts-list-card">
                     <div className="accounts-list-heading">
                         <div>
                             <h2>Danh sách tài khoản</h2>
-                            <p>
-                                Tra cứu và quản lý quyền truy cập của người dùng.
-                            </p>
+                            <p>Tra cứu và quản lý quyền truy cập của người dùng.</p>
                         </div>
 
                         <span className="accounts-result-count">
-                            {loading
-                                ? "Đang tải..."
-                                : `${filteredAccounts.length} kết quả`}
+                            {loading ? "Đang tải..." : `${filteredAccounts.length} kết quả`}
                         </span>
                     </div>
 
-                    {/* Bộ lọc */}
                     <div className="accounts-filters">
                         <div className="accounts-search">
                             <span>⌕</span>
-
                             <input
                                 type="text"
                                 value={keyword}
-                                onChange={(event) =>
-                                    setKeyword(event.target.value)
-                                }
+                                onChange={(event) => setKeyword(event.target.value)}
                                 placeholder="Tìm theo tên, email, số điện thoại..."
                                 aria-label="Tìm kiếm tài khoản"
                             />
@@ -410,9 +397,7 @@ export default function AdminAccounts() {
 
                         <select
                             value={roleFilter}
-                            onChange={(event) =>
-                                setRoleFilter(event.target.value)
-                            }
+                            onChange={(event) => setRoleFilter(event.target.value)}
                             aria-label="Lọc theo vai trò"
                         >
                             <option value="all">Tất cả vai trò</option>
@@ -425,9 +410,7 @@ export default function AdminAccounts() {
 
                         <select
                             value={statusFilter}
-                            onChange={(event) =>
-                                setStatusFilter(event.target.value)
-                            }
+                            onChange={(event) => setStatusFilter(event.target.value)}
                             aria-label="Lọc theo trạng thái"
                         >
                             <option value="all">Tất cả trạng thái</option>
@@ -444,7 +427,6 @@ export default function AdminAccounts() {
                         </button>
                     </div>
 
-                    {/* Bảng tài khoản */}
                     <div className="accounts-table-wrapper">
                         <table className="accounts-table">
                             <thead>
@@ -463,9 +445,7 @@ export default function AdminAccounts() {
                                 <tr>
                                     <td colSpan="6">
                                         <div className="accounts-empty">
-                                            <strong>
-                                                Đang tải danh sách tài khoản...
-                                            </strong>
+                                            <strong>Đang tải danh sách tài khoản...</strong>
                                         </div>
                                     </td>
                                 </tr>
@@ -473,42 +453,29 @@ export default function AdminAccounts() {
                                 filteredAccounts.map((account) => (
                                     <tr key={account.id}>
                                         <td>
-                                            <div className="account-identity">
+                                            <div className="account-user-cell">
                                                 <div className="account-avatar">
-                                                    {account.name
-                                                        .charAt(0)
-                                                        .toUpperCase()}
+                                                    {account.name.charAt(0).toUpperCase()}
                                                 </div>
 
-                                                <div className="account-identity-info">
-                                                    <strong>
-                                                        {account.name}
-                                                    </strong>
-                                                    <span>
-                                                            {account.email}
-                                                        </span>
+                                                <div>
+                                                    <strong>{account.name}</strong>
+                                                    <span>{account.email}</span>
                                                 </div>
                                             </div>
                                         </td>
 
-                                        <td>
-                                            {account.phone || "Chưa cập nhật"}
-                                        </td>
+                                        <td>{account.phone || "Chưa cập nhật"}</td>
 
                                         <td>
                                                 <span
-                                                    className={`account-role role-${String(
-                                                        account.role
-                                                    ).toLowerCase()}`}
+                                                    className={`account-role role-${String(account.role).toLowerCase()}`}
                                                 >
-                                                    {roleLabels[account.role] ||
-                                                        account.role}
+                                                    {roleLabels[account.role] || account.role}
                                                 </span>
                                         </td>
 
-                                        <td>
-                                            {account.joinedAt || "—"}
-                                        </td>
+                                        <td>{account.joinedAt || "—"}</td>
 
                                         <td>
                                                 <span
@@ -519,7 +486,6 @@ export default function AdminAccounts() {
                                                     }`}
                                                 >
                                                     <span className="status-dot" />
-
                                                     {account.status === "active"
                                                         ? "Hoạt động"
                                                         : "Đã khóa"}
@@ -531,11 +497,7 @@ export default function AdminAccounts() {
                                                 <button
                                                     type="button"
                                                     className="account-detail-btn"
-                                                    onClick={() =>
-                                                        setSelectedAccount(
-                                                            account
-                                                        )
-                                                    }
+                                                    onClick={() => openAccountDetails(account)}
                                                 >
                                                     Chi tiết
                                                 </button>
@@ -543,33 +505,24 @@ export default function AdminAccounts() {
                                                 <button
                                                     type="button"
                                                     className={
-                                                        account.status ===
-                                                        "active"
+                                                        account.status === "active"
                                                             ? "account-lock-btn"
                                                             : "account-unlock-btn"
                                                     }
                                                     disabled={
-                                                        account.role ===
-                                                        "Admin" ||
+                                                        account.role === "Admin" ||
                                                         updatingId !== null
                                                     }
                                                     title={
-                                                        account.role ===
-                                                        "Admin"
+                                                        account.role === "Admin"
                                                             ? "Không thể khóa tài khoản Admin"
                                                             : ""
                                                     }
-                                                    onClick={() =>
-                                                        toggleAccountStatus(
-                                                            account.id
-                                                        )
-                                                    }
+                                                    onClick={() => toggleAccountStatus(account.id)}
                                                 >
-                                                    {updatingId ===
-                                                    account.id
+                                                    {updatingId === account.id
                                                         ? "Đang xử lý..."
-                                                        : account.status ===
-                                                        "active"
+                                                        : account.status === "active"
                                                             ? "Khóa"
                                                             : "Mở khóa"}
                                                 </button>
@@ -582,19 +535,16 @@ export default function AdminAccounts() {
                                     <td colSpan="6">
                                         <div className="accounts-empty">
                                             <span>⌕</span>
-
                                             <strong>
                                                 {error
                                                     ? "Không tải được tài khoản"
                                                     : "Không tìm thấy tài khoản"}
                                             </strong>
-
                                             <p>
                                                 {error
                                                     ? "Kiểm tra backend và kết nối API rồi tải lại trang."
                                                     : "Thử thay đổi từ khóa hoặc điều kiện lọc."}
                                             </p>
-
                                             {!error && (
                                                 <button
                                                     type="button"
@@ -613,15 +563,12 @@ export default function AdminAccounts() {
 
                     <div className="accounts-table-footer">
                         <span>
-                            Đang hiển thị {filteredAccounts.length} /{" "}
-                            {totalAccounts} tài khoản
+                            Đang hiển thị {filteredAccounts.length} / {totalAccounts} tài khoản
                         </span>
-
                         <span>Dữ liệu từ hệ thống</span>
                     </div>
                 </section>
 
-                {/* Modal chi tiết tài khoản */}
                 {selectedAccount && (
                     <div
                         className="account-modal-overlay"
@@ -640,17 +587,13 @@ export default function AdminAccounts() {
                             <div className="account-modal-header">
                                 <div>
                                     <p>THÔNG TIN NGƯỜI DÙNG</p>
-                                    <h2 id="account-modal-title">
-                                        Chi tiết tài khoản
-                                    </h2>
+                                    <h2 id="account-modal-title">Chi tiết tài khoản</h2>
                                 </div>
 
                                 <button
                                     type="button"
                                     className="account-modal-close"
-                                    onClick={() =>
-                                        setSelectedAccount(null)
-                                    }
+                                    onClick={() => setSelectedAccount(null)}
                                     aria-label="Đóng"
                                 >
                                     ×
@@ -659,40 +602,30 @@ export default function AdminAccounts() {
 
                             <div className="account-modal-profile">
                                 <div className="account-modal-avatar">
-                                    {selectedAccount.name
-                                        .charAt(0)
-                                        .toUpperCase()}
+                                    {selectedAccount.name.charAt(0).toUpperCase()}
                                 </div>
 
                                 <h3>{selectedAccount.name}</h3>
 
                                 <span>
-                                    {roleLabels[selectedAccount.role] ||
-                                        selectedAccount.role}
+                                    {roleLabels[selectedAccount.role] || selectedAccount.role}
                                 </span>
                             </div>
 
                             <div className="account-modal-details">
                                 <div>
                                     <span>Email</span>
-                                    <strong>
-                                        {selectedAccount.email || "Chưa cập nhật"}
-                                    </strong>
+                                    <strong>{selectedAccount.email || "Chưa cập nhật"}</strong>
                                 </div>
 
                                 <div>
                                     <span>Số điện thoại</span>
-                                    <strong>
-                                        {selectedAccount.phone ||
-                                            "Chưa cập nhật"}
-                                    </strong>
+                                    <strong>{selectedAccount.phone || "Chưa cập nhật"}</strong>
                                 </div>
 
                                 <div>
                                     <span>Ngày tham gia</span>
-                                    <strong>
-                                        {selectedAccount.joinedAt || "—"}
-                                    </strong>
+                                    <strong>{selectedAccount.joinedAt || "—"}</strong>
                                 </div>
 
                                 <div>
@@ -705,13 +638,52 @@ export default function AdminAccounts() {
                                 </div>
                             </div>
 
+                            <div className="account-modal-details" style={{ marginTop: 18 }}>
+                                <div style={{ gridColumn: "1 / -1" }}>
+                                    <span>Lịch sử khóa / mở khóa</span>
+
+                                    {historyLoading ? (
+                                        <strong>Đang tải lịch sử...</strong>
+                                    ) : selectedAccount.statusHistory?.length ? (
+                                        <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
+                                            {selectedAccount.statusHistory.map((item) => (
+                                                <div
+                                                    key={item.id}
+                                                    style={{
+                                                        padding: 12,
+                                                        border: "1px solid #e5ece9",
+                                                        borderRadius: 10,
+                                                    }}
+                                                >
+                                                    <strong>
+                                                        {item.oldStatus === "ACTIVE"
+                                                            ? "Hoạt động"
+                                                            : "Đã khóa"}
+                                                        {" → "}
+                                                        {item.newStatus === "ACTIVE"
+                                                            ? "Hoạt động"
+                                                            : "Đã khóa"}
+                                                    </strong>
+
+                                                    <p style={{ margin: "6px 0" }}>{item.reason}</p>
+
+                                                    <small>
+                                                        {item.changedBy} · {item.changedAt}
+                                                    </small>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <strong>Chưa có lịch sử thay đổi trạng thái.</strong>
+                                    )}
+                                </div>
+                            </div>
+
                             <div className="account-modal-footer">
                                 <button
                                     type="button"
                                     className="account-modal-cancel"
-                                    onClick={() =>
-                                        setSelectedAccount(null)
-                                    }
+                                    onClick={() => setSelectedAccount(null)}
                                 >
                                     Đóng
                                 </button>
@@ -727,11 +699,7 @@ export default function AdminAccounts() {
                                         selectedAccount.role === "Admin" ||
                                         updatingId !== null
                                     }
-                                    onClick={() =>
-                                        toggleAccountStatus(
-                                            selectedAccount.id
-                                        )
-                                    }
+                                    onClick={() => toggleAccountStatus(selectedAccount.id)}
                                 >
                                     {updatingId === selectedAccount.id
                                         ? "Đang xử lý..."

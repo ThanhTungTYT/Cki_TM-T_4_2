@@ -1,41 +1,48 @@
+
+/* =========================================
+   ADMIN ACCOUNTS - CLEANMATE DASHBOARD
+========================================= */
+
 .admin-accounts-page {
     width: 100%;
-    min-width: 0;
-    padding: 4px 0 30px;
-    color: #1e293b;
-    font-family: inherit;
+    min-height: 100vh;
+    padding: 26px;
+    margin: 0 auto;
+    color: #1e385c;
+    background: #f5f7fb;
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
 }
 
-.admin-accounts-page * {
+.admin-accounts-page *,
+.admin-accounts-page *::before,
+.admin-accounts-page *::after {
     box-sizing: border-box;
 }
+
+/* =========================================
+   PAGE HEADER
+========================================= */
 
 .accounts-page-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
+    gap: 18px;
     margin-bottom: 25px;
 }
 
-.accounts-breadcrumb {
-    margin: 0 0 9px;
-    color: #94a3b8;
-    font-size: 12px;
-    font-weight: 600;
-}
-
 .accounts-page-heading h1 {
-    margin: 0 0 8px;
+    margin: 0;
     color: #1e385c;
-    font-size: 28px;
+    font-size: 25px;
     font-weight: 750;
-    letter-spacing: -0.6px;
+    line-height: 1.35;
 }
 
 .accounts-subtitle {
-    margin: 0;
-    color: #718096;
+    margin: 7px 0 0;
+    color: #8290a5;
     font-size: 13px;
     line-height: 1.6;
 }
@@ -43,45 +50,45 @@
 .accounts-demo-label {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
+    justify-content: center;
     flex-shrink: 0;
     padding: 9px 13px;
     color: #15803d;
     background: #f0fdf4;
     border: 1px solid #bbf7d0;
-    border-radius: 9px;
-    font-size: 10px;
+    border-radius: 8px;
+    font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.5px;
 }
 
-.accounts-demo-label::before {
-    width: 7px;
-    height: 7px;
-    background: #22c55e;
-    border-radius: 50%;
-    content: "";
-}
+/* =========================================
+   ERROR MESSAGE
+========================================= */
 
 .accounts-error {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 20px;
-    padding: 14px 16px;
+    padding: 13px 16px;
     color: #b91c1c;
     background: #fef2f2;
     border: 1px solid #fecaca;
-    border-radius: 11px;
+    border-radius: 10px;
     font-size: 13px;
     line-height: 1.6;
 }
 
 .accounts-error button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
-    width: 27px;
-    height: 27px;
+    padding: 0;
     color: #b91c1c;
     background: transparent;
     border: none;
@@ -94,43 +101,44 @@
     background: #fee2e2;
 }
 
+/* =========================================
+   STATISTICS
+========================================= */
+
 .accounts-stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 17px;
-    margin-bottom: 25px;
+    gap: 18px;
+    margin-bottom: 24px;
 }
 
 .accounts-stat-card {
-    position: relative;
     display: flex;
     align-items: center;
-    gap: 17px;
+    gap: 16px;
     min-width: 0;
-    min-height: 135px;
-    padding: 23px;
-    overflow: hidden;
+    padding: 21px;
     background: #ffffff;
     border: 1px solid #e8edf5;
-    border-radius: 15px;
-    box-shadow: 0 4px 16px rgba(30, 56, 92, 0.045);
+    border-radius: 13px;
+    box-shadow: 0 3px 12px rgba(30, 56, 92, 0.035);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .accounts-stat-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 24px rgba(30, 56, 92, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 7px 20px rgba(30, 56, 92, 0.07);
 }
 
 .accounts-stat-icon {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 48px;
+    height: 48px;
     flex-shrink: 0;
-    width: 53px;
-    height: 53px;
-    border-radius: 15px;
-    font-size: 25px;
+    border-radius: 12px;
+    font-size: 23px;
     font-weight: 700;
 }
 
@@ -154,97 +162,108 @@
 }
 
 .accounts-stat-card p {
-    margin: 0 0 9px;
-    color: #64748b;
+    margin: 0 0 5px;
+    color: #8290a5;
     font-size: 12px;
     font-weight: 600;
 }
 
 .accounts-stat-card strong {
     display: block;
-    margin-bottom: 7px;
     color: #1e385c;
-    font-size: 29px;
+    font-size: 25px;
     font-weight: 800;
-    line-height: 1.1;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
 }
 
-.accounts-stat-card > div:last-child > span {
+.accounts-stat-card span {
+    display: block;
+    margin-top: 5px;
     color: #94a3b8;
     font-size: 11px;
 }
 
+/* =========================================
+   ACCOUNT LIST CARD
+========================================= */
+
 .accounts-list-card {
-    min-width: 0;
-    padding: 24px;
+    overflow: hidden;
     background: #ffffff;
     border: 1px solid #e8edf5;
-    border-radius: 16px;
-    box-shadow: 0 5px 20px rgba(30, 56, 92, 0.045);
+    border-radius: 13px;
+    box-shadow: 0 3px 12px rgba(30, 56, 92, 0.035);
 }
 
 .accounts-list-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 22px;
+    gap: 15px;
+    padding: 22px 23px;
+    border-bottom: 1px solid #edf1f6;
 }
 
 .accounts-list-heading h2 {
-    margin: 0 0 7px;
+    margin: 0;
     color: #1e385c;
-    font-size: 19px;
+    font-size: 17px;
     font-weight: 750;
 }
 
 .accounts-list-heading p {
-    margin: 0;
-    color: #94a3b8;
+    margin: 6px 0 0;
+    color: #8290a5;
     font-size: 12px;
-    line-height: 1.6;
+    line-height: 1.5;
 }
 
 .accounts-result-count {
     flex-shrink: 0;
-    padding: 8px 12px;
+    padding: 7px 11px;
     color: #2563eb;
     background: #eff6ff;
-    border-radius: 8px;
+    border-radius: 7px;
     font-size: 11px;
-    font-weight: 750;
+    font-weight: 700;
 }
 
+/* =========================================
+   FILTERS
+========================================= */
+
 .accounts-filters {
-    display: grid;
-    grid-template-columns: minmax(220px, 1.7fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
-    gap: 12px;
+    display: flex;
     align-items: center;
-    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 11px;
+    padding: 17px 23px;
+    background: #ffffff;
+    border-bottom: 1px solid #edf1f6;
 }
 
 .accounts-search {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-width: 0;
-    height: 44px;
-    padding: 0 13px;
-    background: #f8fafc;
+    flex: 1;
+    min-width: 220px;
+    height: 41px;
+    padding: 0 12px;
+    background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    color: #94a3b8;
+    border-radius: 8px;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .accounts-search:focus-within {
-    background: #ffffff;
-    border-color: #60a5fa;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.09);
 }
 
 .accounts-search > span {
-    flex-shrink: 0;
+    color: #94a3b8;
     font-size: 23px;
     line-height: 1;
 }
@@ -253,49 +272,45 @@
     width: 100%;
     min-width: 0;
     padding: 0;
-    color: #334155;
+    color: #1e385c;
     background: transparent;
     border: none;
     outline: none;
-    font: inherit;
     font-size: 12px;
 }
 
 .accounts-search input::placeholder {
-    color: #94a3b8;
+    color: #a0aabc;
 }
 
 .accounts-filters select {
-    width: 100%;
-    min-width: 0;
-    height: 44px;
-    padding: 0 11px;
+    width: auto;
+    min-width: 155px;
+    height: 41px;
+    padding: 0 32px 0 12px;
     color: #475569;
-    background: #f8fafc;
+    background-color: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
+    border-radius: 8px;
     outline: none;
-    font: inherit;
     font-size: 12px;
     cursor: pointer;
 }
 
 .accounts-filters select:focus {
-    border-color: #60a5fa;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.09);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .accounts-reset-btn {
-    height: 44px;
-    padding: 0 16px;
-    color: #475569;
+    height: 41px;
+    padding: 0 15px;
+    color: #64748b;
     background: #ffffff;
-    border: 1px solid #dbe3ee;
-    border-radius: 10px;
-    font: inherit;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
     font-size: 12px;
     font-weight: 650;
-    white-space: nowrap;
     cursor: pointer;
     transition: all 0.2s ease;
 }
@@ -303,32 +318,33 @@
 .accounts-reset-btn:hover {
     color: #2563eb;
     background: #eff6ff;
-    border-color: #93c5fd;
+    border-color: #bfdbfe;
 }
+
+/* =========================================
+   TABLE
+========================================= */
 
 .accounts-table-wrapper {
     width: 100%;
     overflow-x: auto;
-    border: 1px solid #e8edf5;
-    border-radius: 12px;
 }
 
 .accounts-table {
     width: 100%;
-    min-width: 950px;
-    border-collapse: separate;
-    border-spacing: 0;
+    min-width: 850px;
+    border-collapse: collapse;
     text-align: left;
 }
 
 .accounts-table thead {
-    background: #f5f8fd;
+    background: #f8fafc;
 }
 
 .accounts-table th {
-    padding: 16px 15px;
-    color: #64748b;
-    border-bottom: 1px solid #e2e8f0;
+    padding: 14px 17px;
+    color: #8290a5;
+    border-bottom: 1px solid #e8edf5;
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.45px;
@@ -336,15 +352,15 @@
 }
 
 .accounts-table td {
-    padding: 15px;
+    padding: 15px 17px;
     color: #475569;
-    border-bottom: 1px solid #edf1f7;
+    border-bottom: 1px solid #edf1f6;
     font-size: 12px;
     vertical-align: middle;
 }
 
 .accounts-table tbody tr {
-    transition: background 0.18s ease;
+    transition: background 0.15s ease;
 }
 
 .accounts-table tbody tr:hover {
@@ -355,47 +371,47 @@
     border-bottom: none;
 }
 
-.account-identity {
+/* User information */
+
+.account-user-cell {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 11px;
     min-width: 190px;
 }
 
-.account-avatar,
-.account-modal-avatar {
+.account-avatar {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 38px;
+    height: 38px;
     flex-shrink: 0;
-    width: 42px;
-    height: 42px;
     color: #2563eb;
-    background: linear-gradient(135deg, #dbeafe, #eff6ff);
-    border: 1px solid #dbeafe;
-    border-radius: 13px;
-    font-size: 16px;
+    background: #eff6ff;
+    border-radius: 50%;
+    font-size: 14px;
     font-weight: 800;
     text-transform: uppercase;
 }
 
-.account-identity-info {
+.account-user-cell > div:last-child {
     display: flex;
     flex-direction: column;
     gap: 5px;
     min-width: 0;
 }
 
-.account-identity-info strong {
+.account-user-cell strong {
     overflow: hidden;
     color: #1e385c;
     font-size: 12px;
-    font-weight: 750;
+    font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.account-identity-info span {
+.account-user-cell span {
     overflow: hidden;
     color: #94a3b8;
     font-size: 11px;
@@ -403,11 +419,14 @@
     white-space: nowrap;
 }
 
+/* Role badges */
+
 .account-role {
     display: inline-flex;
     align-items: center;
-    padding: 6px 9px;
-    border-radius: 7px;
+    justify-content: center;
+    padding: 6px 10px;
+    border-radius: 6px;
     font-size: 10px;
     font-weight: 700;
     white-space: nowrap;
@@ -419,30 +438,32 @@
 }
 
 .role-cleaner {
-    color: #0f766e;
-    background: #ccfbf1;
+    color: #0891b2;
+    background: #ecfeff;
 }
 
 .role-provider {
     color: #7c3aed;
-    background: #f3e8ff;
+    background: #f5f3ff;
 }
 
 .role-staff {
-    color: #b45309;
-    background: #fef3c7;
+    color: #c2410c;
+    background: #fff7ed;
 }
 
 .role-admin {
-    color: #be123c;
-    background: #ffe4e6;
+    color: #475569;
+    background: #f1f5f9;
 }
+
+/* Account status */
 
 .account-status {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 7px 10px;
+    padding: 6px 9px;
     border-radius: 20px;
     font-size: 10px;
     font-weight: 700;
@@ -455,7 +476,7 @@
 }
 
 .account-status.status-locked {
-    color: #b91c1c;
+    color: #dc2626;
     background: #fef2f2;
 }
 
@@ -463,18 +484,13 @@
     width: 7px;
     height: 7px;
     flex-shrink: 0;
+    background: currentColor;
     border-radius: 50%;
 }
 
-.status-active .status-dot {
-    background: #22c55e;
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
-}
-
-.status-locked .status-dot {
-    background: #ef4444;
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
-}
+/* =========================================
+   TABLE ACTIONS
+========================================= */
 
 .account-actions {
     display: flex;
@@ -484,15 +500,14 @@
 }
 
 .account-actions button {
-    min-height: 32px;
-    padding: 7px 10px;
+    min-height: 31px;
+    padding: 0 10px;
     border: 1px solid transparent;
-    border-radius: 8px;
-    font: inherit;
-    font-size: 11px;
+    border-radius: 6px;
+    font-size: 10px;
     font-weight: 700;
     cursor: pointer;
-    transition: all 0.18s ease;
+    transition: all 0.2s ease;
 }
 
 .account-detail-btn {
@@ -507,20 +522,20 @@
 }
 
 .account-lock-btn {
-    color: #b45309;
-    background: #fffbeb;
-    border-color: #fde68a !important;
+    color: #dc2626;
+    background: #fff1f2;
+    border-color: #ffe4e6 !important;
 }
 
 .account-lock-btn:hover:not(:disabled) {
     color: #ffffff;
-    background: #d97706;
+    background: #dc2626;
 }
 
 .account-unlock-btn {
     color: #15803d;
     background: #f0fdf4;
-    border-color: #bbf7d0 !important;
+    border-color: #dcfce7 !important;
 }
 
 .account-unlock-btn:hover:not(:disabled) {
@@ -528,33 +543,29 @@
     background: #16a34a;
 }
 
-.account-actions button:disabled,
-.account-modal-footer button:disabled {
-    opacity: 0.45;
+.account-actions button:disabled {
+    opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* =========================================
+   EMPTY / LOADING
+========================================= */
 
 .accounts-empty {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 190px;
+    min-height: 185px;
     padding: 25px;
     text-align: center;
 }
 
 .accounts-empty > span {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 46px;
-    height: 46px;
-    margin-bottom: 14px;
+    margin-bottom: 9px;
     color: #94a3b8;
-    background: #f1f5f9;
-    border-radius: 14px;
-    font-size: 26px;
+    font-size: 30px;
 }
 
 .accounts-empty strong {
@@ -563,64 +574,74 @@
 }
 
 .accounts-empty p {
-    margin: 8px 0 0;
+    margin: 7px 0 0;
     color: #94a3b8;
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.6;
 }
 
 .accounts-empty button {
-    margin-top: 14px;
+    margin-top: 13px;
     padding: 8px 13px;
     color: #2563eb;
     background: #eff6ff;
     border: 1px solid #dbeafe;
-    border-radius: 8px;
-    font: inherit;
+    border-radius: 7px;
     font-size: 11px;
     font-weight: 700;
     cursor: pointer;
 }
 
 .accounts-empty button:hover {
-    background: #dbeafe;
+    color: #ffffff;
+    background: #2563eb;
 }
+
+/* =========================================
+   TABLE FOOTER
+========================================= */
 
 .accounts-table-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding-top: 17px;
+    gap: 12px;
+    padding: 14px 20px;
     color: #94a3b8;
+    background: #ffffff;
+    border-top: 1px solid #edf1f6;
     font-size: 11px;
 }
+
+/* =========================================
+   ACCOUNT DETAIL MODAL
+========================================= */
 
 .account-modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 1100;
+    z-index: 1000;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
     overflow-y: auto;
+    padding: 24px;
     background: rgba(15, 23, 42, 0.58);
-    backdrop-filter: blur(4px);
-    animation: accountOverlayIn 0.18s ease;
+    backdrop-filter: blur(3px);
+    animation: account-overlay-show 0.2s ease;
 }
 
 .account-modal {
     width: 100%;
-    max-width: 520px;
-    max-height: calc(100vh - 40px);
+    max-width: 590px;
+    max-height: calc(100vh - 48px);
     overflow-y: auto;
+    padding: 24px;
     background: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    border-radius: 18px;
-    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25);
-    animation: accountModalIn 0.22s ease;
+    border: 1px solid #e8edf5;
+    border-radius: 15px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.22);
+    animation: account-modal-show 0.25s ease;
 }
 
 .account-modal-header {
@@ -628,22 +649,22 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 15px;
-    padding: 22px 24px;
-    border-bottom: 1px solid #edf1f7;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #edf1f6;
 }
 
 .account-modal-header p {
-    margin: 0 0 7px;
+    margin: 0 0 6px;
     color: #2563eb;
     font-size: 10px;
     font-weight: 800;
-    letter-spacing: 1px;
+    letter-spacing: 0.7px;
 }
 
 .account-modal-header h2 {
     margin: 0;
     color: #1e385c;
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 750;
 }
 
@@ -651,44 +672,50 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 34px;
+    height: 34px;
     flex-shrink: 0;
-    width: 35px;
-    height: 35px;
     color: #64748b;
     background: #f1f5f9;
     border: none;
-    border-radius: 9px;
-    font-size: 22px;
+    border-radius: 8px;
+    font-size: 21px;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .account-modal-close:hover {
     color: #dc2626;
-    background: #fee2e2;
+    background: #fef2f2;
 }
+
+/* Profile */
 
 .account-modal-profile {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 26px 20px 23px;
-    background: linear-gradient(180deg, #f8fbff, #ffffff);
-    border-bottom: 1px solid #edf1f7;
+    padding: 23px 15px;
 }
 
 .account-modal-avatar {
-    width: 68px;
-    height: 68px;
-    margin-bottom: 13px;
-    border-radius: 20px;
-    font-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 65px;
+    height: 65px;
+    color: #2563eb;
+    background: #eff6ff;
+    border: 4px solid #dbeafe;
+    border-radius: 50%;
+    font-size: 25px;
+    font-weight: 800;
 }
 
 .account-modal-profile h3 {
-    margin: 0 0 9px;
+    margin: 12px 0 6px;
     color: #1e385c;
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 750;
     text-align: center;
     overflow-wrap: anywhere;
@@ -703,11 +730,16 @@
     font-weight: 700;
 }
 
+/* Details */
+
 .account-modal-details {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0 20px;
-    padding: 8px 24px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #edf1f6;
+    border-radius: 10px;
 }
 
 .account-modal-details > div {
@@ -715,12 +747,14 @@
     flex-direction: column;
     gap: 7px;
     min-width: 0;
-    padding: 15px 0;
-    border-bottom: 1px solid #edf1f7;
+    padding: 10px;
+    background: #ffffff;
+    border: 1px solid #edf1f6;
+    border-radius: 8px;
 }
 
 .account-modal-details > div > span {
-    color: #94a3b8;
+    color: #8290a5;
     font-size: 11px;
     font-weight: 600;
 }
@@ -732,20 +766,48 @@
     overflow-wrap: anywhere;
 }
 
+/* Status history */
+
+.account-modal-details > div[style*="grid-column"] {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.account-modal-details > div[style*="grid-column"] > div > div {
+    background: #ffffff;
+    border-color: #e8edf5 !important;
+}
+
+.account-modal-details > div[style*="grid-column"] p {
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.account-modal-details > div[style*="grid-column"] small {
+    color: #94a3b8;
+    font-size: 10px;
+}
+
+/* Modal footer */
+
 .account-modal-footer {
     display: flex;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 10px;
-    padding: 18px 24px 23px;
-    border-top: 1px solid #edf1f7;
+    gap: 9px;
+    margin-top: 20px;
+    padding-top: 17px;
+    border-top: 1px solid #edf1f6;
 }
 
 .account-modal-footer button {
-    min-height: 39px;
-    padding: 9px 14px;
-    border-radius: 9px;
-    font: inherit;
+    min-height: 38px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: 8px;
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
@@ -753,147 +815,137 @@
 }
 
 .account-modal-cancel {
-    color: #475569;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
+    color: #64748b;
+    background: #ffffff;
+    border-color: #e2e8f0 !important;
 }
 
 .account-modal-cancel:hover {
-    background: #e2e8f0;
+    background: #f8fafc;
 }
 
 .account-modal-lock {
-    color: #b45309;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
+    color: #ffffff;
+    background: #dc2626;
 }
 
 .account-modal-lock:hover:not(:disabled) {
-    color: #ffffff;
-    background: #d97706;
+    background: #b91c1c;
 }
 
 .account-modal-unlock {
-    color: #15803d;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-}
-
-.account-modal-unlock:hover:not(:disabled) {
     color: #ffffff;
     background: #16a34a;
 }
 
-@keyframes accountOverlayIn {
+.account-modal-unlock:hover:not(:disabled) {
+    background: #15803d;
+}
+
+.account-modal-footer button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* =========================================
+   FOCUS
+========================================= */
+
+.accounts-reset-btn:focus-visible,
+.account-actions button:focus-visible,
+.accounts-empty button:focus-visible,
+.account-modal-footer button:focus-visible,
+.account-modal-close:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+
+/* =========================================
+   ANIMATIONS
+========================================= */
+
+@keyframes account-overlay-show {
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
 }
 
-@keyframes accountModalIn {
+@keyframes account-modal-show {
     from {
         opacity: 0;
-        transform: translateY(10px) scale(0.98);
+        transform: translateY(12px) scale(0.99);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
     }
 }
 
-@media (max-width: 1250px) {
+/* =========================================
+   RESPONSIVE
+========================================= */
+
+@media (max-width: 1100px) {
+    .admin-accounts-page {
+        padding: 22px;
+    }
+
     .accounts-filters {
-        grid-template-columns: minmax(200px, 1.5fr) minmax(140px, 1fr);
+        align-items: stretch;
     }
 
     .accounts-search {
-        grid-column: 1 / -1;
+        flex-basis: 100%;
     }
 
-    .accounts-reset-btn {
-        justify-self: start;
-    }
-}
-
-@media (max-width: 900px) {
-    .accounts-stats {
-        gap: 12px;
-    }
-
-    .accounts-stat-card {
-        gap: 12px;
-        padding: 18px 14px;
-    }
-
-    .accounts-stat-icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 12px;
-        font-size: 21px;
-    }
-
-    .accounts-stat-card strong {
-        font-size: 25px;
-    }
-
-    .accounts-list-card {
-        padding: 18px;
+    .accounts-filters select {
+        flex: 1;
     }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
+    .admin-accounts-page {
+        padding: 17px;
+    }
+
     .accounts-page-heading {
         align-items: flex-start;
         flex-direction: column;
-        gap: 13px;
-        margin-bottom: 20px;
+        gap: 12px;
     }
 
     .accounts-page-heading h1 {
-        font-size: 23px;
-    }
-
-    .accounts-subtitle {
-        font-size: 12px;
+        font-size: 22px;
     }
 
     .accounts-stats {
         grid-template-columns: 1fr;
-        gap: 10px;
-        margin-bottom: 18px;
+        gap: 12px;
     }
 
     .accounts-stat-card {
-        min-height: 100px;
         padding: 17px;
-    }
-
-    .accounts-list-card {
-        padding: 15px 12px;
-        border-radius: 13px;
     }
 
     .accounts-list-heading {
         align-items: flex-start;
         flex-direction: column;
-        gap: 12px;
-        margin-bottom: 17px;
-    }
-
-    .accounts-list-heading h2 {
-        font-size: 17px;
+        padding: 18px;
     }
 
     .accounts-filters {
-        grid-template-columns: 1fr;
-        gap: 10px;
+        padding: 15px;
     }
 
-    .accounts-search {
-        grid-column: auto;
+    .accounts-filters select {
+        min-width: 0;
+        width: 100%;
+        flex-basis: 100%;
     }
 
     .accounts-reset-btn {
@@ -903,42 +955,63 @@
     .accounts-table-footer {
         align-items: flex-start;
         flex-direction: column;
+        padding: 13px 16px;
     }
 
     .account-modal-overlay {
         align-items: flex-start;
-        padding: 12px;
+        padding: 15px;
     }
 
     .account-modal {
-        max-height: calc(100vh - 24px);
-        margin: auto 0;
-        border-radius: 14px;
-    }
-
-    .account-modal-header {
+        max-height: calc(100vh - 30px);
         padding: 18px;
     }
+}
 
-    .account-modal-header h2 {
-        font-size: 18px;
+@media (max-width: 480px) {
+    .admin-accounts-page {
+        padding: 12px;
+    }
+
+    .accounts-page-heading h1 {
+        font-size: 20px;
+    }
+
+    .accounts-demo-label {
+        font-size: 10px;
+    }
+
+    .accounts-stat-card {
+        gap: 12px;
+        padding: 15px;
+    }
+
+    .accounts-stat-icon {
+        width: 42px;
+        height: 42px;
+        font-size: 20px;
+    }
+
+    .accounts-stat-card strong {
+        font-size: 22px;
+    }
+
+    .accounts-modal-profile h3 {
+        font-size: 15px;
     }
 
     .account-modal-details {
         grid-template-columns: 1fr;
-        padding: 6px 18px;
-    }
-
-    .account-modal-details > div {
-        padding: 12px 0;
+        padding: 11px;
     }
 
     .account-modal-footer {
-        padding: 15px 18px 18px;
+        flex-direction: column-reverse;
     }
 
     .account-modal-footer button {
-        flex: 1 1 auto;
+        width: 100%;
     }
 }
 
@@ -946,6 +1019,7 @@
     .admin-accounts-page *,
     .admin-accounts-page *::before,
     .admin-accounts-page *::after {
+        scroll-behavior: auto !important;
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;

@@ -2,6 +2,7 @@ package org.ckitmdt.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -12,7 +13,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class RewardTransaction {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -25,6 +25,7 @@ public class RewardTransaction {
     @JoinColumn(name = "booking_id")
     private Booking booking;
 
+    @Column(length = 30)
     private String type;
 
     private Integer points;
@@ -33,4 +34,14 @@ public class RewardTransaction {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
+    @Column(name = "event_key", unique = true, length = 120)
+    private String eventKey;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "performed_by")
+    private User performedBy;
 }

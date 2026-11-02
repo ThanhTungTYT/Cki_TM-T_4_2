@@ -6,10 +6,8 @@ import {
     faEye,
     faRotateLeft,
     faXmark,
-    faCheck,
     faTruck,
     faArrowsRotate,
-    faMoneyBillWave,
 } from "@fortawesome/free-solid-svg-icons";
 import "./AdminOrders.css";
 
@@ -34,34 +32,12 @@ const PAYMENT_LABELS = {
     UNPAID: "Chưa thanh toán",
 };
 
-const ACTIONS_BY_STATUS = {
-    PENDING_PAYMENT: [
-        { action: "cancel", label: "Hủy đơn", icon: faXmark, style: "cancel" },
-    ],
-    PENDING_PROVIDER: [
-        { action: "provider-accept", label: "Xác nhận", icon: faCheck, style: "approve" },
-        { action: "provider-reject", label: "Từ chối", icon: faXmark, style: "cancel" },
-        { action: "cancel", label: "Hủy đơn", icon: faXmark, style: "cancel" },
-    ],
-    CONFIRMED: [
-        { action: "assign-cleaner", label: "Phân công", icon: faCheck, style: "approve" },
-        { action: "cancel", label: "Hủy đơn", icon: faXmark, style: "cancel" },
-    ],
-    ASSIGNED: [
-        { action: "start-travel", label: "Bắt đầu di chuyển", icon: faTruck, style: "approve" },
-        { action: "cancel", label: "Hủy đơn", icon: faXmark, style: "cancel" },
-    ],
-    EN_ROUTE: [
-        { action: "start-job", label: "Bắt đầu làm", icon: faTruck, style: "approve" },
-    ],
-    IN_PROGRESS: [
-        { action: "submit-completion", label: "Gửi nghiệm thu", icon: faCheck, style: "approve" },
-    ],
-    PENDING_COMPLETION: [
-        { action: "customer-accept", label: "Xác nhận hoàn thành", icon: faCheck, style: "approve" },
-        { action: "cancel", label: "Hủy đơn", icon: faXmark, style: "cancel" },
-    ],
-};
+const CANCELLABLE_STATUSES = [
+    "PENDING_PAYMENT",
+    "PENDING_PROVIDER",
+    "CONFIRMED",
+    "ASSIGNED",
+];
 
 const formatCurrency = (value) =>
     new Intl.NumberFormat("vi-VN", {
@@ -95,9 +71,7 @@ const getStatusClass = (status) => {
 
     if (value === "COMPLETED") return "completed";
     if (["CANCELLED", "REJECTED", "EXPIRED"].includes(value)) return "cancelled";
-    if (["PENDING_PAYMENT", "PENDING_PROVIDER", "PENDING_COMPLETION"].includes(value)) {
-        return "pending";
-    }
+    if (["PENDING_PAYMENT", "PENDING_PROVIDER", "PENDING_COMPLETION"].includes(value)) return "pending";
     if (value === "CONFIRMED") return "confirmed";
 
     return "processing";
@@ -106,43 +80,77 @@ const getStatusClass = (status) => {
 const getOrderServiceNames = (order) => {
     if (Array.isArray(order.items) && order.items.length > 0) {
         return order.items
-            .map((item) => item.serviceName || item.packageName || "Dịch vụ")
+            .map((item) => item.serviceName || item.packageName)
             .filter(Boolean)
-            .join(", ");
+            .join(", ") || "Chưa có thông tin dịch vụ";
     }
 
     return "Chưa có thông tin dịch vụ";
 };
 
-const getOrderActions = (order) => {
-    const actions = [...(ACTIONS_BY_STATUS[order.status] || [])];
-    if (order.paymentMethod === "CASH"
-        && order.payment === "UNPAID"
-        && ["PENDING_COMPLETION", "COMPLETED"].includes(order.status)) {
-        actions.push({
-            action: "provider-confirm-cash-payment",
-            label: "Xác nhận đã thu tiền mặt",
-            icon: faMoneyBillWave,
-            style: "approve",
-        });
+const getToken = () =>
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("accessToken") ||
+    sessionStorage.getItem("token");
+
+async function apiRequest(url, options = {}) {
+    const token = getToken();
+
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            Accept: "application/json",
+            ...(options.body ? { "Content-Type": "application/json" } : {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...options.headers,
+        },
+    });
+
+    const text = await response.text();
+    let data = null;
+
+    if (text) {
+        try {
+            data = JSON.parse(text);
+        } catch {
+            data = { message: text };
+        }
     }
-    return actions;
-};
+
+    if (!response.ok) {
+        throw new Error(
+            data?.message ||
+            data?.detail ||
+            data?.error ||
+            `Yêu cầu thất bại (HTTP ${response.status}).`
+        );
+    }
+
+    return data;
+}
 
 function mapOrder(order) {
+    const status = String(order.status || "").toUpperCase();
+    const paymentStatus = String(order.paymentStatus || "UNPAID").toUpperCase();
+
     return {
         ...order,
         id: order.id,
         code: order.bookingCode || `#${order.id}`,
-        customer: order.customerName || "Khách hàng",
-        phone: order.customerPhone || "Chưa có số điện thoại",
-        provider: order.partnerName || "Chưa phân công",
+        customer: order.customerName || "Chưa có thông tin khách hàng",
+        phone: order.customerPhone || "—",
+        provider: order.partnerName || "Chưa có nhà cung cấp",
         service: getOrderServiceNames(order),
         date: order.scheduledStart || order.createdAt || null,
         amount: Number(order.totalAmount) || 0,
-        status: String(order.status || "").toUpperCase(),
-        payment: String(order.paymentStatus || "UNPAID").toUpperCase(),
-        paymentMethod: String(order.paymentMethod || "VNPAY").toUpperCase(),
+        status,
+        payment: paymentStatus,
+        paymentMethod: String(order.paymentMethod || "").toUpperCase(),
+        items: Array.isArray(order.items) ? order.items : [],
+        paymentRecords: Array.isArray(order.paymentRecords) ? order.paymentRecords : [],
+        statusHistory: Array.isArray(order.statusHistory) ? order.statusHistory : [],
+        version: order.version,
     };
 }
 
@@ -159,70 +167,26 @@ function AdminOrders() {
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
 
-    const getToken = () =>
-        localStorage.getItem("accessToken") ||
-        localStorage.getItem("token") ||
-        sessionStorage.getItem("accessToken") ||
-        sessionStorage.getItem("token");
-
-    const request = useCallback(async (url, options = {}) => {
-        const token = getToken();
-
-        const response = await fetch(url, {
-            ...options,
-            headers: {
-                Accept: "application/json",
-                ...(options.body ? { "Content-Type": "application/json" } : {}),
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                ...options.headers,
-            },
-        });
-
-        if (!response.ok) {
-            let message = `Yêu cầu thất bại (HTTP ${response.status}).`;
-
-            try {
-                const data = await response.json();
-                message = data.message || data.error || message;
-            } catch {
-                try {
-                    const text = await response.text();
-                    if (text) message = text;
-                } catch {
-                    // Giữ thông báo HTTP mặc định.
-                }
-            }
-
-            throw new Error(message);
-        }
-
-        if (response.status === 204) return null;
-        return response.json();
-    }, []);
-
     const loadOrders = useCallback(async () => {
         setLoading(true);
         setError("");
 
         try {
-            const data = await request(API_BASE);
+            const data = await apiRequest(API_BASE);
             const list = Array.isArray(data)
                 ? data
-                : Array.isArray(data.content)
+                : Array.isArray(data?.content)
                     ? data.content
                     : [];
 
             setOrders(list.map(mapOrder));
         } catch (err) {
-            setError(
-                err.message ||
-                "Không thể tải đơn hàng. Hãy kiểm tra backend và quyền Admin."
-            );
             setOrders([]);
+            setError(err.message || "Không thể tải danh sách đơn hàng.");
         } finally {
             setLoading(false);
         }
-    }, [request]);
+    }, []);
 
     useEffect(() => {
         loadOrders();
@@ -238,7 +202,8 @@ function AdminOrders() {
                 String(order.customer).toLowerCase().includes(search) ||
                 String(order.phone).toLowerCase().includes(search) ||
                 String(order.service).toLowerCase().includes(search) ||
-                String(order.provider).toLowerCase().includes(search);
+                String(order.provider).toLowerCase().includes(search) ||
+                String(order.address || "").toLowerCase().includes(search);
 
             const matchStatus =
                 statusFilter === "Tất cả" || order.status === statusFilter;
@@ -246,38 +211,25 @@ function AdminOrders() {
             const matchPayment =
                 paymentFilter === "Tất cả" || order.payment === paymentFilter;
 
-            const orderDate = order.date
-                ? String(order.date).slice(0, 10)
-                : "";
-
+            const orderDate = order.date ? String(order.date).slice(0, 10) : "";
             const matchFromDate = !fromDate || (orderDate && orderDate >= fromDate);
             const matchToDate = !toDate || (orderDate && orderDate <= toDate);
 
-            return (
-                matchKeyword &&
-                matchStatus &&
-                matchPayment &&
-                matchFromDate &&
-                matchToDate
-            );
+            return matchKeyword && matchStatus && matchPayment && matchFromDate && matchToDate;
         });
     }, [orders, keyword, statusFilter, paymentFilter, fromDate, toDate]);
 
-    const completedCount = orders.filter(
-        (order) => order.status === "COMPLETED"
-    ).length;
+    const completedCount = orders.filter((order) => order.status === "COMPLETED").length;
 
     const pendingCount = orders.filter((order) =>
         ["PENDING_PAYMENT", "PENDING_PROVIDER"].includes(order.status)
     ).length;
 
     const processingCount = orders.filter((order) =>
-        ["CONFIRMED", "ASSIGNED", "EN_ROUTE", "IN_PROGRESS", "PENDING_COMPLETION"].includes(
-            order.status
-        )
+        ["CONFIRMED", "ASSIGNED", "EN_ROUTE", "IN_PROGRESS", "PENDING_COMPLETION"].includes(order.status)
     ).length;
 
-    const totalRevenue = orders
+    const completedOrderValue = orders
         .filter((order) => order.status === "COMPLETED")
         .reduce((sum, order) => sum + order.amount, 0);
 
@@ -288,58 +240,7 @@ function AdminOrders() {
         setFromDate("");
         setToDate("");
         setNotice("");
-    };
-
-    const executeAction = async (order, action) => {
-        const actionLabels = {
-            cancel: "hủy đơn hàng",
-            "provider-accept": "xác nhận đơn hàng",
-            "provider-reject": "từ chối đơn hàng",
-            "assign-cleaner": "phân công đơn hàng",
-            "start-travel": "bắt đầu di chuyển",
-            "start-job": "bắt đầu thực hiện",
-            "submit-completion": "gửi yêu cầu nghiệm thu",
-            "customer-accept": "xác nhận hoàn thành đơn hàng",
-            "provider-confirm-cash-payment": "xác nhận đã thu tiền mặt",
-        };
-
-        const label = actionLabels[action] || action;
-
-        if (!window.confirm(`Bạn có chắc muốn ${label} ${order.code}?`)) {
-            return;
-        }
-
-        setBusyId(order.id);
         setError("");
-        setNotice("");
-
-        try {
-            await request(
-                `${API_BASE}/${order.id}/actions/${action}`,
-                {
-                    method: "POST",
-                    body: JSON.stringify({
-                        version: order.version,
-                        note: `Thao tác từ trang quản lý đơn hàng Admin: ${label}`,
-                    }),
-                }
-            );
-
-            setNotice(`Đã gửi yêu cầu ${label} thành công.`);
-            await loadOrders();
-
-            if (selectedOrder?.id === order.id) {
-                const detail = await request(`${API_BASE}/${order.id}`);
-                setSelectedOrder(mapOrder(detail));
-            }
-        } catch (err) {
-            setError(
-                err.message ||
-                "Không thể cập nhật trạng thái. Vui lòng tải lại dữ liệu."
-            );
-        } finally {
-            setBusyId(null);
-        }
     };
 
     const openDetail = async (order) => {
@@ -347,12 +248,93 @@ function AdminOrders() {
         setError("");
 
         try {
-            const detail = await request(`${API_BASE}/${order.id}`);
-            setSelectedOrder(mapOrder(detail));
+            const detail = await apiRequest(`${API_BASE}/${order.id}`);
+            if (detail) {
+                setSelectedOrder(mapOrder(detail));
+            }
         } catch (err) {
             setError(err.message || "Không tải được chi tiết đơn hàng.");
         }
     };
+
+    const cancelOrder = async (order) => {
+        if (!CANCELLABLE_STATUSES.includes(order.status)) {
+            setError("Đơn đã bắt đầu thực hiện hoặc đã kết thúc. Không thể hủy tại màn hình này.");
+            return;
+        }
+
+        if (order.version === null || order.version === undefined) {
+            setError("Không có phiên bản đơn hàng. Vui lòng tải lại dữ liệu trước khi thao tác.");
+            return;
+        }
+
+        const reason = window.prompt(`Nhập lý do hủy đơn ${order.code}:`);
+
+        if (reason === null) return;
+
+        if (!reason.trim()) {
+            setError("Bạn phải nhập lý do trước khi hủy đơn.");
+            return;
+        }
+
+        let refundPlan = "";
+
+        if (order.payment === "PAID") {
+            refundPlan = window.prompt(
+                `Đơn ${order.code} đã thanh toán.\nNhập kế hoạch xử lý Customer/refund (chưa tự động hoàn tiền):`
+            );
+
+            if (refundPlan === null) return;
+
+            if (!refundPlan.trim()) {
+                setError("Đơn đã thanh toán cần có kế hoạch xử lý Customer/refund.");
+                return;
+            }
+        }
+
+        const confirmed = window.confirm(
+            order.payment === "PAID"
+                ? `Xác nhận hủy đơn ${order.code}?\nLưu ý: thao tác này không tự động hoàn tiền.`
+                : `Bạn có chắc chắn muốn hủy đơn ${order.code}?`
+        );
+
+        if (!confirmed) return;
+
+        setBusyId(order.id);
+        setError("");
+        setNotice("");
+
+        try {
+            await apiRequest(`${API_BASE}/${order.id}/actions/cancel`, {
+                method: "POST",
+                body: JSON.stringify({
+                    version: order.version,
+                    note: reason.trim(),
+                    refundPlan: refundPlan.trim(),
+                }),
+            });
+
+            setNotice(
+                order.payment === "PAID"
+                    ? `Đã hủy đơn ${order.code}. Khoản thanh toán cần được xử lý refund riêng.`
+                    : `Đã hủy đơn ${order.code}.`
+            );
+
+            await loadOrders();
+
+            if (selectedOrder?.id === order.id) {
+                const detail = await apiRequest(`${API_BASE}/${order.id}`);
+                setSelectedOrder(mapOrder(detail));
+            }
+        } catch (err) {
+            setError(err.message || "Không thể hủy đơn hàng. Vui lòng tải lại dữ liệu.");
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const canAdminCancel = (order) =>
+        CANCELLABLE_STATUSES.includes(order.status);
 
     return (
         <AdminLayout>
@@ -360,9 +342,8 @@ function AdminOrders() {
                 <div className="orders-heading">
                     <div>
                         <h1>Quản lý đơn hàng</h1>
-                        <p>Theo dõi trạng thái, thanh toán và tiến độ đơn hàng.</p>
+                        <p>Theo dõi trạng thái, thanh toán, lịch thực hiện và lịch sử đơn hàng.</p>
                     </div>
-
                     <div className="orders-heading-icon">
                         <FontAwesomeIcon icon={faTruck} />
                     </div>
@@ -385,34 +366,30 @@ function AdminOrders() {
                         <span>Tổng đơn hàng</span>
                         <strong>{orders.length}</strong>
                     </div>
-
                     <div className="order-stat-card">
                         <span>Chờ xử lý</span>
                         <strong className="order-orange">{pendingCount}</strong>
                     </div>
-
                     <div className="order-stat-card">
                         <span>Đang xử lý</span>
                         <strong className="order-blue">{processingCount}</strong>
                     </div>
-
                     <div className="order-stat-card">
                         <span>Hoàn thành</span>
                         <strong className="order-green">{completedCount}</strong>
                     </div>
-
                     <div className="order-stat-card">
-                        <span>Giá trị đơn hoàn thành</span>
-                        <strong className="order-revenue">
-                            {formatCurrency(totalRevenue)}
-                        </strong>
+                        <span>Giá trị đơn hoàn tất</span>
+                        <strong className="order-revenue">{formatCurrency(completedOrderValue)}</strong>
                     </div>
                 </div>
 
                 <div className="orders-content">
                     <div className="orders-content-heading">
-                        <h2>Danh sách đơn hàng</h2>
-
+                        <div>
+                            <h2>Danh sách đơn hàng</h2>
+                            <p>Giá trị đơn hoàn tất là tổng giá trị booking COMPLETED, không đồng nghĩa tiền đã thu hoặc doanh thu sau đối soát.</p>
+                        </div>
                         <button
                             className="order-reset-btn"
                             type="button"
@@ -429,38 +406,26 @@ function AdminOrders() {
                             <FontAwesomeIcon icon={faMagnifyingGlass} />
                             <input
                                 type="text"
-                                placeholder="Tìm mã đơn, khách hàng, SĐT, dịch vụ..."
+                                placeholder="Tìm mã đơn, khách hàng, SĐT, Provider, địa chỉ..."
                                 value={keyword}
                                 onChange={(event) => setKeyword(event.target.value)}
                             />
                         </div>
 
-                        <select
-                            value={statusFilter}
-                            onChange={(event) => setStatusFilter(event.target.value)}
-                        >
+                        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                             <option value="Tất cả">Tất cả trạng thái</option>
                             {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                                <option key={value} value={value}>
-                                    {label}
-                                </option>
+                                <option key={value} value={value}>{label}</option>
                             ))}
                         </select>
 
-                        <select
-                            value={paymentFilter}
-                            onChange={(event) => setPaymentFilter(event.target.value)}
-                        >
+                        <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
                             <option value="Tất cả">Tất cả thanh toán</option>
                             <option value="PAID">Đã thanh toán</option>
                             <option value="UNPAID">Chưa thanh toán</option>
                         </select>
 
-                        <button
-                            className="order-reset-btn"
-                            type="button"
-                            onClick={resetFilters}
-                        >
+                        <button className="order-reset-btn" type="button" onClick={resetFilters}>
                             <FontAwesomeIcon icon={faRotateLeft} />
                             Đặt lại
                         </button>
@@ -476,7 +441,6 @@ function AdminOrders() {
                                 onChange={(event) => setFromDate(event.target.value)}
                             />
                         </label>
-
                         <label>
                             Đến ngày
                             <input
@@ -486,10 +450,7 @@ function AdminOrders() {
                                 onChange={(event) => setToDate(event.target.value)}
                             />
                         </label>
-
-                        <span>
-                            Tìm thấy <strong>{filteredOrders.length}</strong> đơn hàng
-                        </span>
+                        <span>Tìm thấy <strong>{filteredOrders.length}</strong> đơn hàng</span>
                     </div>
 
                     <div className="orders-table-wrapper">
@@ -506,105 +467,69 @@ function AdminOrders() {
                                 <th>Thao tác</th>
                             </tr>
                             </thead>
-
                             <tbody>
                             {loading && (
                                 <tr>
-                                    <td colSpan="8" className="order-empty">
-                                        Đang tải danh sách đơn hàng...
-                                    </td>
+                                    <td colSpan="8" className="order-empty">Đang tải danh sách đơn hàng...</td>
                                 </tr>
                             )}
 
-                            {!loading && filteredOrders.map((order) => {
-                                const actions = getOrderActions(order);
-
-                                return (
-                                    <tr key={order.id}>
-                                        <td>
-                                            <strong>{order.code}</strong>
-                                        </td>
-
-                                        <td>
-                                            <strong>{order.customer}</strong>
-                                            <small>{order.phone}</small>
-                                        </td>
-
-                                        <td>
-                                            <span>{order.service}</span>
-                                            <small>{order.provider}</small>
-                                        </td>
-
-                                        <td>
-                                            {formatDate(order.date)}
-                                            <small>{formatTime(order.date)}</small>
-                                        </td>
-
-                                        <td className="order-amount">
-                                            {formatCurrency(order.amount)}
-                                        </td>
-
-                                        <td>
-                                                <span
-                                                    className={`order-payment ${
-                                                        order.payment === "PAID"
-                                                            ? "payment-paid"
-                                                            : "payment-unpaid"
-                                                    }`}
-                                                >
-                                                    {PAYMENT_LABELS[order.payment] || "Chưa thanh toán"}
-                                                </span>
-                                        </td>
-
-                                        <td>
-                                                <span
-                                                    className={`order-status order-status-${getStatusClass(
-                                                        order.status
-                                                    )}`}
-                                                >
-                                                    {getStatusLabel(order.status)}
-                                                </span>
-                                        </td>
-
-                                        <td>
-                                            <div className="order-actions">
+                            {!loading && filteredOrders.map((order) => (
+                                <tr key={order.id}>
+                                    <td><strong>{order.code}</strong></td>
+                                    <td>
+                                        <strong>{order.customer}</strong>
+                                        <small>{order.phone}</small>
+                                    </td>
+                                    <td>
+                                        <span>{order.service}</span>
+                                        <small>{order.provider}</small>
+                                    </td>
+                                    <td>
+                                        {formatDate(order.date)}
+                                        <small>{formatTime(order.date)}</small>
+                                    </td>
+                                    <td className="order-amount">{formatCurrency(order.amount)}</td>
+                                    <td>
+                                            <span className={`order-payment ${order.payment === "PAID" ? "payment-paid" : "payment-unpaid"}`}>
+                                                {PAYMENT_LABELS[order.payment] || "Chưa thanh toán"}
+                                            </span>
+                                    </td>
+                                    <td>
+                                            <span className={`order-status order-status-${getStatusClass(order.status)}`}>
+                                                {getStatusLabel(order.status)}
+                                            </span>
+                                    </td>
+                                    <td>
+                                        <div className="order-actions">
+                                            <button
+                                                className="order-view-btn"
+                                                title="Xem chi tiết"
+                                                type="button"
+                                                onClick={() => openDetail(order)}
+                                            >
+                                                <FontAwesomeIcon icon={faEye} />
+                                            </button>
+                                            {canAdminCancel(order) && (
                                                 <button
-                                                    className="order-view-btn"
-                                                    title="Xem chi tiết"
+                                                    className="order-cancel-btn"
+                                                    title="Hủy đơn trước khi bắt đầu"
                                                     type="button"
-                                                    onClick={() => openDetail(order)}
+                                                    disabled={busyId === order.id}
+                                                    onClick={() => cancelOrder(order)}
                                                 >
-                                                    <FontAwesomeIcon icon={faEye} />
+                                                    <FontAwesomeIcon icon={faXmark} />
                                                 </button>
-
-                                                {actions.map((action) => (
-                                                    <button
-                                                        key={action.action}
-                                                        className={
-                                                            action.style === "cancel"
-                                                                ? "order-cancel-btn"
-                                                                : "order-approve-btn"
-                                                        }
-                                                        title={action.label}
-                                                        type="button"
-                                                        disabled={busyId === order.id}
-                                                        onClick={() =>
-                                                            executeAction(order, action.action)
-                                                        }
-                                                    >
-                                                        <FontAwesomeIcon icon={action.icon} />
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
 
                             {!loading && filteredOrders.length === 0 && (
                                 <tr>
                                     <td colSpan="8" className="order-empty">
-                                        Không tìm thấy đơn hàng phù hợp.
+                                        {error ? "Không tải được dữ liệu đơn hàng." : "Không tìm thấy đơn hàng phù hợp."}
                                     </td>
                                 </tr>
                             )}
@@ -614,21 +539,11 @@ function AdminOrders() {
                 </div>
 
                 {selectedOrder && (
-                    <div
-                        className="order-modal-overlay"
-                        onClick={() => setSelectedOrder(null)}
-                    >
-                        <div
-                            className="order-modal"
-                            onClick={(event) => event.stopPropagation()}
-                        >
+                    <div className="order-modal-overlay" onClick={() => setSelectedOrder(null)}>
+                        <div className="order-modal" onClick={(event) => event.stopPropagation()}>
                             <div className="order-modal-header">
                                 <h2>Chi tiết đơn hàng {selectedOrder.code}</h2>
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedOrder(null)}
-                                    aria-label="Đóng"
-                                >
+                                <button type="button" onClick={() => setSelectedOrder(null)} aria-label="Đóng">
                                     <FontAwesomeIcon icon={faXmark} />
                                 </button>
                             </div>
@@ -639,67 +554,102 @@ function AdminOrders() {
                                 <p><strong>Dịch vụ:</strong> {selectedOrder.service}</p>
                                 <p><strong>Nhà cung cấp:</strong> {selectedOrder.provider}</p>
                                 <p><strong>Địa chỉ:</strong> {selectedOrder.address || "—"}</p>
-                                <p><strong>Ngày đặt:</strong> {formatDate(selectedOrder.createdAt)}</p>
+                                <p><strong>Ngày tạo đơn:</strong> {formatDate(selectedOrder.createdAt)}</p>
                                 <p><strong>Lịch thực hiện:</strong> {formatDate(selectedOrder.date)} {formatTime(selectedOrder.date)}</p>
                                 <p><strong>Tổng tiền:</strong> {formatCurrency(selectedOrder.amount)}</p>
-                                <p><strong>Phương thức:</strong> {selectedOrder.paymentMethod === "CASH" ? "Tiền mặt khi hoàn tất" : "VNPay"}</p>
+                                <p>
+                                    <strong>Phương thức:</strong>{" "}
+                                    {selectedOrder.paymentMethod === "CASH"
+                                        ? "Tiền mặt khi hoàn tất"
+                                        : selectedOrder.paymentMethod === "VNPAY"
+                                            ? "VNPay"
+                                            : selectedOrder.paymentMethod || "—"}
+                                </p>
                                 <p><strong>Thanh toán:</strong> {PAYMENT_LABELS[selectedOrder.payment] || "Chưa thanh toán"}</p>
-                                <p><strong>Trạng thái:</strong> {getStatusLabel(selectedOrder.status)}</p>
+                                <p><strong>Trạng thái đơn:</strong> {getStatusLabel(selectedOrder.status)}</p>
                                 <p><strong>Ghi chú khách hàng:</strong> {selectedOrder.customerNote || "Không có"}</p>
                                 <p><strong>Lý do hủy:</strong> {selectedOrder.cancelReason || "Không có"}</p>
+                                <p><strong>Phiên bản đơn:</strong> {selectedOrder.version ?? "—"}</p>
 
-                                {Array.isArray(selectedOrder.items) &&
-                                    selectedOrder.items.length > 0 && (
-                                        <>
-                                            <p><strong>Chi tiết dịch vụ:</strong></p>
-                                            {selectedOrder.items.map((item) => (
-                                                <p key={item.id}>
-                                                    {item.serviceName || item.packageName || "Dịch vụ"}
-                                                    {" — SL: "}{item.quantity || 1}
-                                                    {" — "}{formatCurrency(item.totalPrice || item.unitPrice)}
+                                {selectedOrder.cancellationNeedsRefundReview && (
+                                    <div className="orders-message orders-message-error">
+                                        Đơn đã hủy nhưng có khoản thanh toán thành công. Cần kiểm tra và xử lý refund riêng; trạng thái hủy đơn không có nghĩa là đã hoàn tiền.
+                                    </div>
+                                )}
+
+                                {selectedOrder.items.length > 0 && (
+                                    <>
+                                        <p><strong>Snapshot dịch vụ tại thời điểm đặt:</strong></p>
+                                        {selectedOrder.items.map((item, index) => (
+                                            <p key={item.id || index}>
+                                                {item.serviceName || item.packageName || "Dịch vụ"}
+                                                {" — SL: "}{item.quantity || 1}
+                                                {" — Đơn giá: "}{formatCurrency(item.unitPrice)}
+                                                {" — Thành tiền: "}{formatCurrency(item.totalPrice)}
+                                            </p>
+                                        ))}
+                                    </>
+                                )}
+
+                                {selectedOrder.paymentRecords.length > 0 && (
+                                    <>
+                                        <p><strong>Lịch sử thanh toán:</strong></p>
+                                        {selectedOrder.paymentRecords.map((payment) => (
+                                            <div key={payment.id}>
+                                                <p>
+                                                    {payment.provider || payment.method || "Thanh toán"}
+                                                    {" — "}{formatCurrency(payment.amount)}
+                                                    {" — "}{payment.status || "Chưa xác định"}
                                                 </p>
-                                            ))}
-                                        </>
-                                    )}
+                                                <p>
+                                                    <small>
+                                                        Mã giao dịch: {payment.transactionCode || payment.txnRef || "—"}
+                                                        {" · "}Ngày thanh toán: {formatDate(payment.paidAt)}
+                                                    </small>
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
 
-                                {Array.isArray(selectedOrder.statusHistory) &&
-                                    selectedOrder.statusHistory.length > 0 && (
-                                        <>
-                                            <p><strong>Lịch sử trạng thái:</strong></p>
-                                            {selectedOrder.statusHistory.map((history, index) => (
-                                                <p key={history.id || index}>
-                                                    {history.oldStatus || "Mới"}
-                                                    {" → "}
-                                                    {history.newStatus || "—"}
+                                {selectedOrder.statusHistory.length > 0 && (
+                                    <>
+                                        <p><strong>Timeline trạng thái:</strong></p>
+                                        {selectedOrder.statusHistory.map((history, index) => (
+                                            <div key={history.id || index}>
+                                                <p>
+                                                    <strong>
+                                                        {getStatusLabel(history.oldStatus || "Mới")}
+                                                        {" → "}
+                                                        {getStatusLabel(history.newStatus)}
+                                                    </strong>
+                                                </p>
+                                                <p>
+                                                    {history.changedByName
+                                                        ? `Người thực hiện: ${history.changedByName}`
+                                                        : "Người thực hiện: Hệ thống"}
                                                     {history.createdAt
-                                                        ? ` (${formatDate(history.createdAt)} ${formatTime(history.createdAt)})`
+                                                        ? ` · ${formatDate(history.createdAt)} ${formatTime(history.createdAt)}`
                                                         : ""}
-                                                    {history.note ? ` — ${history.note}` : ""}
                                                 </p>
-                                            ))}
-                                        </>
-                                    )}
+                                                {history.note && <p>{history.note}</p>}
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
                             </div>
 
                             <div className="order-modal-footer">
-                                {getOrderActions(selectedOrder).map((action) => (
+                                {canAdminCancel(selectedOrder) && (
                                     <button
-                                        key={action.action}
-                                        className={
-                                            action.style === "cancel"
-                                                ? "order-cancel-btn"
-                                                : "order-approve-btn"
-                                        }
+                                        className="order-cancel-btn"
                                         type="button"
                                         disabled={busyId === selectedOrder.id}
-                                        onClick={() =>
-                                            executeAction(selectedOrder, action.action)
-                                        }
+                                        onClick={() => cancelOrder(selectedOrder)}
                                     >
-                                        {action.label}
+                                        Hủy đơn
                                     </button>
-                                ))}
-
+                                )}
                                 <button
                                     className="order-modal-close"
                                     type="button"

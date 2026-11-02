@@ -11,12 +11,16 @@ import {
     faRotate,
     faCircleCheck,
     faClock,
-    faFileCircleExclamation
+    faFileCircleExclamation,
+    faComments,
+    faChevronDown,
+    faChevronUp
 } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import './profile.css';
 import './customer-bookings.css';
+import './customer-reports-conversation.css';
 
 const API_URL = 'http://localhost:8080/api/reports';
 
@@ -42,9 +46,18 @@ function getToken() {
 
 function formatDate(value) {
     if (!value) return 'Chưa có dữ liệu';
+
     const date = new Date(value);
+
     if (Number.isNaN(date.getTime())) return 'Chưa có dữ liệu';
-    return date.toLocaleString('vi-VN');
+
+    return date.toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 }
 
 function getErrorMessage(status, data) {
@@ -56,33 +69,65 @@ function getErrorMessage(status, data) {
 
     if (status === 403) {
         return message ||
-            'Bạn không có quyền gửi khiếu nại cho đơn hàng này. Hãy kiểm tra mã đơn và bảo đảm đơn thuộc tài khoản của bạn.';
+            'Bạn không có quyền thực hiện thao tác này.';
     }
 
     if (status === 400) {
-        return message || 'Thông tin khiếu nại chưa hợp lệ. Vui lòng kiểm tra tiêu đề và nội dung.';
+        return message ||
+            'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.';
     }
 
     if (status === 404) {
-        return message || 'Không tìm thấy đơn hàng liên quan. Hãy kiểm tra lại mã đơn.';
+        return message || 'Không tìm thấy dữ liệu yêu cầu.';
     }
 
     return message || `Yêu cầu thất bại (${status}).`;
 }
 
+async function requestApi(url, options = {}) {
+    const token = getToken();
+
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+            Authorization: `Bearer ${token}`,
+            ...options.headers
+        }
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+        const error = new Error(getErrorMessage(response.status, data));
+        error.status = response.status;
+        throw error;
+    }
+
+    return data;
+}
+
 export default function CustomerReports() {
     const navigate = useNavigate();
+
     const [form, setForm] = useState({
         subject: '',
         category: 'SERVICE_QUALITY',
         bookingCode: '',
         description: ''
     });
+
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+
+    const [expandedReportId, setExpandedReportId] = useState(null);
+    const [responses, setResponses] = useState({});
+    const [responsesLoading, setResponsesLoading] = useState(false);
+    const [replyContent, setReplyContent] = useState('');
+    const [sendingReply, setSendingReply] = useState(false);
 
     const handleLogout = () => {
         sessionStorage.removeItem('accessToken');
@@ -104,26 +149,16 @@ export default function CustomerReports() {
         setError('');
 
         try {
-            const response = await fetch(`${API_URL}/mine`, {
-                method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-
-            const data = await response.json().catch(() => null);
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    navigate('/login', { replace: true });
-                    return;
-                }
-                throw new Error(getErrorMessage(response.status, data));
-            }
-
+            const data = await requestApi(`${API_URL}/mine`);
             setReports(Array.isArray(data) ? data : []);
         } catch (err) {
             setError(err.message || 'Không thể tải lịch sử khiếu nại.');
+
+            if (err.status === 401) {
+                navigate('/login', { replace: true });
+                return;
+            }
+
             setReports([]);
         } finally {
             setLoading(false);
@@ -134,8 +169,48 @@ export default function CustomerReports() {
         loadReports();
     }, []);
 
+    const loadResponses = async (reportId) => {
+        if (!reportId) return;
+
+        setResponsesLoading(true);
+        setError('');
+
+        try {
+            const data = await requestApi(
+                `${API_URL}/${reportId}/responses`
+            );
+
+            setResponses(previous => ({
+                ...previous,
+                [reportId]: Array.isArray(data) ? data : []
+            }));
+        } catch (err) {
+            setError(
+                err.message ||
+                'Không thể tải lịch sử trao đổi của khiếu nại.'
+            );
+        } finally {
+            setResponsesLoading(false);
+        }
+    };
+
+    const toggleConversation = async (reportId) => {
+        setError('');
+        setNotice('');
+        setReplyContent('');
+
+        if (expandedReportId === reportId) {
+            setExpandedReportId(null);
+            return;
+        }
+
+        setExpandedReportId(reportId);
+        await loadResponses(reportId);
+    };
+
     const handleChange = (event) => {
         const { name, value } = event.target;
+
         setForm(previous => ({
             ...previous,
             [name]: value
@@ -181,26 +256,13 @@ export default function CustomerReports() {
                 payload.bookingCode = bookingCode;
             }
 
-            const response = await fetch(API_URL, {
+            await requestApi(API_URL, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
                 body: JSON.stringify(payload)
             });
 
-            const data = await response.json().catch(() => null);
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    navigate('/login', { replace: true });
-                    return;
-                }
-                throw new Error(getErrorMessage(response.status, data));
-            }
-
             setNotice('Gửi khiếu nại thành công.');
+
             setForm({
                 subject: '',
                 category: 'SERVICE_QUALITY',
@@ -216,9 +278,44 @@ export default function CustomerReports() {
         }
     };
 
+    const handleSendReply = async (event, reportId) => {
+        event.preventDefault();
+
+        const content = replyContent.trim();
+
+        if (!content) {
+            setError('Vui lòng nhập nội dung phản hồi.');
+            return;
+        }
+
+        if (sendingReply) return;
+
+        setSendingReply(true);
+        setError('');
+        setNotice('');
+
+        try {
+            await requestApi(`${API_URL}/${reportId}/responses`, {
+                method: 'POST',
+                body: JSON.stringify({ content })
+            });
+
+            setReplyContent('');
+            await loadResponses(reportId);
+            await loadReports();
+
+            setNotice('Đã gửi phản hồi thành công.');
+        } catch (err) {
+            setError(err.message || 'Không thể gửi phản hồi.');
+        } finally {
+            setSendingReply(false);
+        }
+    };
+
     return (
         <div className="home">
             <Header />
+
             <main className="profile-main">
                 <div className="profile-container">
                     <aside className="profile-sidebar">
@@ -230,6 +327,7 @@ export default function CustomerReports() {
                                 <FontAwesomeIcon icon={faUser} />
                                 Hồ sơ cá nhân
                             </li>
+
                             <li
                                 className="sidebar-item"
                                 onClick={() => navigate('/customer/bookings')}
@@ -237,6 +335,7 @@ export default function CustomerReports() {
                                 <FontAwesomeIcon icon={faBoxArchive} />
                                 Đơn hàng của tôi
                             </li>
+
                             <li
                                 className="sidebar-item"
                                 onClick={() => navigate('/customer/bookings/history')}
@@ -244,10 +343,12 @@ export default function CustomerReports() {
                                 <FontAwesomeIcon icon={faClockRotateLeft} />
                                 Lịch sử đơn hàng
                             </li>
+
                             <li className="sidebar-item active">
                                 <FontAwesomeIcon icon={faHeadset} />
                                 Hỗ trợ & Khiếu nại
                             </li>
+
                             <li
                                 className="sidebar-item logout"
                                 onClick={handleLogout}
@@ -261,7 +362,9 @@ export default function CustomerReports() {
                     <div className="profile-content customer-reports-content">
                         <div className="profile-header-title">
                             <h2>Hỗ trợ & Khiếu nại</h2>
-                            <p>Gửi yêu cầu hỗ trợ và theo dõi tình trạng xử lý từ hệ thống.</p>
+                            <p>
+                                Gửi yêu cầu hỗ trợ và theo dõi tình trạng xử lý từ hệ thống.
+                            </p>
                         </div>
 
                         {error && (
@@ -279,24 +382,29 @@ export default function CustomerReports() {
 
                         <section className="customer-report-card">
                             <h3>Thông tin khiếu nại</h3>
+
                             <form onSubmit={handleSubmit}>
                                 <div className="customer-report-form-grid">
                                     <div className="customer-report-field">
-                                        <label htmlFor="report-subject">Tiêu đề</label>
+                                        <label htmlFor="report-subject">
+                                            Tiêu đề
+                                        </label>
                                         <input
                                             id="report-subject"
                                             name="subject"
                                             type="text"
                                             value={form.subject}
                                             onChange={handleChange}
-                                            maxLength={200}
+                                            maxLength={120}
                                             placeholder="Nhập tiêu đề khiếu nại"
                                             required
                                         />
                                     </div>
 
                                     <div className="customer-report-field">
-                                        <label htmlFor="report-category">Loại khiếu nại</label>
+                                        <label htmlFor="report-category">
+                                            Loại khiếu nại
+                                        </label>
                                         <select
                                             id="report-category"
                                             name="category"
@@ -333,7 +441,9 @@ export default function CustomerReports() {
                                     </div>
 
                                     <div className="customer-report-field full">
-                                        <label htmlFor="report-description">Nội dung chi tiết</label>
+                                        <label htmlFor="report-description">
+                                            Nội dung chi tiết
+                                        </label>
                                         <textarea
                                             id="report-description"
                                             name="description"
@@ -345,7 +455,9 @@ export default function CustomerReports() {
                                             placeholder="Mô tả cụ thể vấn đề bạn gặp phải..."
                                             required
                                         />
-                                        <small>{form.description.trim().length}/5000 ký tự</small>
+                                        <small>
+                                            {form.description.trim().length}/5000 ký tự
+                                        </small>
                                     </div>
                                 </div>
 
@@ -367,6 +479,7 @@ export default function CustomerReports() {
                                     >
                                         Xóa nội dung
                                     </button>
+
                                     <button
                                         type="submit"
                                         className="customer-report-primary"
@@ -385,13 +498,17 @@ export default function CustomerReports() {
                                     <h3>Lịch sử khiếu nại</h3>
                                     <p>Các yêu cầu do tài khoản của bạn gửi.</p>
                                 </div>
+
                                 <button
                                     type="button"
                                     className="customer-report-refresh"
                                     onClick={loadReports}
                                     disabled={loading}
                                 >
-                                    <FontAwesomeIcon icon={faRotate} />
+                                    <FontAwesomeIcon
+                                        icon={faRotate}
+                                        className={loading ? 'customer-report-spin' : ''}
+                                    />
                                     Tải lại
                                 </button>
                             </div>
@@ -407,51 +524,186 @@ export default function CustomerReports() {
                                 </div>
                             ) : (
                                 <div className="customer-report-list">
-                                    {reports.map(report => (
-                                        <article className="customer-report-item" key={report.id}>
-                                            <div className="customer-report-item-heading">
-                                                <div>
-                                                    <span className="customer-report-id">
-                                                        Khiếu nại #{report.id}
+                                    {reports.map(report => {
+                                        const isExpanded = expandedReportId === report.id;
+                                        const reportResponses = responses[report.id] || [];
+
+                                        return (
+                                            <article
+                                                className="customer-report-item"
+                                                key={report.id}
+                                            >
+                                                <div className="customer-report-item-heading">
+                                                    <div>
+                                                        <span className="customer-report-id">
+                                                            Khiếu nại #{report.id}
+                                                        </span>
+                                                        <h4>
+                                                            {report.subject || 'Không có tiêu đề'}
+                                                        </h4>
+                                                    </div>
+
+                                                    <span
+                                                        className={`customer-report-status ${(report.status || 'OPEN').toLowerCase()}`}
+                                                    >
+                                                        <FontAwesomeIcon icon={faClock} />
+                                                        {STATUS_LABELS[report.status] ||
+                                                            report.status ||
+                                                            'Chưa có trạng thái'}
                                                     </span>
-                                                    <h4>{report.subject || 'Không có tiêu đề'}</h4>
                                                 </div>
-                                                <span className={`customer-report-status ${(report.status || 'OPEN').toLowerCase()}`}>
-                                                    <FontAwesomeIcon icon={faClock} />
-                                                    {STATUS_LABELS[report.status] || report.status || 'Chưa có trạng thái'}
-                                                </span>
-                                            </div>
 
-                                            <div className="customer-report-meta">
-                                                <span>
-                                                    Loại: {CATEGORIES.find(item => item.value === report.category)?.label || report.category || 'Khác'}
-                                                </span>
-                                                <span>
-                                                    Mã đơn: {report.bookingCode || 'Không liên kết đơn hàng'}
-                                                </span>
-                                                <span>
-                                                    Ngày gửi: {formatDate(report.createdAt)}
-                                                </span>
-                                            </div>
-
-                                            <p className="customer-report-description">
-                                                {report.description || 'Không có nội dung'}
-                                            </p>
-
-                                            {report.resolution && (
-                                                <div className="customer-report-resolution">
-                                                    <strong>Kết quả xử lý:</strong>
-                                                    <p>{report.resolution}</p>
+                                                <div className="customer-report-meta">
+                                                    <span>
+                                                        Loại: {CATEGORIES.find(item =>
+                                                        item.value === report.category
+                                                    )?.label || report.category || 'Khác'}
+                                                    </span>
+                                                    <span>
+                                                        Mã đơn: {report.bookingCode || 'Không liên kết đơn hàng'}
+                                                    </span>
+                                                    <span>
+                                                        Ngày gửi: {formatDate(report.createdAt)}
+                                                    </span>
                                                 </div>
-                                            )}
-                                        </article>
-                                    ))}
+
+                                                <p className="customer-report-description">
+                                                    {report.description || 'Không có nội dung'}
+                                                </p>
+
+                                                {report.resolution && (
+                                                    <div className="customer-report-resolution">
+                                                        <strong>Kết quả xử lý:</strong>
+                                                        <p>{report.resolution}</p>
+                                                    </div>
+                                                )}
+
+                                                <button
+                                                    type="button"
+                                                    className="customer-report-conversation-toggle"
+                                                    onClick={() => toggleConversation(report.id)}
+                                                >
+                                                    <FontAwesomeIcon icon={faComments} />
+                                                    {isExpanded
+                                                        ? 'Thu gọn trao đổi'
+                                                        : 'Xem lịch sử trao đổi'}
+                                                    <span>
+                                                        {isExpanded
+                                                            ? <FontAwesomeIcon icon={faChevronUp} />
+                                                            : <FontAwesomeIcon icon={faChevronDown} />}
+                                                    </span>
+                                                </button>
+
+                                                {isExpanded && (
+                                                    <div className="customer-report-conversation">
+                                                        <div className="customer-report-conversation-heading">
+                                                            <h5>Lịch sử phản hồi</h5>
+                                                            <span>
+                                                                {reportResponses.length} phản hồi
+                                                            </span>
+                                                        </div>
+
+                                                        {responsesLoading ? (
+                                                            <div className="customer-report-conversation-empty">
+                                                                <FontAwesomeIcon
+                                                                    icon={faRotate}
+                                                                    className="customer-report-spin"
+                                                                />
+                                                                Đang tải nội dung trao đổi...
+                                                            </div>
+                                                        ) : reportResponses.length === 0 ? (
+                                                            <div className="customer-report-conversation-empty">
+                                                                Chưa có phản hồi nào. Bạn có thể gửi thêm thông tin bên dưới.
+                                                            </div>
+                                                        ) : (
+                                                            <div className="customer-report-response-list">
+                                                                {reportResponses.map(response => (
+                                                                    <div
+                                                                        className="customer-report-response"
+                                                                        key={response.id}
+                                                                    >
+                                                                        <div className="customer-report-response-header">
+                                                                            <div>
+                                                                                <strong>
+                                                                                    {response.responderName || 'Tài khoản hệ thống'}
+                                                                                </strong>
+                                                                                <span>
+                                                                                    {response.responderRole || 'Người tham gia'}
+                                                                                </span>
+                                                                            </div>
+                                                                            <time>
+                                                                                {formatDate(response.createdAt)}
+                                                                            </time>
+                                                                        </div>
+
+                                                                        <p>{response.content}</p>
+
+                                                                        {response.attachmentUrl && (
+                                                                            <a
+                                                                                href={response.attachmentUrl}
+                                                                                target="_blank"
+                                                                                rel="noreferrer"
+                                                                            >
+                                                                                Xem tệp đính kèm
+                                                                            </a>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+
+                                                        <form
+                                                            className="customer-report-reply-form"
+                                                            onSubmit={(event) =>
+                                                                handleSendReply(event, report.id)
+                                                            }
+                                                        >
+                                                            <label htmlFor={`report-reply-${report.id}`}>
+                                                                Gửi phản hồi bổ sung
+                                                            </label>
+                                                            <textarea
+                                                                id={`report-reply-${report.id}`}
+                                                                rows={3}
+                                                                value={replyContent}
+                                                                onChange={(event) =>
+                                                                    setReplyContent(event.target.value)
+                                                                }
+                                                                placeholder="Nhập nội dung bạn muốn trao đổi thêm..."
+                                                                disabled={sendingReply}
+                                                            />
+
+                                                            <div className="customer-report-reply-actions">
+                                                                <small>
+                                                                    Nội dung gửi đi sẽ được lưu trong lịch sử khiếu nại.
+                                                                </small>
+                                                                <button
+                                                                    type="submit"
+                                                                    className="customer-report-primary"
+                                                                    disabled={
+                                                                        sendingReply ||
+                                                                        !replyContent.trim()
+                                                                    }
+                                                                >
+                                                                    <FontAwesomeIcon
+                                                                        icon={sendingReply ? faRotate : faPaperPlane}
+                                                                        className={sendingReply ? 'customer-report-spin' : ''}
+                                                                    />
+                                                                    {sendingReply ? 'Đang gửi...' : 'Gửi phản hồi'}
+                                                                </button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
+                                                )}
+                                            </article>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </section>
                     </div>
                 </div>
             </main>
+
             <Footer />
         </div>
     );

@@ -1,4 +1,3 @@
-
 package org.ckitmdt.backend.repository;
 
 import jakarta.persistence.LockModeType;
@@ -8,29 +7,24 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.math.BigDecimal;    
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
-
     List<Payment> findByBooking_Id(Long bookingId);
 
-    List<Payment> findByBooking_IdAndStatusIgnoreCase(
-            Long bookingId,
-            String status
-    );
+    @Query("SELECT p FROM Payment p WHERE UPPER(p.status) IN :statuses")
+    List<Payment> findByStatusesIgnoreCase(@Param("statuses") List<String> statuses);
 
+    List<Payment> findByBooking_IdAndStatusIgnoreCase(Long bookingId, String status);
     Optional<Payment> findByTxnRef(String txnRef);
-
     boolean existsByBooking_IdAndStatus(Long bookingId, String status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.txnRef = :txnRef")
-    Optional<Payment> findByTxnRefForUpdate(
-            @Param("txnRef") String txnRef
-    );
+    Optional<Payment> findByTxnRefForUpdate(@Param("txnRef") String txnRef);
 
     @Query("""
             SELECT COALESCE(SUM(p.amount), 0)

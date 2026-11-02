@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminLayout from "./AdminLayout";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -7,7 +7,10 @@ import {
     faEye,
     faXmark,
     faCreditCard,
-    faRotate
+    faRotate,
+    faWallet,
+    faFileInvoiceDollar,
+    faBuildingColumns
 } from "@fortawesome/free-solid-svg-icons";
 import "./AdminTransactions.css";
 
@@ -24,6 +27,7 @@ const formatDate = (value) => {
     if (!value) return "Chưa cập nhật";
 
     const date = new Date(value);
+
     if (Number.isNaN(date.getTime())) return "Chưa cập nhật";
 
     return date.toLocaleString("vi-VN", {
@@ -38,11 +42,25 @@ const formatDate = (value) => {
 const statusLabel = (status) => {
     const value = String(status || "").toUpperCase();
 
-    if (["SUCCESS", "PAID"].includes(value)) return "Thành công";
-    if (["PENDING", "PROCESSING"].includes(value)) return "Đang chờ";
-    if (["FAILED", "ERROR"].includes(value)) return "Thất bại";
-    if (["REFUNDED", "FULLY_REFUNDED"].includes(value)) return "Đã hoàn tiền";
-    if (["PARTIALLY_REFUNDED"].includes(value)) return "Hoàn tiền một phần";
+    if (["SUCCESS", "PAID", "SUCCESSFUL", "SUCCEEDED"].includes(value)) {
+        return "Thành công";
+    }
+
+    if (["PENDING", "PROCESSING"].includes(value)) {
+        return "Đang chờ";
+    }
+
+    if (["FAILED", "ERROR"].includes(value)) {
+        return "Thất bại";
+    }
+
+    if (["REFUNDED", "FULLY_REFUNDED"].includes(value)) {
+        return "Đã hoàn tiền";
+    }
+
+    if (value === "PARTIALLY_REFUNDED") {
+        return "Hoàn tiền một phần";
+    }
 
     return status || "Chưa xác định";
 };
@@ -50,10 +68,21 @@ const statusLabel = (status) => {
 const statusClass = (status) => {
     const value = String(status || "").toUpperCase();
 
-    if (["SUCCESS", "PAID"].includes(value)) return "success";
-    if (["PENDING", "PROCESSING"].includes(value)) return "pending";
-    if (["FAILED", "ERROR"].includes(value)) return "failed";
-    if (["REFUNDED", "FULLY_REFUNDED"].includes(value)) return "refunded";
+    if (["SUCCESS", "PAID", "SUCCESSFUL", "SUCCEEDED"].includes(value)) {
+        return "success";
+    }
+
+    if (["PENDING", "PROCESSING"].includes(value)) {
+        return "pending";
+    }
+
+    if (["FAILED", "ERROR"].includes(value)) {
+        return "failed";
+    }
+
+    if (["REFUNDED", "FULLY_REFUNDED", "PARTIALLY_REFUNDED"].includes(value)) {
+        return "refunded";
+    }
 
     return "unknown";
 };
@@ -71,6 +100,7 @@ const methodLabel = (method, provider) => {
 
 function AdminTransactions() {
     const [transactions, setTransactions] = useState([]);
+    const [summary, setSummary] = useState(null);
     const [keyword, setKeyword] = useState("");
     const [statusFilter, setStatusFilter] = useState("ALL");
     const [methodFilter, setMethodFilter] = useState("ALL");
@@ -78,66 +108,113 @@ function AdminTransactions() {
     const [toDate, setToDate] = useState("");
     const [selectedTransaction, setSelectedTransaction] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [summaryLoading, setSummaryLoading] = useState(true);
     const [error, setError] = useState("");
     const [retry, setRetry] = useState(0);
+
+    const loadTransactions = useCallback(async (signal) => {
+        const token = getToken();
+
+        if (!token) {
+            throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        }
+
+        const response = await fetch(`${API_URL}/admin/transactions`, {
+            method: "GET",
+            headers: {
+                Accept: "application/json",
+                Authorization: `Bearer ${token}`
+            },
+            signal
+        });
+
+        const body = await response.json().catch(() => null);
+
+        if (!response.ok) {
+            throw new Error(
+                body?.message ||
+                body?.detail ||
+                (response.status === 401
+                    ? "Phiên đăng nhập đã hết hạn."
+                    : response.status === 403
+                        ? "Tài khoản không có quyền xem giao dịch."
+                        : "Không thể tải danh sách giao dịch.")
+            );
+        }
+
+        if (!Array.isArray(body)) {
+            throw new Error("Dữ liệu giao dịch từ backend không đúng định dạng.");
+        }
+
+        setTransactions(body);
+    }, []);
+
+    const loadSummary = useCallback(async (signal) => {
+        const token = getToken();
+
+        if (!token) {
+            throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        }
+
+        const params = new URLSearchParams();
+
+        if (fromDate) params.set("fromDate", fromDate);
+        if (toDate) params.set("toDate", toDate);
+
+        const query = params.toString();
+        const url = `${API_URL}/admin/transactions/finance-summary${query ? `?${query}` : ""}`;
+
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                Accept: "application/json",
+                Authorization: `Bearer ${token}`
+            },
+            signal
+        });
+
+        const body = await response.json().catch(() => null);
+
+        if (!response.ok) {
+            throw new Error(
+                body?.message ||
+                body?.detail ||
+                "Không thể tải số liệu tổng hợp tài chính."
+            );
+        }
+
+        setSummary(body);
+    }, [fromDate, toDate]);
 
     useEffect(() => {
         const controller = new AbortController();
 
-        async function loadTransactions() {
+        async function loadData() {
             setLoading(true);
+            setSummaryLoading(true);
             setError("");
 
             try {
-                const token = getToken();
-
-                if (!token) {
-                    throw new Error("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-                }
-
-                const response = await fetch(`${API_URL}/admin/transactions`, {
-                    method: "GET",
-                    headers: {
-                        Accept: "application/json",
-                        Authorization: `Bearer ${token}`
-                    },
-                    signal: controller.signal
-                });
-
-                const body = await response.json().catch(() => null);
-
-                if (!response.ok) {
-                    throw new Error(
-                        body?.message ||
-                        body?.detail ||
-                        (response.status === 401
-                            ? "Phiên đăng nhập đã hết hạn."
-                            : response.status === 403
-                                ? "Tài khoản không có quyền xem giao dịch."
-                                : "Không thể tải danh sách giao dịch.")
-                    );
-                }
-
-                if (!Array.isArray(body)) {
-                    throw new Error("Dữ liệu giao dịch từ backend không đúng định dạng.");
-                }
-
-                setTransactions(body);
+                await Promise.all([
+                    loadTransactions(controller.signal),
+                    loadSummary(controller.signal)
+                ]);
             } catch (err) {
                 if (err.name !== "AbortError") {
-                    setError(err.message || "Không thể tải danh sách giao dịch.");
+                    setError(err.message || "Không thể tải dữ liệu tài chính.");
                 }
             } finally {
                 if (!controller.signal.aborted) {
                     setLoading(false);
+                    setSummaryLoading(false);
                 }
             }
         }
 
-        loadTransactions();
+        loadData();
 
         return () => controller.abort();
-    }, [retry]);
+    }, [loadTransactions, loadSummary, retry]);
 
     const filteredTransactions = useMemo(() => {
         const search = keyword.trim().toLowerCase();
@@ -155,14 +232,18 @@ function AdminTransactions() {
                 String(item.bookingCode ?? "").toLowerCase().includes(search) ||
                 String(item.customerName ?? "").toLowerCase().includes(search) ||
                 String(item.email ?? "").toLowerCase().includes(search) ||
+                String(item.partnerName ?? "").toLowerCase().includes(search) ||
                 String(item.reference ?? "").toLowerCase().includes(search) ||
                 String(item.txnRef ?? "").toLowerCase().includes(search);
 
             const matchStatus =
                 statusFilter === "ALL" ||
-                (statusFilter === "SUCCESS" && ["SUCCESS", "PAID"].includes(status)) ||
-                (statusFilter === "PENDING" && ["PENDING", "PROCESSING"].includes(status)) ||
-                (statusFilter === "FAILED" && ["FAILED", "ERROR"].includes(status)) ||
+                (statusFilter === "SUCCESS" &&
+                    ["SUCCESS", "PAID", "SUCCESSFUL", "SUCCEEDED"].includes(status)) ||
+                (statusFilter === "PENDING" &&
+                    ["PENDING", "PROCESSING"].includes(status)) ||
+                (statusFilter === "FAILED" &&
+                    ["FAILED", "ERROR", "CANCELLED", "EXPIRED"].includes(status)) ||
                 (statusFilter === "REFUNDED" &&
                     ["REFUNDED", "FULLY_REFUNDED", "PARTIALLY_REFUNDED"].includes(status));
 
@@ -173,33 +254,38 @@ function AdminTransactions() {
             const matchFromDate = !fromDate || dateOnly >= fromDate;
             const matchToDate = !toDate || dateOnly <= toDate;
 
-            return matchKeyword && matchStatus && matchMethod &&
-                matchFromDate && matchToDate;
+            return matchKeyword &&
+                matchStatus &&
+                matchMethod &&
+                matchFromDate &&
+                matchToDate;
         });
-    }, [transactions, keyword, statusFilter, methodFilter, fromDate, toDate]);
+    }, [
+        transactions,
+        keyword,
+        statusFilter,
+        methodFilter,
+        fromDate,
+        toDate
+    ]);
 
     const successfulTransactions = transactions.filter((item) =>
-        ["SUCCESS", "PAID"].includes(String(item.status || "").toUpperCase())
+        ["SUCCESS", "PAID", "SUCCESSFUL", "SUCCEEDED"].includes(
+            String(item.status || "").toUpperCase()
+        )
     );
 
     const pendingCount = transactions.filter((item) =>
-        ["PENDING", "PROCESSING"].includes(String(item.status || "").toUpperCase())
-    ).length;
-
-    const failedCount = transactions.filter((item) =>
-        ["FAILED", "ERROR"].includes(String(item.status || "").toUpperCase())
-    ).length;
-
-    const refundedCount = transactions.filter((item) =>
-        ["REFUNDED", "FULLY_REFUNDED", "PARTIALLY_REFUNDED"].includes(
+        ["PENDING", "PROCESSING"].includes(
             String(item.status || "").toUpperCase()
         )
     ).length;
 
-    const totalSuccessful = successfulTransactions.reduce(
-        (sum, item) => sum + Number(item.amount || 0),
-        0
-    );
+    const failedCount = transactions.filter((item) =>
+        ["FAILED", "ERROR", "CANCELLED", "EXPIRED"].includes(
+            String(item.status || "").toUpperCase()
+        )
+    ).length;
 
     const resetFilters = () => {
         setKeyword("");
@@ -209,13 +295,20 @@ function AdminTransactions() {
         setToDate("");
     };
 
+    const refresh = () => {
+        setRetry(value => value + 1);
+    };
+
     return (
         <AdminLayout>
             <div className="admin-transactions-page">
                 <div className="transactions-heading">
                     <div>
-                        <h1>Quản lý giao dịch</h1>
-                        <p>Theo dõi giao dịch lấy trực tiếp từ hệ thống thanh toán.</p>
+                        <h1>Tài chính và giao dịch</h1>
+                        <p>
+                            Theo dõi tiền khách thanh toán, đơn hoàn thành,
+                            phí sàn và yêu cầu hoàn tiền.
+                        </p>
                     </div>
 
                     <div className="transactions-heading-icon">
@@ -226,7 +319,7 @@ function AdminTransactions() {
                 {error && (
                     <div className="transactions-error" role="alert">
                         <span>{error}</span>
-                        <button type="button" onClick={() => setRetry((value) => value + 1)}>
+                        <button type="button" onClick={refresh}>
                             <FontAwesomeIcon icon={faRotate} /> Thử lại
                         </button>
                     </div>
@@ -234,37 +327,57 @@ function AdminTransactions() {
 
                 <div className="transactions-stats">
                     <div className="transaction-stat-card">
-                        <span>Tổng giao dịch</span>
-                        <strong>{loading ? "—" : transactions.length}</strong>
-                    </div>
-
-                    <div className="transaction-stat-card">
-                        <span>Thanh toán thành công</span>
+                        <span>Tiền khách đã thanh toán thành công</span>
                         <strong className="transaction-green">
-                            {loading ? "—" : successfulTransactions.length}
+                            {summaryLoading
+                                ? "—"
+                                : formatCurrency(summary?.customerCollected)}
                         </strong>
                     </div>
 
                     <div className="transaction-stat-card">
-                        <span>Đang chờ</span>
-                        <strong className="transaction-orange">
-                            {loading ? "—" : pendingCount}
+                        <span>Giá trị đơn đã hoàn thành</span>
+                        <strong>
+                            {summaryLoading
+                                ? "—"
+                                : formatCurrency(summary?.completedBookingTotal)}
                         </strong>
                     </div>
 
                     <div className="transaction-stat-card">
-                        <span>Thất bại</span>
-                        <strong className="transaction-red">
-                            {loading ? "—" : failedCount}
-                        </strong>
-                    </div>
-
-                    <div className="transaction-stat-card">
-                        <span>Tổng tiền thành công</span>
+                        <span>Phí sàn suy ra từ snapshot</span>
                         <strong className="transaction-revenue">
-                            {loading ? "—" : formatCurrency(totalSuccessful)}
+                            {summaryLoading
+                                ? "—"
+                                : formatCurrency(summary?.derivedPlatformFee)}
                         </strong>
                     </div>
+
+                    <div className="transaction-stat-card">
+                        <span>Yêu cầu hoàn tiền đang chờ</span>
+                        <strong className="transaction-orange">
+                            {summaryLoading
+                                ? "—"
+                                : formatCurrency(summary?.pendingRefundAmount)}
+                        </strong>
+                    </div>
+
+                    <div className="transaction-stat-card">
+                        <span>Hoàn tiền đã duyệt</span>
+                        <strong className="transaction-red">
+                            {summaryLoading
+                                ? "—"
+                                : formatCurrency(summary?.approvedRefundAmount)}
+                        </strong>
+                    </div>
+                </div>
+
+                <div className="transaction-readonly-note">
+                    {summary?.financeNotice ||
+                        "Số liệu tài chính được tổng hợp từ giao dịch, đơn hàng và yêu cầu hoàn tiền đã lưu."}
+                    {" "}
+                    Hoàn tiền đã duyệt không đồng nghĩa tiền đã được chuyển.
+                    Hệ thống hiện chưa có sổ chi trả và chứng từ thanh toán cho Nhà cung cấp.
                 </div>
 
                 <div className="transactions-filter">
@@ -274,7 +387,7 @@ function AdminTransactions() {
                             type="text"
                             value={keyword}
                             onChange={(event) => setKeyword(event.target.value)}
-                            placeholder="Tìm mã giao dịch, mã đơn, khách hàng..."
+                            placeholder="Tìm mã giao dịch, mã đơn, khách hàng, Nhà cung cấp..."
                         />
                     </div>
 
@@ -307,6 +420,7 @@ function AdminTransactions() {
                         <input
                             type="date"
                             value={fromDate}
+                            max={toDate || undefined}
                             onChange={(event) => setFromDate(event.target.value)}
                         />
                     </label>
@@ -316,6 +430,7 @@ function AdminTransactions() {
                         <input
                             type="date"
                             value={toDate}
+                            min={fromDate || undefined}
                             onChange={(event) => setToDate(event.target.value)}
                         />
                     </label>
@@ -325,6 +440,21 @@ function AdminTransactions() {
                     </button>
                 </div>
 
+                <div className="transactions-result-summary">
+                    <span>
+                        Tổng giao dịch: <strong>{loading ? "—" : transactions.length}</strong>
+                    </span>
+                    <span>
+                        Thành công: <strong>{loading ? "—" : successfulTransactions.length}</strong>
+                    </span>
+                    <span>
+                        Đang chờ: <strong>{loading ? "—" : pendingCount}</strong>
+                    </span>
+                    <span>
+                        Thất bại: <strong>{loading ? "—" : failedCount}</strong>
+                    </span>
+                </div>
+
                 <div className="transactions-table-wrapper">
                     <table className="transactions-table">
                         <thead>
@@ -332,6 +462,7 @@ function AdminTransactions() {
                             <th>Mã giao dịch</th>
                             <th>Mã đơn hàng</th>
                             <th>Khách hàng</th>
+                            <th>Nhà cung cấp</th>
                             <th>Phương thức</th>
                             <th>Thời gian</th>
                             <th>Số tiền</th>
@@ -343,7 +474,7 @@ function AdminTransactions() {
                         <tbody>
                         {loading && (
                             <tr>
-                                <td colSpan="8" className="transactions-empty">
+                                <td colSpan="9" className="transactions-empty">
                                     Đang tải giao dịch...
                                 </td>
                             </tr>
@@ -351,7 +482,7 @@ function AdminTransactions() {
 
                         {!loading && !error && filteredTransactions.length === 0 && (
                             <tr>
-                                <td colSpan="8" className="transactions-empty">
+                                <td colSpan="9" className="transactions-empty">
                                     Không có giao dịch phù hợp.
                                 </td>
                             </tr>
@@ -365,15 +496,16 @@ function AdminTransactions() {
                                     <strong>{item.customerName || "Chưa cập nhật"}</strong>
                                     <small>{item.email || ""}</small>
                                 </td>
+                                <td>{item.partnerName || "Chưa cập nhật"}</td>
                                 <td>
                                     {methodLabel(item.paymentMethod, item.paymentProvider)}
                                 </td>
-                                <td>{formatDate(item.createdAt || item.date)}</td>
+                                <td>{formatDate(item.paidAt || item.createdAt || item.date)}</td>
                                 <td>{formatCurrency(item.amount)}</td>
                                 <td>
-                                        <span className={`transaction-status ${statusClass(item.status)}`}>
-                                            {statusLabel(item.status)}
-                                        </span>
+                                    <span className={`transaction-status ${statusClass(item.status)}`}>
+                                        {statusLabel(item.status)}
+                                    </span>
                                 </td>
                                 <td>
                                     <button
@@ -425,8 +557,21 @@ function AdminTransactions() {
                                 <span>Mã giao dịch</span>
                                 <strong>GD{String(selectedTransaction.id).padStart(4, "0")}</strong>
 
+                                <span>Mã tham chiếu</span>
+                                <strong>
+                                    {selectedTransaction.reference ||
+                                        selectedTransaction.txnRef ||
+                                        "Chưa có"}
+                                </strong>
+
                                 <span>Mã đơn hàng</span>
-                                <strong>{selectedTransaction.bookingCode || `Đơn #${selectedTransaction.bookingId}`}</strong>
+                                <strong>
+                                    {selectedTransaction.bookingCode ||
+                                        `Đơn #${selectedTransaction.bookingId}`}
+                                </strong>
+
+                                <span>Trạng thái đơn hàng</span>
+                                <strong>{selectedTransaction.bookingStatus || "Chưa cập nhật"}</strong>
 
                                 <span>Khách hàng</span>
                                 <strong>{selectedTransaction.customerName || "Chưa cập nhật"}</strong>
@@ -437,6 +582,9 @@ function AdminTransactions() {
                                 <span>Số điện thoại</span>
                                 <strong>{selectedTransaction.phone || "Chưa cập nhật"}</strong>
 
+                                <span>Nhà cung cấp</span>
+                                <strong>{selectedTransaction.partnerName || "Chưa cập nhật"}</strong>
+
                                 <span>Phương thức</span>
                                 <strong>
                                     {methodLabel(
@@ -445,29 +593,45 @@ function AdminTransactions() {
                                     )}
                                 </strong>
 
-                                <span>Số tiền</span>
+                                <span>Số tiền giao dịch</span>
                                 <strong>{formatCurrency(selectedTransaction.amount)}</strong>
 
-                                <span>Trạng thái</span>
-                                <strong>{statusLabel(selectedTransaction.status)}</strong>
+                                <span>Giá trị dịch vụ trong đơn</span>
+                                <strong>{formatCurrency(selectedTransaction.bookingSubtotal)}</strong>
 
-                                <span>Mã tham chiếu</span>
+                                <span>Giảm giá</span>
                                 <strong>
-                                    {selectedTransaction.reference ||
-                                        selectedTransaction.txnRef ||
-                                        "Chưa có"}
+                                    {formatCurrency(
+                                        Number(selectedTransaction.discountAmount || 0) +
+                                        Number(selectedTransaction.pointsDiscount || 0)
+                                    )}
                                 </strong>
 
-                                <span>Thời gian tạo</span>
-                                <strong>{formatDate(selectedTransaction.createdAt || selectedTransaction.date)}</strong>
+                                <span>Tổng tiền đơn</span>
+                                <strong>{formatCurrency(selectedTransaction.bookingTotal)}</strong>
+
+                                <span>Trạng thái thanh toán</span>
+                                <strong>{statusLabel(selectedTransaction.status)}</strong>
+
+                                <span>Trạng thái hoàn tiền</span>
+                                <strong>{selectedTransaction.refundStatus || "Chưa có yêu cầu"}</strong>
+
+                                <span>Số tiền hoàn đã duyệt</span>
+                                <strong>
+                                    {formatCurrency(selectedTransaction.approvedRefundAmount)}
+                                </strong>
+
+                                <span>Thời gian tạo giao dịch</span>
+                                <strong>{formatDate(selectedTransaction.createdAt)}</strong>
 
                                 <span>Thời gian thanh toán</span>
                                 <strong>{formatDate(selectedTransaction.paidAt)}</strong>
                             </div>
 
                             <p className="transaction-readonly-note">
-                                Trạng thái chỉ được hiển thị từ backend. Muốn xử lý hoàn tiền,
-                                hãy dùng chức năng quản lý yêu cầu hoàn tiền.
+                                Đây là màn hình tra cứu. Không sửa trực tiếp giao dịch gốc.
+                                Quyết định hoàn tiền được thực hiện tại Quản lý hoàn tiền.
+                                Trạng thái duyệt hoàn tiền không xác nhận việc đã chuyển khoản.
                             </p>
                         </section>
                     </div>

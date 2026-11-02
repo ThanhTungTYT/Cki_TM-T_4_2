@@ -1,0 +1,510 @@
+/* =========================================
+   ADMIN OUTBOX MANAGEMENT
+========================================= */
+
+.admin-outbox-page {
+    --outbox-blue: #2563eb;
+    --outbox-blue-dark: #1e385c;
+    --outbox-text: #1e293b;
+    --outbox-muted: #8290a5;
+    --outbox-border: #e8edf5;
+    --outbox-bg: #f5f7fb;
+
+    width: 100%;
+    min-height: 100vh;
+    padding: 28px;
+    box-sizing: border-box;
+    background: var(--outbox-bg);
+    color: var(--outbox-text);
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Header */
+
+.admin-outbox-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.admin-outbox-header h1 {
+    margin: 0 0 8px;
+    color: var(--outbox-blue-dark);
+    font-size: 25px;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.admin-outbox-header p {
+    margin: 0;
+    color: var(--outbox-muted);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.admin-outbox-header > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 42px;
+    padding: 0 17px;
+    border: none;
+    border-radius: 9px;
+    background: var(--outbox-blue);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+    white-space: nowrap;
+}
+
+.admin-outbox-header > button:hover:not(:disabled) {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+.admin-outbox-header > button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Alerts */
+
+.admin-outbox-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 13px 16px;
+    margin-bottom: 18px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.admin-outbox-alert svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.admin-outbox-alert.error {
+    color: #b42318;
+    background: #fef3f2;
+    border-color: #fecdca;
+}
+
+.admin-outbox-alert.success {
+    color: #067647;
+    background: #ecfdf3;
+    border-color: #abefc6;
+}
+
+/* Summary */
+
+.admin-outbox-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 22px 24px;
+    margin-bottom: 24px;
+    background: #fff;
+    border: 1px solid var(--outbox-border);
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(30, 56, 92, 0.04);
+}
+
+.admin-outbox-summary > div {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-shrink: 0;
+}
+
+.admin-outbox-summary > div > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    background: #fff4e5;
+    color: #dc6803;
+    font-size: 21px;
+}
+
+.admin-outbox-summary > div > div {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.admin-outbox-summary small {
+    color: var(--outbox-muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.admin-outbox-summary strong {
+    color: var(--outbox-text);
+    font-size: 27px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.admin-outbox-summary > p {
+    max-width: 650px;
+    margin: 0;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+/* Table panel */
+
+.admin-outbox-table-panel {
+    width: 100%;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid var(--outbox-border);
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(30, 56, 92, 0.04);
+}
+
+.admin-outbox-panel-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 24px;
+    border-bottom: 1px solid var(--outbox-border);
+}
+
+.admin-outbox-panel-heading h2 {
+    margin: 0 0 6px;
+    color: var(--outbox-blue-dark);
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.admin-outbox-panel-heading p {
+    margin: 0;
+    color: var(--outbox-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* Table */
+
+.admin-outbox-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.admin-outbox-table-wrap table {
+    width: 100%;
+    min-width: 1050px;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.admin-outbox-table-wrap thead {
+    background: #f8fafc;
+}
+
+.admin-outbox-table-wrap th {
+    padding: 15px 16px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--outbox-border);
+}
+
+.admin-outbox-table-wrap td {
+    padding: 16px;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.6;
+    vertical-align: middle;
+    border-bottom: 1px solid #edf1f7;
+}
+
+.admin-outbox-table-wrap tbody tr {
+    transition: background 0.15s ease;
+}
+
+.admin-outbox-table-wrap tbody tr:hover {
+    background: #f8faff;
+}
+
+.admin-outbox-table-wrap tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.admin-outbox-table-wrap td strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+
+.admin-outbox-table-wrap td small {
+    display: block;
+    margin-top: 3px;
+    color: var(--outbox-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.admin-outbox-error-text {
+    min-width: 190px;
+    max-width: 280px;
+    color: #b42318 !important;
+    overflow-wrap: anywhere;
+}
+
+/* Retry button */
+
+.admin-outbox-retry {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 35px;
+    padding: 0 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.admin-outbox-retry:hover {
+    background: var(--outbox-blue);
+    border-color: var(--outbox-blue);
+    color: #fff;
+}
+
+/* Empty state */
+
+.admin-outbox-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
+    padding: 24px;
+    margin: 0;
+    color: var(--outbox-muted);
+    font-size: 14px;
+    text-align: center;
+}
+
+/* Retry form */
+
+.admin-outbox-retry-panel {
+    padding: 24px;
+    margin-top: 22px;
+    background: #fff;
+    border: 1px solid var(--outbox-border);
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(30, 56, 92, 0.04);
+}
+
+.admin-outbox-retry-panel > div:first-child {
+    margin-bottom: 20px;
+}
+
+.admin-outbox-retry-panel h2 {
+    margin: 0 0 7px;
+    color: var(--outbox-blue-dark);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.admin-outbox-retry-panel > div:first-child p {
+    margin: 0;
+    color: var(--outbox-muted);
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.admin-outbox-retry-panel > label {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.admin-outbox-retry-panel textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 13px 14px;
+    box-sizing: border-box;
+    border: 1px solid #dbe3ef;
+    border-radius: 9px;
+    outline: none;
+    background: #fff;
+    color: var(--outbox-text);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-outbox-retry-panel textarea::placeholder {
+    color: #a0aaba;
+}
+
+.admin-outbox-retry-panel textarea:focus {
+    border-color: var(--outbox-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Retry actions */
+
+.admin-outbox-retry-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.admin-outbox-retry-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 17px;
+    border: none;
+    border-radius: 8px;
+    background: var(--outbox-blue);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.admin-outbox-retry-actions button:not(:disabled):hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+.admin-outbox-retry-actions button.cancel {
+    border: 1px solid #dbe3ef;
+    background: #fff;
+    color: #475569;
+}
+
+.admin-outbox-retry-actions button.cancel:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.admin-outbox-retry-actions button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Focus accessibility */
+
+.admin-outbox-page button:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.25);
+    outline-offset: 2px;
+}
+
+/* Responsive */
+
+@media (max-width: 1024px) {
+    .admin-outbox-page {
+        padding: 22px;
+    }
+
+    .admin-outbox-summary {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .admin-outbox-summary > p {
+        max-width: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-outbox-page {
+        padding: 16px;
+    }
+
+    .admin-outbox-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .admin-outbox-header h1 {
+        font-size: 21px;
+    }
+
+    .admin-outbox-header > button {
+        width: 100%;
+    }
+
+    .admin-outbox-summary {
+        padding: 18px;
+    }
+
+    .admin-outbox-panel-heading {
+        padding: 18px;
+    }
+
+    .admin-outbox-retry-panel {
+        padding: 18px;
+    }
+}
+
+@media (max-width: 480px) {
+    .admin-outbox-page {
+        padding: 12px;
+    }
+
+    .admin-outbox-header h1 {
+        font-size: 19px;
+    }
+
+    .admin-outbox-summary > div > span {
+        width: 44px;
+        height: 44px;
+        font-size: 18px;
+    }
+
+    .admin-outbox-summary strong {
+        font-size: 24px;
+    }
+
+    .admin-outbox-retry-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+
+    .admin-outbox-retry-actions button {
+        width: 100%;
+    }
+}

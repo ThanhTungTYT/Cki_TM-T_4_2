@@ -1,0 +1,168 @@
+/* =========================================
+   ADMIN REALTIME NOTIFICATION
+========================================= */
+
+.admin-realtime-notification {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 9999;
+
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+
+    width: 380px;
+    max-width: calc(100vw - 32px);
+    padding: 17px;
+
+    background: #ffffff;
+    border: 1px solid #e8edf5;
+    border-left: 4px solid #2563eb;
+    border-radius: 13px;
+
+    box-shadow: 0 12px 35px rgba(30, 56, 92, 0.16);
+
+    animation: admin-notification-enter 0.3s ease;
+}
+
+.admin-realtime-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+
+    color: #2563eb;
+    background: #eff6ff;
+    border-radius: 11px;
+
+    font-size: 17px;
+}
+
+.admin-realtime-content {
+    flex: 1;
+    min-width: 0;
+    padding-top: 2px;
+}
+
+.admin-realtime-content strong {
+    display: block;
+    margin-bottom: 6px;
+
+    color: #1e385c;
+    font-size: 14px;
+    font-weight: 750;
+    line-height: 1.4;
+
+    overflow-wrap: anywhere;
+}
+
+.admin-realtime-content p {
+    margin: 0;
+
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.65;
+
+    overflow-wrap: anywhere;
+}
+
+.admin-realtime-content small {
+    display: block;
+    margin-top: 9px;
+
+    color: #94a3b8;
+    font-size: 10px;
+}
+
+.admin-realtime-notification > button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 29px;
+    height: 29px;
+    flex-shrink: 0;
+
+    padding: 0;
+    border: none;
+    border-radius: 7px;
+
+    color: #94a3b8;
+    background: transparent;
+
+    font-size: 15px;
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+}
+
+.admin-realtime-notification > button:hover {
+    color: #dc2626;
+    background: #fef2f2;
+}
+
+.admin-realtime-notification > button:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+
+/* =========================================
+   ANIMATION
+========================================= */
+
+@keyframes admin-notification-enter {
+    from {
+        opacity: 0;
+        transform: translateX(25px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* =========================================
+   RESPONSIVE
+========================================= */
+
+@media (max-width: 576px) {
+    .admin-realtime-notification {
+        top: 12px;
+        right: 12px;
+
+        width: auto;
+        max-width: calc(100vw - 24px);
+
+        padding: 13px;
+        gap: 10px;
+    }
+
+    .admin-realtime-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 15px;
+    }
+
+    .admin-realtime-content strong {
+        font-size: 13px;
+    }
+
+    .admin-realtime-content p {
+        font-size: 11px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-realtime-notification {
+        animation: none;
+    }
+
+    .admin-realtime-notification > button {
+        transition: none;
+    }
+}

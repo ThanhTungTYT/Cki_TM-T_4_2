@@ -22,9 +22,10 @@ import AdminComplaintManagement from './pages/admin/AdminComplaintManagement';
 import ForgotPassword from './pages/forgot-password';
 import AdminRefundManagement from './pages/admin/AdminRefundManagement';
 import AdminProviderChangeRequests from './pages/admin/AdminProviderChangeRequests';
+import AdminPromotions from './pages/admin/AdminPromotions';
+import AdminStaffOperations from './pages/admin/AdminStaffOperations';
+import AdminOutboxManagement from './pages/admin/AdminOutboxManagement';
 import PaymentResult from './pages/PaymentResult';
-
-// F01 — Cổng thông tin Đối tác
 import ProviderLayout from './pages/provider-portal/ProviderLayout';
 import ProviderDashboard from './pages/provider-portal/ProviderDashboard';
 import ProviderBookings from './pages/provider-portal/ProviderBookings';
@@ -34,12 +35,27 @@ import ProviderSchedule from './pages/provider-portal/ProviderSchedule';
 import ProviderServices from './pages/provider-portal/ProviderServices';
 import ProviderComplaints from './pages/provider-portal/ProviderComplaints';
 
+function HomeRoute() {
+    let user = {};
+
+    try {
+        user = JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user') || '{}');
+    } catch {}
+
+    const role = String(user.role || '').toUpperCase();
+
+    if (role === 'STAFF' || role === 'ROLE_STAFF') {
+        return <Navigate to="/admin/staff-operations" replace />;
+    }
+
+    return <Home />;
+}
+
 function App() {
     return (
         <BrowserRouter>
             <Routes>
-                {/* ---- Customer pages ---- */}
-                <Route path="/" element={<Home />} />
+                <Route path="/" element={<HomeRoute />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/services" element={<Services />} />
@@ -51,12 +67,9 @@ function App() {
                 <Route path="/verify-otp" element={<VerifyOtp />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/payment-result" element={<PaymentResult />} />
-
                 <Route path="/customer/bookings" element={<CustomerBookings />} />
                 <Route path="/customer/bookings/history" element={<CustomerBookingHistory />} />
                 <Route path="/customer/reports" element={<CustomerReports />} />
-
-                {/* ---- Admin pages ---- */}
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/accounts" element={<AdminAccounts />} />
                 <Route path="/admin/services" element={<AdminServices />} />
@@ -66,8 +79,9 @@ function App() {
                 <Route path="/admin/transactions" element={<AdminTransactions />} />
                 <Route path="/admin/complaints" element={<AdminComplaintManagement />} />
                 <Route path="/admin/refunds" element={<AdminRefundManagement />} />
-
-                {/* ---- F01: Provider Portal ---- */}
+                <Route path="/admin/promotions" element={<AdminPromotions />} />
+                <Route path="/admin/staff-operations" element={<AdminStaffOperations />} />
+                <Route path="/admin/outbox" element={<AdminOutboxManagement />} />
                 <Route path="/provider-portal" element={<ProviderLayout />}>
                     <Route index element={<Navigate to="dashboard" replace />} />
                     <Route path="dashboard" element={<ProviderDashboard />} />
@@ -84,4 +98,4 @@ function App() {
     );
 }
 
-export default App;
+export default App;

@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -9,7 +8,14 @@ import {
     faClock,
     faHashtag,
     faLayerGroup,
-    faTag
+    faTag,
+    faStar,
+    faLocationDot,
+    faUserGroup,
+    faBriefcase,
+    faRulerCombined,
+    faBuilding,
+    faCheckCircle
 } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -63,9 +69,18 @@ function getPricingUnit(pricingType) {
     return units[type] || '';
 }
 
+function formatRating(value) {
+    if (value === null || value === undefined) {
+        return 'Chưa có đánh giá';
+    }
+
+    return Number(value).toFixed(1);
+}
+
 function ServiceDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
+
     const [service, setService] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -101,7 +116,7 @@ function ServiceDetail() {
                         data?.detail ||
                         data?.error ||
                         (response.status === 404
-                            ? 'Không tìm thấy dịch vụ trong cơ sở dữ liệu.'
+                            ? 'Không tìm thấy dịch vụ hoặc dịch vụ đã ngừng hoạt động.'
                             : `Không thể tải dịch vụ. Mã lỗi: ${response.status}`)
                     );
                 }
@@ -110,7 +125,11 @@ function ServiceDetail() {
                     throw new Error('Backend không trả về thông tin dịch vụ hợp lệ.');
                 }
 
-                setService(data);
+                setService({
+                    ...data,
+                    packages: Array.isArray(data.packages) ? data.packages : [],
+                    providers: Array.isArray(data.providers) ? data.providers : []
+                });
             } catch (err) {
                 if (err.name !== 'AbortError') {
                     setError(
@@ -168,6 +187,8 @@ function ServiceDetail() {
     const price = service.basePrice;
     const unit = getPricingUnit(service.pricingType);
     const image = service.thumbnailUrl;
+    const packages = service.packages;
+    const providers = service.providers;
 
     return (
         <div className="detail-page">
@@ -184,7 +205,13 @@ function ServiceDetail() {
                 >
                     Trang chủ
                 </span>
-                <FontAwesomeIcon className="detail-breadcrumb-separator" icon={faChevronRight} aria-hidden="true" />
+
+                <FontAwesomeIcon
+                    className="detail-breadcrumb-separator"
+                    icon={faChevronRight}
+                    aria-hidden="true"
+                />
+
                 <span
                     role="link"
                     tabIndex={0}
@@ -195,7 +222,13 @@ function ServiceDetail() {
                 >
                     Dịch vụ
                 </span>
-                <FontAwesomeIcon className="detail-breadcrumb-separator" icon={faChevronRight} aria-hidden="true" />
+
+                <FontAwesomeIcon
+                    className="detail-breadcrumb-separator"
+                    icon={faChevronRight}
+                    aria-hidden="true"
+                />
+
                 <strong>{service.name || 'Chi tiết dịch vụ'}</strong>
             </nav>
 
@@ -225,12 +258,13 @@ function ServiceDetail() {
 
                         <div className="detail-rating">
                             <span className="detail-meta-item">
-                                <FontAwesomeIcon icon={faHashtag} aria-hidden="true" />
+                                <FontAwesomeIcon icon={faHashtag} />
                                 Mã dịch vụ: {service.id}
                             </span>
+
                             {service.status && (
                                 <span className={`detail-status-badge status-${String(service.status).toLowerCase()}`}>
-                                    <span className="detail-status-dot" aria-hidden="true" />
+                                    <span className="detail-status-dot" />
                                     {service.status}
                                 </span>
                             )}
@@ -239,42 +273,49 @@ function ServiceDetail() {
                         <hr />
 
                         <h2 className="detail-section-title">
-                            <FontAwesomeIcon icon={faLayerGroup} aria-hidden="true" />
+                            <FontAwesomeIcon icon={faLayerGroup} />
                             Mô tả dịch vụ
                         </h2>
+
                         <p className="detail-description">
                             {service.description || 'Chưa có mô tả cho dịch vụ này.'}
                         </p>
 
                         <h2 className="detail-section-title">
-                            <FontAwesomeIcon icon={faTag} aria-hidden="true" />
+                            <FontAwesomeIcon icon={faTag} />
                             Thông tin dịch vụ
                         </h2>
 
                         <div className="detail-specifications">
                             <div>
-                                <span><FontAwesomeIcon icon={faLayerGroup} aria-hidden="true" /> Loại dịch vụ</span>
-                                <strong>
-                                    {service.categoryName || 'Chưa cập nhật'}
-                                </strong>
+                                <span>
+                                    <FontAwesomeIcon icon={faLayerGroup} />
+                                    Loại dịch vụ
+                                </span>
+                                <strong>{service.categoryName || 'Chưa cập nhật'}</strong>
                             </div>
 
                             <div>
-                                <span><FontAwesomeIcon icon={faTag} aria-hidden="true" /> Hình thức tính giá</span>
-                                <strong>
-                                    {service.pricingType || 'Chưa cập nhật'}
-                                </strong>
+                                <span>
+                                    <FontAwesomeIcon icon={faTag} />
+                                    Hình thức tính giá
+                                </span>
+                                <strong>{service.pricingType || 'Chưa cập nhật'}</strong>
                             </div>
 
                             <div>
-                                <span><FontAwesomeIcon icon={faClock} aria-hidden="true" /> Thời gian dự kiến</span>
-                                <strong>
-                                    {formatDuration(service.estimatedMinutes)}
-                                </strong>
+                                <span>
+                                    <FontAwesomeIcon icon={faClock} />
+                                    Thời gian dự kiến
+                                </span>
+                                <strong>{formatDuration(service.estimatedMinutes)}</strong>
                             </div>
 
                             <div>
-                                <span><FontAwesomeIcon icon={faTag} aria-hidden="true" /> Giá cơ bản</span>
+                                <span>
+                                    <FontAwesomeIcon icon={faTag} />
+                                    Giá cơ bản
+                                </span>
                                 <strong>{formatPrice(price)}</strong>
                             </div>
 
@@ -287,16 +328,17 @@ function ServiceDetail() {
                         </div>
 
                         <p className="detail-disclaimer">
-                            Giá và thông tin hiển thị được lấy từ hệ thống.
-                            Vui lòng kiểm tra gói dịch vụ và chi phí cuối cùng
-                            trước khi xác nhận đặt lịch.
+                            Giá hiển thị là giá tham khảo. Chi phí thực tế có thể
+                            thay đổi theo Provider, gói dịch vụ và nhu cầu sử dụng.
+                            Vui lòng kiểm tra thông tin trước khi đặt lịch.
                         </p>
                     </div>
                 </section>
 
                 <aside className="detail-booking">
                     <span className="detail-price-label">
-                        <FontAwesomeIcon icon={faTag} aria-hidden="true" /> Giá cơ bản
+                        <FontAwesomeIcon icon={faTag} />
+                        Giá cơ bản
                     </span>
 
                     <div className="detail-price">
@@ -305,8 +347,8 @@ function ServiceDetail() {
                     </div>
 
                     <p className="detail-note">
-                        Giá cuối cùng có thể phụ thuộc vào gói dịch vụ,
-                        số lượng và các lựa chọn khi đặt lịch.
+                        Giá cuối cùng phụ thuộc vào Provider và gói dịch vụ
+                        mà bạn lựa chọn.
                     </p>
 
                     <button
@@ -314,7 +356,7 @@ function ServiceDetail() {
                         className="detail-book-button"
                         onClick={() => navigate('/services')}
                     >
-                        <FontAwesomeIcon icon={faCalendarCheck} aria-hidden="true" />
+                        <FontAwesomeIcon icon={faCalendarCheck} />
                         <span>Xem và chọn gói dịch vụ</span>
                     </button>
 
@@ -323,12 +365,244 @@ function ServiceDetail() {
                         className="detail-back-button"
                         onClick={() => navigate('/services')}
                     >
-                        <FontAwesomeIcon icon={faArrowLeft} aria-hidden="true" />
+                        <FontAwesomeIcon icon={faArrowLeft} />
                         <span>Quay lại danh sách</span>
                     </button>
                 </aside>
 
-                <ServiceReviews serviceId={service.id} />
+                <section style={{
+                    gridColumn: '1 / -1',
+                    marginTop: '30px'
+                }}>
+                    <h2 className="detail-section-title">
+                        <FontAwesomeIcon icon={faLayerGroup} />
+                        Các gói dịch vụ
+                    </h2>
+
+                    {packages.length === 0 ? (
+                        <p style={{ color: '#777', padding: '15px 0' }}>
+                            Hiện chưa có gói dịch vụ nào được công khai.
+                        </p>
+                    ) : (
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                            gap: '18px',
+                            marginTop: '20px'
+                        }}>
+                            {packages.map(item => (
+                                <article
+                                    key={item.id}
+                                    style={{
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: '14px',
+                                        padding: '20px',
+                                        background: '#fff',
+                                        boxShadow: '0 3px 12px rgba(0,0,0,0.04)'
+                                    }}
+                                >
+                                    <h3 style={{
+                                        color: '#15966f',
+                                        margin: '0 0 15px',
+                                        fontSize: '19px'
+                                    }}>
+                                        {item.name || 'Gói dịch vụ'}
+                                    </h3>
+
+                                    <p>
+                                        <FontAwesomeIcon icon={faTag} />
+                                        {' '}Giá:
+                                        <strong style={{ color: '#15966f', marginLeft: '5px' }}>
+                                            {formatPrice(item.price)}
+                                        </strong>
+                                    </p>
+
+                                    <p>
+                                        <FontAwesomeIcon icon={faClock} />
+                                        {' '}Thời gian:
+                                        {' '}{formatDuration(item.durationMinutes)}
+                                    </p>
+
+                                    <p>
+                                        <FontAwesomeIcon icon={faUserGroup} />
+                                        {' '}Số nhân viên:
+                                        {' '}{item.employeeCount ?? 'Chưa cập nhật'}
+                                    </p>
+
+                                    <p>
+                                        <FontAwesomeIcon icon={faRulerCombined} />
+                                        {' '}Diện tích:
+                                        {' '}
+                                        {item.minArea != null || item.maxArea != null
+                                            ? `${item.minArea ?? 0} - ${item.maxArea ?? 'Không giới hạn'} m²`
+                                            : 'Chưa cập nhật'}
+                                    </p>
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                <section style={{
+                    gridColumn: '1 / -1',
+                    marginTop: '30px'
+                }}>
+                    <h2 className="detail-section-title">
+                        <FontAwesomeIcon icon={faBuilding} />
+                        Nhà cung cấp dịch vụ
+                    </h2>
+
+                    {providers.length === 0 ? (
+                        <p style={{ color: '#777', padding: '15px 0' }}>
+                            Hiện chưa có nhà cung cấp nào đang cung cấp dịch vụ này.
+                        </p>
+                    ) : (
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                            gap: '18px',
+                            marginTop: '20px'
+                        }}>
+                            {providers.map(provider => (
+                                <article
+                                    key={provider.providerId}
+                                    style={{
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: '14px',
+                                        padding: '20px',
+                                        background: '#fff',
+                                        boxShadow: '0 3px 12px rgba(0,0,0,0.04)'
+                                    }}
+                                >
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        marginBottom: '15px'
+                                    }}>
+                                        {provider.avatarUrl ? (
+                                            <img
+                                                src={provider.avatarUrl}
+                                                alt={provider.businessName}
+                                                style={{
+                                                    width: '55px',
+                                                    height: '55px',
+                                                    borderRadius: '50%',
+                                                    objectFit: 'cover'
+                                                }}
+                                                onError={event => {
+                                                    event.currentTarget.style.display = 'none';
+                                                }}
+                                            />
+                                        ) : (
+                                            <div style={{
+                                                width: '55px',
+                                                height: '55px',
+                                                borderRadius: '50%',
+                                                background: '#e5f7ef',
+                                                color: '#15966f',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontSize: '22px',
+                                                fontWeight: 'bold'
+                                            }}>
+                                                {(provider.businessName || 'P').charAt(0).toUpperCase()}
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <h3 style={{
+                                                margin: 0,
+                                                color: '#173b35',
+                                                fontSize: '18px'
+                                            }}>
+                                                {provider.businessName || 'Nhà cung cấp'}
+                                            </h3>
+
+                                            <span style={{
+                                                color: '#15966f',
+                                                fontSize: '13px'
+                                            }}>
+                                                <FontAwesomeIcon icon={faCheckCircle} />
+                                                {' '}Đang cung cấp dịch vụ
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <p style={{
+                                        color: '#666',
+                                        lineHeight: 1.6
+                                    }}>
+                                        {provider.description || 'Nhà cung cấp chưa cập nhật mô tả.'}
+                                    </p>
+
+                                    <p>
+                                        <FontAwesomeIcon icon={faLocationDot} />
+                                        {' '}{provider.address || 'Chưa cập nhật địa chỉ'}
+                                    </p>
+
+                                    <p>
+                                        <FontAwesomeIcon icon={faStar} style={{ color: '#f5a623' }} />
+                                        {' '}Đánh giá:
+                                        <strong style={{ marginLeft: '5px' }}>
+                                            {formatRating(provider.ratingAverage)}
+                                        </strong>
+                                        {' '}({provider.totalReviews ?? 0} đánh giá)
+                                    </p>
+
+                                    <p>
+                                        <FontAwesomeIcon icon={faBriefcase} />
+                                        {' '}Công việc hoàn thành:
+                                        {' '}{provider.totalCompletedJobs ?? 0}
+                                    </p>
+
+                                    <div style={{
+                                        borderTop: '1px solid #eee',
+                                        marginTop: '15px',
+                                        paddingTop: '15px'
+                                    }}>
+                                        <span style={{ color: '#666' }}>
+                                            Giá cung cấp
+                                        </span>
+
+                                        <h3 style={{
+                                            color: '#15966f',
+                                            margin: '5px 0 0'
+                                        }}>
+                                            {formatPrice(provider.price)}
+                                        </h3>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(`/provider/${provider.providerId}`)}
+                                        style={{
+                                            width: '100%',
+                                            marginTop: '15px',
+                                            padding: '11px',
+                                            border: '1px solid #15966f',
+                                            borderRadius: '8px',
+                                            background: '#fff',
+                                            color: '#15966f',
+                                            cursor: 'pointer',
+                                            fontWeight: 600
+                                        }}
+                                    >
+                                        Xem hồ sơ nhà cung cấp
+                                    </button>
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                </section>
+
+                <section style={{
+                    gridColumn: '1 / -1',
+                    marginTop: '30px'
+                }}>
+                    <ServiceReviews serviceId={service.id} />
+                </section>
             </main>
 
             <Footer />

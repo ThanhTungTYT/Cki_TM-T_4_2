@@ -11,9 +11,9 @@ import org.ckitmdt.backend.repository.CancellationRefundRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -22,7 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,7 +32,6 @@ public class CancellationRefundService {
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
 
-    // Khách hàng gửi yêu cầu hoàn tiền.
     @Transactional
     public Map<String, Object> requestRefund(
             Long bookingId,
@@ -42,13 +40,12 @@ public class CancellationRefundService {
 
         User customer = currentUser(auth);
 
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy đơn hàng."
                 ));
 
-        // Chỉ chủ đơn mới được gửi yêu cầu.
         if (booking.getCustomer() == null
                 || !booking.getCustomer().getId().equals(customer.getId())) {
             throw new ResponseStatusException(
@@ -76,14 +73,13 @@ public class CancellationRefundService {
 
         String reason = text(body == null ? null : body.get("reason"));
 
-        if (reason.isBlank()) {
+        if (reason.isBlank() || reason.length() > 5000) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Vui lòng nhập lý do yêu cầu hoàn tiền."
+                    "Lý do yêu cầu hoàn tiền không được để trống và không vượt quá 5000 ký tự."
             );
         }
 
-        // Chỉ cộng tiền từ các giao dịch đã thanh toán thành công.
         List<Payment> payments =
                 paymentRepository.findByBooking_Id(bookingId);
 
@@ -113,7 +109,6 @@ public class CancellationRefundService {
         return row(refundRepository.save(refund));
     }
 
-    // Admin/Staff xem danh sách yêu cầu hoàn tiền.
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getRefundsForAdmin(
             Authentication auth) {
@@ -123,17 +118,16 @@ public class CancellationRefundService {
         return refundRepository.findTop200ByOrderByRequestedAtDesc()
                 .stream()
                 .map(this::row)
-                .collect(Collectors.toList());
+                .toList();
     }
 
-    // Admin/Staff duyệt hoặc từ chối yêu cầu.
     @Transactional
     public Map<String, Object> reviewRefund(
             Long id,
             Map<String, Object> body,
             Authentication auth) {
 
-        User operator = requireStaff(auth);
+        User operator = requireAdmin(auth);
 
         if (body == null) {
             throw new ResponseStatusException(
@@ -142,7 +136,7 @@ public class CancellationRefundService {
             );
         }
 
-        CancellationRefund refund = refundRepository.findById(id)
+        CancellationRefund refund = refundRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy yêu cầu hoàn tiền."
@@ -175,6 +169,8 @@ public class CancellationRefundService {
                 decisionNote
         );
 
+        LocalDateTime now = LocalDateTime.now();
+
         refund.setStatus(status);
 
         if ("APPROVED".equals(status)) {
@@ -185,7 +181,7 @@ public class CancellationRefundService {
 
         refund.setDecisionNote(decisionNote);
         refund.setReviewedBy(operator.getEmail());
-        refund.setReviewedAt(LocalDateTime.now());
+        refund.setReviewedAt(now);
 
         return row(refundRepository.save(refund));
     }
@@ -212,7 +208,7 @@ public class CancellationRefundService {
 
         if (!"PENDING_REVIEW".equalsIgnoreCase(refund.getStatus())) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
+                    HttpStatus.CONFLICT,
                     "Yêu cầu này đã được xử lý."
             );
         }
@@ -225,10 +221,10 @@ public class CancellationRefundService {
             );
         }
 
-        if (decisionNote.isBlank()) {
+        if (decisionNote.isBlank() || decisionNote.length() > 5000) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Vui lòng nhập lý do xử lý."
+                    "Vui lòng nhập ghi chú xử lý không vượt quá 5000 ký tự."
             );
         }
 
@@ -279,7 +275,21 @@ public class CancellationRefundService {
                 && !"ROLE_STAFF".equals(role)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "Bạn không có quyền xử lý yêu cầu hoàn tiền."
+                    "Bạn không có quyền xem yêu cầu hoàn tiền."
+            );
+        }
+
+        return user;
+    }
+
+    private User requireAdmin(Authentication auth) {
+        User user = currentUser(auth);
+        String role = upper(user.getRole());
+
+        if (!"ADMIN".equals(role) && !"ROLE_ADMIN".equals(role)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ Admin mới được duyệt hoặc từ chối yêu cầu hoàn tiền."
             );
         }
 
@@ -293,19 +303,31 @@ public class CancellationRefundService {
         User requester = refund.getRequestedBy();
 
         result.put("id", refund.getId());
-        result.put("bookingId",
-                booking != null ? booking.getId() : null);
-        result.put("bookingCode",
-                booking != null ? booking.getBookingCode() : null);
-        result.put("bookingStatus",
-                booking != null ? booking.getStatus() : null);
+        result.put(
+                "bookingId",
+                booking == null ? null : booking.getId()
+        );
+        result.put(
+                "bookingCode",
+                booking == null ? null : booking.getBookingCode()
+        );
+        result.put(
+                "bookingStatus",
+                booking == null ? null : booking.getStatus()
+        );
 
-        result.put("requestedById",
-                requester != null ? requester.getId() : null);
-        result.put("requestedByName",
-                requester != null ? requester.getFullName() : null);
-        result.put("requestedByEmail",
-                requester != null ? requester.getEmail() : null);
+        result.put(
+                "requestedById",
+                requester == null ? null : requester.getId()
+        );
+        result.put(
+                "requestedByName",
+                requester == null ? null : requester.getFullName()
+        );
+        result.put(
+                "requestedByEmail",
+                requester == null ? null : requester.getEmail()
+        );
 
         result.put("requestedAmount", refund.getRequestedAmount());
         result.put("approvedAmount", refund.getApprovedAmount());
@@ -315,6 +337,13 @@ public class CancellationRefundService {
         result.put("reviewedBy", refund.getReviewedBy());
         result.put("requestedAt", refund.getRequestedAt());
         result.put("reviewedAt", refund.getReviewedAt());
+
+        result.put(
+                "refundTransferStatus",
+                "APPROVED".equalsIgnoreCase(refund.getStatus())
+                        ? "WAITING_FOR_TRANSFER_EVIDENCE"
+                        : null
+        );
 
         return result;
     }

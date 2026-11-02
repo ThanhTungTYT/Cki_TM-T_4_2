@@ -3,6 +3,23 @@ import AdminLayout from "./AdminLayout";
 import "./AdminServices.css";
 
 const API_URL = "/api/admin/services";
+const EMPTY_SERVICE = {
+    name: "",
+    slug: "",
+    categoryId: "",
+    description: "",
+    thumbnailUrl: "",
+    pricingType: "FIXED",
+    basePrice: "",
+    estimatedMinutes: "",
+    displayOrder: "0",
+};
+const EMPTY_CATEGORY = {
+    name: "",
+    description: "",
+    imageUrl: "",
+    displayOrder: "0",
+};
 
 function getToken() {
     return (
@@ -14,912 +31,972 @@ function getToken() {
     );
 }
 
-async function apiRequest(url, options = {}) {
+async function apiRequest(path, options = {}) {
     const token = getToken();
-
     let response;
 
     try {
-        response = await fetch(url, {
+        response = await fetch(`${API_URL}${path}`, {
             ...options,
             headers: {
-                ...(options.body
-                    ? { "Content-Type": "application/json" }
-                    : {}),
-                ...(token
-                    ? { Authorization: `Bearer ${token}` }
-                    : {}),
+                Accept: "application/json",
+                ...(options.body ? { "Content-Type": "application/json" } : {}),
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 ...options.headers,
             },
         });
-    } catch (error) {
-        console.error("Không kết nối được API:", error);
-        throw new Error(
-            "Không kết nối được máy chủ. Hãy kiểm tra backend và cấu hình proxy."
-        );
+    } catch {
+        throw new Error("Không kết nối được máy chủ. Hãy kiểm tra backend và cấu hình proxy.");
     }
 
     const responseText = await response.text();
+    let data = null;
+
+    if (responseText) {
+        try {
+            data = JSON.parse(responseText);
+        } catch {
+            data = null;
+        }
+    }
 
     if (!response.ok) {
-        console.error("API URL:", url);
-        console.error("HTTP STATUS:", response.status);
-        console.error("SERVER RESPONSE:", responseText);
-        console.error("TOKEN EXISTS:", Boolean(token));
-
-        let message = responseText;
-
-        try {
-            const parsed = JSON.parse(responseText);
-            message =
-                parsed.message ||
-                parsed.error ||
-                parsed.detail ||
-                responseText;
-        } catch {
-            // Giữ nguyên nội dung phản hồi nếu không phải JSON.
-        }
-
-        if (response.status === 401) {
-            throw new Error(
-                message || "Phiên đăng nhập hết hạn hoặc token không hợp lệ."
-            );
-        }
-
-        if (response.status === 403) {
-            throw new Error(
-                message ||
-                "Máy chủ từ chối quyền truy cập. Hãy kiểm tra token và quyền ADMIN/STAFF."
-            );
-        }
-
-        throw new Error(message || `Lỗi HTTP ${response.status}`);
+        const error = new Error(
+            data?.message ||
+            data?.detail ||
+            data?.error ||
+            responseText ||
+            `Lỗi HTTP ${response.status}`
+        );
+        error.status = response.status;
+        throw error;
     }
 
-    if (response.status === 204 || !responseText) {
-        return null;
-    }
-
-    try {
-        return JSON.parse(responseText);
-    } catch {
+    if (responseText && data === null) {
         throw new Error("Dữ liệu máy chủ trả về không đúng định dạng JSON.");
     }
+
+    return data;
 }
 
-const STATUS_OPTIONS = [
-    "Chờ duyệt",
-    "Đang hoạt động",
-    "Tạm ngừng",
-];
-
 function normalizeStatus(status) {
-    const value = String(status || "").trim().toUpperCase();
-
-    if (
-        ["ACTIVE", "ĐANG HOẠT ĐỘNG", "APPROVED"].includes(value)
-    ) {
-        return "Đang hoạt động";
-    }
-
-    if (
-        ["PENDING", "PENDING_APPROVAL", "CHỜ DUYỆT"].includes(value)
-    ) {
-        return "Chờ duyệt";
-    }
-
-    if (
-        [
-            "INACTIVE",
-            "SUSPENDED",
-            "DISABLED",
-            "TẠM NGỪNG",
-            "LOCKED",
-        ].includes(value)
-    ) {
-        return "Tạm ngừng";
-    }
-
-    return STATUS_OPTIONS.includes(status)
-        ? status
-        : "Chờ duyệt";
+    return String(status || "").trim().toUpperCase() === "ACTIVE"
+        ? "Đang hoạt động"
+        : "Ngừng hoạt động";
 }
 
 function getStatusClass(status) {
-    const normalized = normalizeStatus(status);
-
-    if (normalized === "Đang hoạt động") {
-        return "status-active";
-    }
-
-    if (normalized === "Chờ duyệt") {
-        return "status-pending";
-    }
-
-    return "status-stopped";
+    return normalizeStatus(status) === "Đang hoạt động"
+        ? "status-active"
+        : "status-stopped";
 }
 
-function getPartnerName(partner) {
-    return (
-        partner?.name ||
-        partner?.businessName ||
-        partner?.fullName ||
-        partner?.user?.fullName ||
-        `Nhà cung cấp #${partner?.id ?? ""}`
-    );
-}
-
-function AdminServices() {
-    const [services, setServices] = useState([]);
-    const [categories, setCategories] = useState([]);
-    const [partners, setPartners] = useState([]);
-
-    const [loading, setLoading] = useState(true);
-    const [optionsLoading, setOptionsLoading] = useState(true);
-    const [error, setError] = useState("");
-    const [optionsError, setOptionsError] = useState("");
-
-    const [keyword, setKeyword] = useState("");
-    const [statusFilter, setStatusFilter] = useState("Tất cả");
-    const [categoryFilter, setCategoryFilter] = useState("Tất cả");
-
-    const [showForm, setShowForm] = useState(false);
-    const [editingId, setEditingId] = useState(null);
-    const [saving, setSaving] = useState(false);
-    const [deletingId, setDeletingId] = useState(null);
-    const [changingStatusId, setChangingStatusId] = useState(null);
-
-    const emptyForm = {
-        name: "",
-        categoryId: "",
-        partnerId: "",
-        price: "",
-        estimatedMinutes: "",
-        status: "Chờ duyệt",
-    };
-
-    const [form, setForm] = useState({ ...emptyForm });
-
-    const fetchServices = useCallback(async () => {
-        try {
-            setLoading(true);
-            setError("");
-
-            const data = await apiRequest(API_URL);
-            const list = Array.isArray(data)
-                ? data
-                : Array.isArray(data?.content)
-                    ? data.content
-                    : [];
-
-            setServices(
-                list.map((service) => ({
-                    ...service,
-                    status: normalizeStatus(service.status),
-                    category:
-                        service.category ||
-                        service.categoryName ||
-                        service.category?.name ||
-                        "",
-                    provider:
-                        service.provider ||
-                        service.partnerName ||
-                        service.businessName ||
-                        service.partner?.name ||
-                        "",
-                    duration:
-                        service.duration ??
-                        service.estimatedMinutes ??
-                        null,
-                }))
-            );
-        } catch (err) {
-            setError(err.message || "Không thể tải danh sách dịch vụ.");
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    const fetchOptions = useCallback(async () => {
-        try {
-            setOptionsLoading(true);
-            setOptionsError("");
-
-            const data = await apiRequest(`${API_URL}/options`);
-
-setCategories(
-    Array.isArray(data?.categories)
-        ? data.categories
-        : []
-);
-
-setPartners(
-    Array.isArray(data?.partners)
-        ? data.partners
-        : []
-);
-} catch (err) {
-    setOptionsError(
-        "Không tải được danh mục hoặc nhà cung cấp: " +
-        err.message
-    );
-} finally {
-    setOptionsLoading(false);
-}
-}, []);
-
-useEffect(() => {
-    fetchServices();
-    fetchOptions();
-}, [fetchServices, fetchOptions]);
-
-const filteredServices = useMemo(() => {
-    const search = keyword.trim().toLowerCase();
-
-    return services.filter((service) => {
-        const name = String(service.name || "").toLowerCase();
-        const provider = String(service.provider || "").toLowerCase();
-        const category =
-            typeof service.category === "string"
-                ? service.category
-                : service.category?.name || "";
-
-        const matchKeyword =
-            name.includes(search) ||
-            provider.toLowerCase().includes(search);
-
-        const matchStatus =
-            statusFilter === "Tất cả" ||
-            normalizeStatus(service.status) === statusFilter;
-
-        const matchCategory =
-            categoryFilter === "Tất cả" ||
-            category === categoryFilter;
-
-        return matchKeyword && matchStatus && matchCategory;
-    });
-}, [services, keyword, statusFilter, categoryFilter]);
-
-const activeCount = services.filter(
-    (item) => normalizeStatus(item.status) === "Đang hoạt động"
-).length;
-
-const pendingCount = services.filter(
-    (item) => normalizeStatus(item.status) === "Chờ duyệt"
-).length;
-
-const stoppedCount = services.filter(
-    (item) => normalizeStatus(item.status) === "Tạm ngừng"
-).length;
-
-const formatPrice = (price) => {
+function formatPrice(price) {
     if (price === null || price === undefined || price === "") {
-        return "—";
+        return "Chưa thiết lập";
     }
 
     const number = Number(price);
 
     return Number.isFinite(number)
-        ? number.toLocaleString("vi-VN") + " đ"
-        : "—";
-};
+        ? `${number.toLocaleString("vi-VN")} đ`
+        : "Chưa thiết lập";
+}
 
-const openAddForm = () => {
-    setEditingId(null);
-    setForm({ ...emptyForm });
-    setShowForm(true);
-};
-
-const openEditForm = (service) => {
-    setEditingId(service.id);
-
-    setForm({
-        name: service.name || "",
-        categoryId: String(
-            service.categoryId ?? service.category?.id ?? ""
-        ),
-        partnerId: String(
-            service.partnerId ?? service.partner?.id ?? ""
-        ),
-        price: String(service.price ?? ""),
-        estimatedMinutes: String(
-            service.estimatedMinutes ?? service.duration ?? ""
-        ),
-        status: normalizeStatus(service.status),
-    });
-
-    setShowForm(true);
-};
-
-const closeForm = () => {
-    if (saving) {
-        return;
+function formatDuration(minutes) {
+    if (minutes === null || minutes === undefined || minutes === "") {
+        return "Chưa thiết lập";
     }
 
-    setShowForm(false);
-    setEditingId(null);
-    setForm({ ...emptyForm });
-};
+    const value = Number(minutes);
 
-const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    if (!form.name.trim()) {
-        alert("Vui lòng nhập tên dịch vụ.");
-        return;
+    if (!Number.isFinite(value) || value <= 0) {
+        return "Chưa thiết lập";
     }
 
-    if (!form.categoryId || !form.partnerId) {
-        alert("Vui lòng chọn danh mục và nhà cung cấp.");
-        return;
+    if (value % 60 === 0) {
+        return `${value / 60} giờ`;
     }
 
-    if (
-        form.price === "" ||
-        !Number.isFinite(Number(form.price)) ||
-        Number(form.price) <= 0
-    ) {
-        alert("Giá dịch vụ phải lớn hơn 0.");
-        return;
+    if (value > 60) {
+        return `${Math.floor(value / 60)} giờ ${value % 60} phút`;
     }
 
-    if (
-        form.estimatedMinutes === "" ||
-        !Number.isFinite(Number(form.estimatedMinutes)) ||
-        Number(form.estimatedMinutes) <= 0
-    ) {
-        alert("Thời lượng dịch vụ phải lớn hơn 0.");
-        return;
-    }
+    return `${value} phút`;
+}
 
-    const payload = {
-        name: form.name.trim(),
-        categoryId: Number(form.categoryId),
-        partnerId: Number(form.partnerId),
-        price: Number(form.price),
-        estimatedMinutes: Number(form.estimatedMinutes),
-        status: form.status,
+export default function AdminServices() {
+    const [activeTab, setActiveTab] = useState("services");
+    const [services, setServices] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    const [notice, setNotice] = useState("");
+    const [keyword, setKeyword] = useState("");
+    const [statusFilter, setStatusFilter] = useState("ALL");
+    const [categoryFilter, setCategoryFilter] = useState("ALL");
+    const [serviceModal, setServiceModal] = useState(false);
+    const [categoryModal, setCategoryModal] = useState(false);
+    const [editingService, setEditingService] = useState(null);
+    const [editingCategory, setEditingCategory] = useState(null);
+    const [serviceForm, setServiceForm] = useState(EMPTY_SERVICE);
+    const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY);
+
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        setError("");
+
+        try {
+            const [serviceData, categoryData] = await Promise.all([
+                apiRequest(""),
+                apiRequest("/categories"),
+            ]);
+
+            setServices(Array.isArray(serviceData) ? serviceData : []);
+            setCategories(Array.isArray(categoryData) ? categoryData : []);
+        } catch (err) {
+            setError(err.message || "Không thể tải danh mục dịch vụ.");
+
+            if (err.status === 401) {
+                setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    const filteredServices = useMemo(() => {
+        const search = keyword.trim().toLocaleLowerCase("vi-VN");
+
+        return services.filter((service) => {
+            const matchesSearch =
+                !search ||
+                String(service.name || "").toLocaleLowerCase("vi-VN").includes(search) ||
+                String(service.slug || "").toLocaleLowerCase("vi-VN").includes(search);
+
+            const matchesStatus =
+                statusFilter === "ALL" ||
+                String(service.status).toUpperCase() === statusFilter;
+
+            const matchesCategory =
+                categoryFilter === "ALL" ||
+                String(service.categoryId) === categoryFilter;
+
+            return matchesSearch && matchesStatus && matchesCategory;
+        });
+    }, [services, keyword, statusFilter, categoryFilter]);
+
+    const activeServices = services.filter(
+        (item) => String(item.status).toUpperCase() === "ACTIVE"
+    ).length;
+
+    const inactiveServices = services.length - activeServices;
+
+    const activeCategories = categories.filter(
+        (item) => String(item.status).toUpperCase() === "ACTIVE"
+    ).length;
+
+    const openCreateService = () => {
+        setEditingService(null);
+        setServiceForm({
+            ...EMPTY_SERVICE,
+            categoryId: categories.find(
+                (item) => item.status === "ACTIVE"
+            )?.id?.toString() || "",
+        });
+        setError("");
+        setServiceModal(true);
     };
 
-    try {
-        setSaving(true);
+    const openEditService = (service) => {
+        setEditingService(service);
+        setServiceForm({
+            name: service.name || "",
+            slug: service.slug || "",
+            categoryId: service.categoryId?.toString() || "",
+            description: service.description || "",
+            thumbnailUrl: service.thumbnailUrl || "",
+            pricingType: service.pricingType || "FIXED",
+            basePrice: service.basePrice ?? "",
+            estimatedMinutes: service.estimatedMinutes ?? "",
+            displayOrder: service.displayOrder ?? 0,
+        });
+        setError("");
+        setServiceModal(true);
+    };
 
-        if (editingId !== null) {
-            await apiRequest(`${API_URL}/${editingId}`, {
-                method: "PUT",
-                body: JSON.stringify(payload),
-            });
+    const saveService = async (event) => {
+        event.preventDefault();
 
-            alert("Cập nhật dịch vụ thành công.");
-        } else {
-            await apiRequest(API_URL, {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
-
-            alert("Thêm dịch vụ thành công.");
+        if (saving) {
+            return;
         }
 
-        setShowForm(false);
-        setEditingId(null);
-        setForm({ ...emptyForm });
+        if (!serviceForm.name.trim() || !serviceForm.categoryId) {
+            setError("Vui lòng nhập tên dịch vụ và chọn danh mục.");
+            return;
+        }
 
-        await fetchServices();
-    } catch (err) {
-        alert("Không thể lưu dịch vụ: " + err.message);
-    } finally {
-        setSaving(false);
-    }
-};
+        if (
+            serviceForm.basePrice !== "" &&
+            (
+                !Number.isFinite(Number(serviceForm.basePrice)) ||
+                Number(serviceForm.basePrice) < 0
+            )
+        ) {
+            setError("Giá dịch vụ phải là số không âm.");
+            return;
+        }
 
-const changeStatus = async (service) => {
-    const currentStatus = normalizeStatus(service.status);
+        if (
+            serviceForm.estimatedMinutes !== "" &&
+            (
+                !Number.isInteger(Number(serviceForm.estimatedMinutes)) ||
+                Number(serviceForm.estimatedMinutes) <= 0
+            )
+        ) {
+            setError("Thời lượng phải là số nguyên dương.");
+            return;
+        }
 
-    const nextStatus =
-        currentStatus === "Đang hoạt động"
-            ? "Tạm ngừng"
-            : "Đang hoạt động";
+        setSaving(true);
+        setError("");
 
-    const actionText =
-        nextStatus === "Đang hoạt động"
-            ? "kích hoạt"
-            : "tạm ngừng";
+        try {
+            const payload = {
+                ...serviceForm,
+                categoryId: Number(serviceForm.categoryId),
+                basePrice: serviceForm.basePrice === ""
+                    ? null
+                    : Number(serviceForm.basePrice),
+                estimatedMinutes: serviceForm.estimatedMinutes === ""
+                    ? null
+                    : Number(serviceForm.estimatedMinutes),
+                displayOrder: Number(serviceForm.displayOrder) || 0,
+            };
 
-    if (
-        !window.confirm(
-            `Bạn có chắc muốn ${actionText} dịch vụ "${service.name}"?`
-        )
-    ) {
-        return;
-    }
+            await apiRequest(
+                editingService ? `/${editingService.id}` : "",
+                {
+                    method: editingService ? "PUT" : "POST",
+                    body: JSON.stringify(payload),
+                }
+            );
 
-    try {
-        setChangingStatusId(service.id);
+            setServiceModal(false);
+            setNotice(
+                editingService
+                    ? "Đã cập nhật dịch vụ toàn sàn."
+                    : "Đã tạo dịch vụ toàn sàn."
+            );
 
-        await apiRequest(`${API_URL}/${service.id}/status`, {
-            method: "PUT",
-            body: JSON.stringify({ status: nextStatus }),
+            await loadData();
+        } catch (err) {
+            setError(err.message || "Không thể lưu dịch vụ.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const toggleServiceStatus = async (service) => {
+        const nextStatus =
+            String(service.status).toUpperCase() === "ACTIVE"
+                ? "INACTIVE"
+                : "ACTIVE";
+
+        const message = nextStatus === "INACTIVE"
+            ? "Ngừng công bố dịch vụ này? Dữ liệu và lịch sử liên quan sẽ được giữ nguyên."
+            : "Kích hoạt lại dịch vụ này?";
+
+        if (!window.confirm(message)) {
+            return;
+        }
+
+        setError("");
+        setNotice("");
+
+        try {
+            await apiRequest(`/${service.id}/status`, {
+                method: "PATCH",
+                body: JSON.stringify({ status: nextStatus }),
+            });
+
+            setNotice(
+                nextStatus === "ACTIVE"
+                    ? "Đã kích hoạt dịch vụ."
+                    : "Đã ngừng công bố dịch vụ."
+            );
+
+            await loadData();
+        } catch (err) {
+            setError(err.message || "Không thể thay đổi trạng thái dịch vụ.");
+        }
+    };
+
+    const openCreateCategory = () => {
+        setEditingCategory(null);
+        setCategoryForm(EMPTY_CATEGORY);
+        setError("");
+        setCategoryModal(true);
+    };
+
+    const openEditCategory = (category) => {
+        setEditingCategory(category);
+        setCategoryForm({
+            name: category.name || "",
+            description: category.description || "",
+            imageUrl: category.imageUrl || "",
+            displayOrder: category.displayOrder ?? 0,
         });
+        setError("");
+        setCategoryModal(true);
+    };
 
-        await fetchServices();
-    } catch (err) {
-        alert("Không thể đổi trạng thái: " + err.message);
-    } finally {
-        setChangingStatusId(null);
-    }
-};
+    const saveCategory = async (event) => {
+        event.preventDefault();
 
-const deleteService = async (service) => {
-    if (
-        !window.confirm(
-            `Bạn có chắc muốn xóa dịch vụ "${service.name}" khỏi nhà cung cấp này?`
-        )
-    ) {
-        return;
-    }
+        if (saving) {
+            return;
+        }
 
-    try {
-        setDeletingId(service.id);
+        if (!categoryForm.name.trim()) {
+            setError("Vui lòng nhập tên danh mục.");
+            return;
+        }
 
-        await apiRequest(`${API_URL}/${service.id}`, {
-            method: "DELETE",
-        });
+        setSaving(true);
+        setError("");
 
-        await fetchServices();
-        alert("Đã xóa liên kết dịch vụ.");
-    } catch (err) {
-        alert("Không thể xóa dịch vụ: " + err.message);
-    } finally {
-        setDeletingId(null);
-    }
-};
+        try {
+            const payload = {
+                ...categoryForm,
+                displayOrder: Number(categoryForm.displayOrder) || 0,
+            };
 
-return (
-    <AdminLayout>
-        <div className="admin-services">
-            <div className="services-heading">
-                <div>
-                    <h1>Quản lý dịch vụ</h1>
-                    <p>
-                        Quản lý danh sách dịch vụ vệ sinh trên CleanMate.
-                    </p>
-                </div>
+            await apiRequest(
+                editingCategory
+                    ? `/categories/${editingCategory.id}`
+                    : "/categories",
+                {
+                    method: editingCategory ? "PUT" : "POST",
+                    body: JSON.stringify(payload),
+                }
+            );
 
-                <button
-                    type="button"
-                    className="service-add-btn"
-                    onClick={openAddForm}
-                >
-                    + Thêm dịch vụ
-                </button>
-            </div>
+            setCategoryModal(false);
+            setNotice(
+                editingCategory
+                    ? "Đã cập nhật danh mục."
+                    : "Đã tạo danh mục."
+            );
 
-            <div className="service-stats">
-                <div className="service-stat-card">
-                    <span>Tổng dịch vụ</span>
-                    <strong>{services.length}</strong>
-                </div>
+            await loadData();
+        } catch (err) {
+            setError(err.message || "Không thể lưu danh mục.");
+        } finally {
+            setSaving(false);
+        }
+    };
 
-                <div className="service-stat-card">
-                    <span>Đang hoạt động</span>
-                    <strong>{activeCount}</strong>
-                </div>
+    const toggleCategoryStatus = async (category) => {
+        const nextStatus =
+            String(category.status).toUpperCase() === "ACTIVE"
+                ? "INACTIVE"
+                : "ACTIVE";
 
-                <div className="service-stat-card">
-                    <span>Chờ duyệt</span>
-                    <strong>{pendingCount}</strong>
-                </div>
+        const message = nextStatus === "INACTIVE"
+            ? "Ngừng hoạt động danh mục? Các dịch vụ thuộc danh mục sẽ không còn hiển thị công khai, dữ liệu vẫn được giữ."
+            : "Kích hoạt lại danh mục?";
 
-                <div className="service-stat-card">
-                    <span>Tạm ngừng</span>
-                    <strong>{stoppedCount}</strong>
-                </div>
-            </div>
+        if (!window.confirm(message)) {
+            return;
+        }
 
-            <div className="service-content">
-                <div className="service-toolbar">
-                    <input
-                        type="text"
-                        placeholder="Tìm theo tên dịch vụ hoặc nhà cung cấp..."
-                        value={keyword}
-                        onChange={(event) =>
-                            setKeyword(event.target.value)
-                        }
-                    />
+        setError("");
+        setNotice("");
 
-                    <select
-                        value={categoryFilter}
-                        onChange={(event) =>
-                            setCategoryFilter(event.target.value)
-                        }
+        try {
+            await apiRequest(`/categories/${category.id}/status`, {
+                method: "PATCH",
+                body: JSON.stringify({ status: nextStatus }),
+            });
+
+            setNotice(
+                nextStatus === "ACTIVE"
+                    ? "Đã kích hoạt danh mục."
+                    : "Đã ngừng hoạt động danh mục."
+            );
+
+            await loadData();
+        } catch (err) {
+            setError(err.message || "Không thể thay đổi trạng thái danh mục.");
+        }
+    };
+
+    return (
+        <AdminLayout>
+            <div className="admin-services">
+                <div className="services-heading">
+                    <div>
+                        <h1>Danh mục dịch vụ toàn sàn</h1>
+                        <p>
+                            Quản lý dịch vụ và danh mục dùng chung. Giá chào bán
+                            riêng của Provider được quản lý tại quy trình duyệt yêu cầu.
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        className="service-add-btn"
+                        onClick={loadData}
+                        disabled={loading}
                     >
-                        <option value="Tất cả">Tất cả danh mục</option>
-
-                        {[
-                            ...new Set(
-                                services
-                                    .map((service) =>
-                                        typeof service.category === "string"
-                                            ? service.category
-                                            : service.category?.name || ""
-                                    )
-                                    .filter(Boolean)
-                            ),
-                        ].map((category) => (
-                            <option key={category} value={category}>
-                                {category}
-                            </option>
-                        ))}
-                    </select>
-
-                    <select
-                        value={statusFilter}
-                        onChange={(event) =>
-                            setStatusFilter(event.target.value)
-                        }
-                    >
-                        <option value="Tất cả">Tất cả trạng thái</option>
-
-                        {STATUS_OPTIONS.map((status) => (
-                            <option key={status} value={status}>
-                                {status}
-                            </option>
-                        ))}
-                    </select>
+                        {loading ? "Đang tải..." : "Làm mới"}
+                    </button>
                 </div>
 
-                {error && (
-                    <div className="service-error">
-                        <p>{error}</p>
-                        <button type="button" onClick={fetchServices}>
-                            Thử tải lại
+                <div className="service-stats">
+                    <div className="service-stat-card">
+                        <span>Tổng dịch vụ</span>
+                        <strong>{services.length}</strong>
+                    </div>
+
+                    <div className="service-stat-card">
+                        <span>Đang công bố</span>
+                        <strong>{activeServices}</strong>
+                    </div>
+
+                    <div className="service-stat-card">
+                        <span>Ngừng công bố</span>
+                        <strong>{inactiveServices}</strong>
+                    </div>
+
+                    <div className="service-stat-card">
+                        <span>Danh mục hoạt động</span>
+                        <strong>{activeCategories}</strong>
+                    </div>
+                </div>
+
+                <div className="service-content">
+                    <div
+                        style={{
+                            display: "flex",
+                            gap: 10,
+                            flexWrap: "wrap",
+                            marginBottom: 18,
+                            borderBottom: "1px solid #e2e8f0",
+                            paddingBottom: 12,
+                        }}
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("services")}
+                            style={{
+                                border: 0,
+                                borderRadius: 8,
+                                padding: "10px 15px",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                color: activeTab === "services" ? "#fff" : "#334155",
+                                background: activeTab === "services" ? "#15966f" : "#f1f5f9",
+                            }}
+                        >
+                            Dịch vụ toàn sàn ({services.length})
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("categories")}
+                            style={{
+                                border: 0,
+                                borderRadius: 8,
+                                padding: "10px 15px",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                color: activeTab === "categories" ? "#fff" : "#334155",
+                                background: activeTab === "categories" ? "#15966f" : "#f1f5f9",
+                            }}
+                        >
+                            Danh mục ({categories.length})
                         </button>
                     </div>
-                )}
 
-                {optionsError && (
-                    <div className="service-error">
-                        <p>{optionsError}</p>
-                        <button type="button" onClick={fetchOptions}>
-                            Tải lại danh mục và nhà cung cấp
-                        </button>
-                    </div>
-                )}
+                    {notice && (
+                        <div className="service-workflow-notice">
+                            <strong>{notice}</strong>
+                        </div>
+                    )}
 
-                <div className="service-table-wrapper">
-                    <table className="service-table">
-                        <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Tên dịch vụ</th>
-                            <th>Danh mục</th>
-                            <th>Nhà cung cấp</th>
-                            <th>Giá</th>
-                            <th>Thời lượng</th>
-                            <th>Trạng thái</th>
-                            <th>Thao tác</th>
-                        </tr>
-                        </thead>
+                    {error && (
+                        <div className="service-error">
+                            <p>{error}</p>
+                            <button type="button" onClick={loadData}>
+                                Tải lại
+                            </button>
+                        </div>
+                    )}
 
-                        <tbody>
-                        {loading && (
-                            <tr>
-                                <td colSpan="8" className="service-empty">
-                                    Đang tải danh sách dịch vụ...
-                                </td>
-                            </tr>
-                        )}
+                    {activeTab === "services" ? (
+                        <>
+                            <div className="service-toolbar">
+                                <input
+                                    type="text"
+                                    placeholder="Tìm theo tên hoặc mã slug dịch vụ..."
+                                    value={keyword}
+                                    onChange={(event) => setKeyword(event.target.value)}
+                                />
 
-                        {!loading &&
-                            !error &&
-                            filteredServices.map((service) => {
-                                const status = normalizeStatus(
-                                    service.status
-                                );
+                                <select
+                                    value={categoryFilter}
+                                    onChange={(event) => setCategoryFilter(event.target.value)}
+                                >
+                                    <option value="ALL">Tất cả danh mục</option>
+                                    {categories.map((category) => (
+                                        <option key={category.id} value={String(category.id)}>
+                                            {category.name}
+                                        </option>
+                                    ))}
+                                </select>
 
-                                return (
-                                    <tr key={service.id}>
-                                        <td>{service.id}</td>
-                                        <td>{service.name || "—"}</td>
-                                        <td>
-                                            {typeof service.category === "string"
-                                                ? service.category || "—"
-                                                : service.category?.name || "—"}
-                                        </td>
-                                        <td>{service.provider || "—"}</td>
-                                        <td>{formatPrice(service.price)}</td>
-                                        <td>
-                                            {service.duration
-                                                ? `${service.duration} phút`
-                                                : "—"}
-                                        </td>
-                                        <td>
-                                                    <span
-                                                        className={`service-status ${getStatusClass(status)}`}
-                                                    >
-                                                        {status}
-                                                    </span>
-                                        </td>
-                                        <td>
-                                            <div className="service-actions">
-                                                <button
-                                                    type="button"
-                                                    className="service-edit-btn"
-                                                    onClick={() =>
-                                                        openEditForm(service)
-                                                    }
-                                                >
-                                                    Sửa
-                                                </button>
+                                <select
+                                    value={statusFilter}
+                                    onChange={(event) => setStatusFilter(event.target.value)}
+                                >
+                                    <option value="ALL">Tất cả trạng thái</option>
+                                    <option value="ACTIVE">Đang hoạt động</option>
+                                    <option value="INACTIVE">Ngừng hoạt động</option>
+                                </select>
 
-                                                <button
-                                                    type="button"
-                                                    className="service-status-btn"
-                                                    disabled={
-                                                        changingStatusId === service.id
-                                                    }
-                                                    onClick={() =>
-                                                        changeStatus(service)
-                                                    }
-                                                >
-                                                    {changingStatusId === service.id
-                                                        ? "Đang xử lý..."
-                                                        : status === "Đang hoạt động"
-                                                            ? "Tạm ngừng"
-                                                            : "Kích hoạt"}
-                                                </button>
+                                <button
+                                    type="button"
+                                    className="service-add-btn"
+                                    onClick={openCreateService}
+                                >
+                                    Thêm dịch vụ
+                                </button>
+                            </div>
 
-                                                <button
-                                                    type="button"
-                                                    className="service-delete-btn"
-                                                    disabled={
-                                                        deletingId === service.id
-                                                    }
-                                                    onClick={() =>
-                                                        deleteService(service)
-                                                    }
-                                                >
-                                                    {deletingId === service.id
-                                                        ? "Đang xóa..."
-                                                        : "Xóa"}
-                                                </button>
-                                            </div>
-                                        </td>
+                            <div className="service-workflow-notice">
+                                <strong>Phân biệt danh mục toàn sàn và giá Provider</strong>
+                                <p>
+                                    Màn hình này quản lý thông tin gốc trong bảng services.
+                                    Không thay đổi partner_services hoặc giá của Provider.
+                                    Khi ngừng dịch vụ, hệ thống giữ nguyên dịch vụ, gói,
+                                    booking và lịch sử liên quan.
+                                </p>
+                            </div>
+
+                            <div className="service-table-wrapper">
+                                <table className="service-table">
+                                    <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Tên dịch vụ</th>
+                                        <th>Danh mục</th>
+                                        <th>Giá nền</th>
+                                        <th>Thời lượng</th>
+                                        <th>Provider đăng ký</th>
+                                        <th>Gói dịch vụ</th>
+                                        <th>Trạng thái</th>
+                                        <th>Thao tác</th>
                                     </tr>
-                                );
-                            })}
+                                    </thead>
 
-                        {!loading &&
-                            !error &&
-                            filteredServices.length === 0 && (
-                                <tr>
-                                    <td colSpan="8" className="service-empty">
-                                        Không tìm thấy dịch vụ phù hợp.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                    <tbody>
+                                    {loading && (
+                                        <tr>
+                                            <td colSpan="9" className="service-empty">
+                                                Đang tải dữ liệu...
+                                            </td>
+                                        </tr>
+                                    )}
 
-                <div className="service-table-footer">
-                    Hiển thị {filteredServices.length} / {services.length} dịch vụ
+                                    {!loading && filteredServices.map((service) => (
+                                        <tr key={service.id}>
+                                            <td>{service.id}</td>
+                                            <td>
+                                                <strong>{service.name || "—"}</strong>
+                                                <small>{service.slug || ""}</small>
+                                            </td>
+                                            <td>{service.category || "—"}</td>
+                                            <td>{formatPrice(service.basePrice)}</td>
+                                            <td>{formatDuration(service.estimatedMinutes)}</td>
+                                            <td>{service.partnerOfferCount ?? 0}</td>
+                                            <td>{service.packageCount ?? 0}</td>
+                                            <td>
+                                                    <span className={`service-status ${getStatusClass(service.status)}`}>
+                                                        {normalizeStatus(service.status)}
+                                                    </span>
+                                            </td>
+                                            <td>
+                                                <div className="service-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="service-edit-btn"
+                                                        onClick={() => openEditService(service)}
+                                                    >
+                                                        Sửa
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="service-status-btn"
+                                                        onClick={() => toggleServiceStatus(service)}
+                                                    >
+                                                        {String(service.status).toUpperCase() === "ACTIVE"
+                                                            ? "Ngừng"
+                                                            : "Kích hoạt"}
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+
+                                    {!loading && filteredServices.length === 0 && (
+                                        <tr>
+                                            <td colSpan="9" className="service-empty">
+                                                Không có dịch vụ phù hợp.
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="service-table-footer">
+                                Hiển thị {filteredServices.length} / {services.length} dịch vụ
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: 16,
+                                    flexWrap: "wrap",
+                                    marginBottom: 18,
+                                }}
+                            >
+                                <div>
+                                    <strong>Danh mục dịch vụ</strong>
+                                    <p>
+                                        Không xóa cứng danh mục để bảo toàn khóa ngoại và lịch sử.
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="service-add-btn"
+                                    onClick={openCreateCategory}
+                                >
+                                    Thêm danh mục
+                                </button>
+                            </div>
+
+                            <div className="service-table-wrapper">
+                                <table className="service-table">
+                                    <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Tên danh mục</th>
+                                        <th>Mô tả</th>
+                                        <th>Số dịch vụ</th>
+                                        <th>Thứ tự</th>
+                                        <th>Trạng thái</th>
+                                        <th>Thao tác</th>
+                                    </tr>
+                                    </thead>
+
+                                    <tbody>
+                                    {loading && (
+                                        <tr>
+                                            <td colSpan="7" className="service-empty">
+                                                Đang tải dữ liệu...
+                                            </td>
+                                        </tr>
+                                    )}
+
+                                    {!loading && categories.map((category) => (
+                                        <tr key={category.id}>
+                                            <td>{category.id}</td>
+                                            <td><strong>{category.name}</strong></td>
+                                            <td>{category.description || "—"}</td>
+                                            <td>{category.serviceCount ?? 0}</td>
+                                            <td>{category.displayOrder ?? 0}</td>
+                                            <td>
+                                                    <span className={`service-status ${getStatusClass(category.status)}`}>
+                                                        {normalizeStatus(category.status)}
+                                                    </span>
+                                            </td>
+                                            <td>
+                                                <div className="service-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="service-edit-btn"
+                                                        onClick={() => openEditCategory(category)}
+                                                    >
+                                                        Sửa
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="service-status-btn"
+                                                        onClick={() => toggleCategoryStatus(category)}
+                                                    >
+                                                        {String(category.status).toUpperCase() === "ACTIVE"
+                                                            ? "Ngừng"
+                                                            : "Kích hoạt"}
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+
+                                    {!loading && categories.length === 0 && (
+                                        <tr>
+                                            <td colSpan="7" className="service-empty">
+                                                Chưa có danh mục trong cơ sở dữ liệu.
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {showForm && (
+            {serviceModal && (
                 <div
                     className="service-modal-overlay"
-                    onClick={closeForm}
+                    onMouseDown={(event) => {
+                        if (event.target === event.currentTarget) {
+                            setServiceModal(false);
+                        }
+                    }}
                 >
-                    <div
-                        className="service-modal"
-                        onClick={(event) => event.stopPropagation()}
-                    >
+                    <div className="service-modal">
                         <div className="service-modal-header">
-                            <h2>
-                                {editingId !== null
-                                    ? "Cập nhật dịch vụ"
-                                    : "Thêm dịch vụ"}
-                            </h2>
-
-                            <button
-                                type="button"
-                                onClick={closeForm}
-                                disabled={saving}
-                            >
+                            <h2>{editingService ? "Cập nhật dịch vụ" : "Thêm dịch vụ toàn sàn"}</h2>
+                            <button type="button" onClick={() => setServiceModal(false)}>
                                 ×
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit}>
-                            <label htmlFor="service-name">
-                                Tên dịch vụ
-                            </label>
+                        <form onSubmit={saveService}>
+                            <label>Tên dịch vụ *</label>
                             <input
-                                id="service-name"
-                                value={form.name}
-                                onChange={(event) =>
-                                    setForm({
-                                        ...form,
-                                        name: event.target.value,
-                                    })
-                                }
-                                placeholder="Nhập tên dịch vụ"
+                                value={serviceForm.name}
+                                onChange={(event) => setServiceForm({
+                                    ...serviceForm,
+                                    name: event.target.value,
+                                })}
+                                maxLength={150}
                                 required
                             />
 
-                            <label htmlFor="service-category">
-                                Danh mục dịch vụ
-                            </label>
-                            <select
-                                id="service-category"
-                                value={form.categoryId}
-                                onChange={(event) =>
-                                    setForm({
-                                        ...form,
-                                        categoryId: event.target.value,
-                                    })
-                                }
-                                required
-                                disabled={optionsLoading}
-                            >
-                                <option value="">
-                                    {optionsLoading
-                                        ? "Đang tải danh mục..."
-                                        : "Chọn danh mục"}
-                                </option>
-
-                                {categories.map((category) => (
-                                    <option
-                                        key={category.id}
-                                        value={category.id}
-                                    >
-                                        {category.name}
-                                    </option>
-                                ))}
-                            </select>
-
-                            <label htmlFor="service-partner">
-                                Nhà cung cấp
-                            </label>
-                            <select
-                                id="service-partner"
-                                value={form.partnerId}
-                                onChange={(event) =>
-                                    setForm({
-                                        ...form,
-                                        partnerId: event.target.value,
-                                    })
-                                }
-                                required
-                                disabled={optionsLoading}
-                            >
-                                <option value="">
-                                    {optionsLoading
-                                        ? "Đang tải nhà cung cấp..."
-                                        : "Chọn nhà cung cấp"}
-                                </option>
-
-                                {partners.map((partner) => (
-                                    <option
-                                        key={partner.id}
-                                        value={partner.id}
-                                    >
-                                        {getPartnerName(partner)}
-                                        {partner.status
-                                            ? ` (${partner.status})`
-                                            : ""}
-                                    </option>
-                                ))}
-                            </select>
-
-                            {!optionsLoading && categories.length === 0 && (
-                                <p>
-                                    Chưa có danh mục để lựa chọn. Hãy kiểm tra
-                                    dữ liệu danh mục trong database.
-                                </p>
-                            )}
-
-                            {!optionsLoading && partners.length === 0 && (
-                                <p>
-                                    Chưa có nhà cung cấp để lựa chọn. Hãy kiểm
-                                    tra dữ liệu nhà cung cấp trong database.
-                                </p>
-                            )}
-
-                            <label htmlFor="service-price">
-                                Giá dịch vụ (VNĐ)
-                            </label>
+                            <label>Slug</label>
                             <input
-                                id="service-price"
+                                value={serviceForm.slug}
+                                onChange={(event) => setServiceForm({
+                                    ...serviceForm,
+                                    slug: event.target.value,
+                                })}
+                                placeholder="Để trống để tự tạo từ tên dịch vụ"
+                                maxLength={150}
+                            />
+
+                            <label>Danh mục *</label>
+                            <select
+                                value={serviceForm.categoryId}
+                                onChange={(event) => setServiceForm({
+                                    ...serviceForm,
+                                    categoryId: event.target.value,
+                                })}
+                                required
+                            >
+                                <option value="">Chọn danh mục</option>
+                                {categories
+                                    .filter((item) =>
+                                        String(item.status).toUpperCase() === "ACTIVE" ||
+                                        String(item.id) === String(serviceForm.categoryId)
+                                    )
+                                    .map((item) => (
+                                        <option key={item.id} value={item.id}>
+                                            {item.name}
+                                        </option>
+                                    ))}
+                            </select>
+
+                            <label>Mô tả</label>
+                            <textarea
+                                value={serviceForm.description}
+                                onChange={(event) => setServiceForm({
+                                    ...serviceForm,
+                                    description: event.target.value,
+                                })}
+                                rows={3}
+                                maxLength={5000}
+                            />
+
+                            <label>URL ảnh đại diện</label>
+                            <input
+                                type="url"
+                                value={serviceForm.thumbnailUrl}
+                                onChange={(event) => setServiceForm({
+                                    ...serviceForm,
+                                    thumbnailUrl: event.target.value,
+                                })}
+                                maxLength={500}
+                            />
+
+                            <label>Loại giá</label>
+                            <input value="Giá cố định (FIXED)" disabled />
+
+                            <label>Giá nền (VNĐ)</label>
+                            <input
                                 type="number"
-                                min="1"
+                                min="0"
                                 step="1000"
-                                value={form.price}
-                                onChange={(event) =>
-                                    setForm({
-                                        ...form,
-                                        price: event.target.value,
-                                    })
-                                }
-                                placeholder="Ví dụ: 250000"
-                                required
+                                value={serviceForm.basePrice}
+                                onChange={(event) => setServiceForm({
+                                    ...serviceForm,
+                                    basePrice: event.target.value,
+                                })}
                             />
 
-                            <label htmlFor="service-duration">
-                                Thời lượng (phút)
-                            </label>
+                            <label>Thời lượng dự kiến (phút)</label>
                             <input
-                                id="service-duration"
                                 type="number"
                                 min="1"
                                 step="1"
-                                value={form.estimatedMinutes}
-                                onChange={(event) =>
-                                    setForm({
-                                        ...form,
-                                        estimatedMinutes: event.target.value,
-                                    })
-                                }
-                                placeholder="Ví dụ: 120"
-                                required
+                                value={serviceForm.estimatedMinutes}
+                                onChange={(event) => setServiceForm({
+                                    ...serviceForm,
+                                    estimatedMinutes: event.target.value,
+                                })}
                             />
 
-                            <label htmlFor="service-status">
-                                Trạng thái
-                            </label>
-                            <select
-                                id="service-status"
-                                value={form.status}
-                                onChange={(event) =>
-                                    setForm({
-                                        ...form,
-                                        status: event.target.value,
-                                    })
-                                }
-                            >
-                                {STATUS_OPTIONS.map((status) => (
-                                    <option key={status} value={status}>
-                                        {status}
-                                    </option>
-                                ))}
-                            </select>
+                            <label>Thứ tự hiển thị</label>
+                            <input
+                                type="number"
+                                step="1"
+                                value={serviceForm.displayOrder}
+                                onChange={(event) => setServiceForm({
+                                    ...serviceForm,
+                                    displayOrder: event.target.value,
+                                })}
+                            />
 
                             <div className="service-modal-actions">
                                 <button
                                     type="button"
                                     className="service-cancel-btn"
-                                    onClick={closeForm}
-                                    disabled={saving}
+                                    onClick={() => setServiceModal(false)}
                                 >
                                     Hủy
                                 </button>
-
                                 <button
                                     type="submit"
                                     className="service-save-btn"
-                                    disabled={
-                                        saving ||
-                                        optionsLoading ||
-                                        categories.length === 0 ||
-                                        partners.length === 0
-                                    }
+                                    disabled={saving}
                                 >
-                                    {saving
-                                        ? "Đang lưu..."
-                                        : editingId !== null
-                                            ? "Lưu thay đổi"
-                                            : "Thêm dịch vụ"}
+                                    {saving ? "Đang lưu..." : "Lưu dịch vụ"}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-        </div>
-    </AdminLayout>
-);
-}
 
-export default AdminServices;
+            {categoryModal && (
+                <div
+                    className="service-modal-overlay"
+                    onMouseDown={(event) => {
+                        if (event.target === event.currentTarget) {
+                            setCategoryModal(false);
+                        }
+                    }}
+                >
+                    <div className="service-modal">
+                        <div className="service-modal-header">
+                            <h2>{editingCategory ? "Cập nhật danh mục" : "Thêm danh mục"}</h2>
+                            <button type="button" onClick={() => setCategoryModal(false)}>
+                                ×
+                            </button>
+                        </div>
+
+                        <form onSubmit={saveCategory}>
+                            <label>Tên danh mục *</label>
+                            <input
+                                value={categoryForm.name}
+                                onChange={(event) => setCategoryForm({
+                                    ...categoryForm,
+                                    name: event.target.value,
+                                })}
+                                maxLength={150}
+                                required
+                            />
+
+                            <label>Mô tả</label>
+                            <textarea
+                                value={categoryForm.description}
+                                onChange={(event) => setCategoryForm({
+                                    ...categoryForm,
+                                    description: event.target.value,
+                                })}
+                                rows={3}
+                                maxLength={5000}
+                            />
+
+                            <label>URL hình ảnh</label>
+                            <input
+                                type="url"
+                                value={categoryForm.imageUrl}
+                                onChange={(event) => setCategoryForm({
+                                    ...categoryForm,
+                                    imageUrl: event.target.value,
+                                })}
+                                maxLength={500}
+                            />
+
+                            <label>Thứ tự hiển thị</label>
+                            <input
+                                type="number"
+                                step="1"
+                                value={categoryForm.displayOrder}
+                                onChange={(event) => setCategoryForm({
+                                    ...categoryForm,
+                                    displayOrder: event.target.value,
+                                })}
+                            />
+
+                            <div className="service-modal-actions">
+                                <button
+                                    type="button"
+                                    className="service-cancel-btn"
+                                    onClick={() => setCategoryModal(false)}
+                                >
+                                    Hủy
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="service-save-btn"
+                                    disabled={saving}
+                                >
+                                    {saving ? "Đang lưu..." : "Lưu danh mục"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </AdminLayout>
+    );
+}
