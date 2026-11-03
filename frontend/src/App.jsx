@@ -34,6 +34,9 @@ import ProviderEmployees from './pages/provider-portal/ProviderEmployees';
 import ProviderSchedule from './pages/provider-portal/ProviderSchedule';
 import ProviderServices from './pages/provider-portal/ProviderServices';
 import ProviderComplaints from './pages/provider-portal/ProviderComplaints';
+import CleanerLayout from './pages/cleaner-portal/CleanerLayout';
+import CleanerDashboard from './pages/cleaner-portal/CleanerDashboard';
+import CleanerPlaceholder from './pages/cleaner-portal/CleanerPlaceholder';
 
 function HomeRoute() {
     let user = {};
@@ -43,6 +46,11 @@ function HomeRoute() {
     } catch {}
 
     const role = String(user.role || '').toUpperCase();
+    if (role === 'CLEANER' || role === 'EMPLOYEE' ||
+        role === 'ROLE_CLEANER' || role === 'ROLE_EMPLOYEE') {
+        return <Navigate to="/cleaner/dashboard" replace />;
+    }
+
 
     if (role === 'STAFF' || role === 'ROLE_STAFF') {
         return <Navigate to="/admin/staff-operations" replace />;
@@ -82,6 +90,16 @@ function App() {
                 <Route path="/admin/promotions" element={<AdminPromotions />} />
                 <Route path="/admin/staff-operations" element={<AdminStaffOperations />} />
                 <Route path="/admin/outbox" element={<AdminOutboxManagement />} />
+                <Route path="/cleaner" element={<CleanerLayout />}>
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route path="dashboard" element={<CleanerDashboard />} />
+                    <Route path="jobs" element={<CleanerPlaceholder />} />
+                    <Route path="calendar" element={<CleanerPlaceholder />} />
+                    <Route path="history" element={<CleanerPlaceholder />} />
+                    <Route path="notifications" element={<CleanerPlaceholder />} />
+                    <Route path="profile" element={<CleanerPlaceholder />} />
+                    <Route path="*" element={<CleanerPlaceholder />} />
+                </Route>
                 <Route path="/provider-portal" element={<ProviderLayout />}>
                     <Route index element={<Navigate to="dashboard" replace />} />
                     <Route path="dashboard" element={<ProviderDashboard />} />
