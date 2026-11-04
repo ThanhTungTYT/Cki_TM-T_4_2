@@ -22,6 +22,7 @@ public class BookingRewardLifecycleService {
     private final RewardTransactionRepository rewardTransactionRepository;
     private final BookingPromotionRepository bookingPromotionRepository;
     private final PromotionRepository promotionRepository;
+    private final UserRepository userRepository;
 
     @Transactional
     public void processBooking(Long bookingId) {
@@ -62,50 +63,8 @@ public class BookingRewardLifecycleService {
 
         RewardPolicy policy = rewardPolicyRepository.findById(1L).orElse(null);
 
-        if (policy == null || !Boolean.TRUE.equals(policy.getEnabled())) {
-            return;
-        }
-
-        BigDecimal amountStep = policy.getEarnAmountStep();
-        Integer earnPoints = policy.getEarnPoints();
-
-        if (amountStep == null
-                || amountStep.signum() <= 0
-                || earnPoints == null
-                || earnPoints <= 0
-                || booking.getTotalAmount() == null
-                || booking.getTotalAmount().signum() <= 0
-                || booking.getCustomer() == null) {
-            return;
-        }
-
-        long stepCount;
-
-        try {
-            stepCount = booking.getTotalAmount()
-                    .divideToIntegralValue(amountStep)
-                    .longValueExact();
-        } catch (ArithmeticException exception) {
-            log.error(
-                    "Không thể tính số điểm tích lũy cho booking {}.",
-                    booking.getId(),
-                    exception
-            );
-            return;
-        }
-
-        long earnedLong;
-
-        try {
-            earnedLong = Math.multiplyExact(stepCount, earnPoints.longValue());
-        } catch (ArithmeticException exception) {
-            log.error(
-                    "Số điểm tích lũy vượt giới hạn cho booking {}.",
-                    booking.getId(),
-                    exception
-            );
-            return;
-        }
+        if (booking.getCustomer() == null) return;
+        long earnedLong = CcoinRules.earned(booking.getTotalAmount());
 
         if (earnedLong <= 0 || earnedLong > Integer.MAX_VALUE) {
             return;
@@ -114,6 +73,7 @@ public class BookingRewardLifecycleService {
         int earnedPoints = (int) earnedLong;
         LocalDateTime now = LocalDateTime.now();
 
+        userRepository.findByIdForUpdate(booking.getCustomer().getId()).orElseThrow();
         RewardAccount account = rewardAccountRepository
                 .findByUserIdForUpdate(booking.getCustomer().getId())
                 .orElseGet(() -> rewardAccountRepository.save(
@@ -139,7 +99,7 @@ public class BookingRewardLifecycleService {
             return;
         }
 
-        Integer expiryMonths = policy.getExpiryMonths();
+        Integer expiryMonths = policy == null ? null : policy.getExpiryMonths();
 
         LocalDateTime expiresAt = expiryMonths != null && expiryMonths > 0
                 ? now.plusMonths(expiryMonths)

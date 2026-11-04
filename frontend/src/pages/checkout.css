@@ -4,6 +4,9 @@
    ======================================================== */
 
 .checkout-page {
+    color-scheme: light;
+    color: #334155;
+    font-family: Arial, Helvetica, sans-serif;
     min-height: 100vh;
     background: #f8fafc;
     display: flex;
@@ -748,6 +751,41 @@
 }
 
 /* Pricing Rows */
+.checkout-page .ccoin-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 0;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.checkout-page .ccoin-toggle input[type="checkbox"] {
+    appearance: auto;
+    flex: 0 0 14px;
+    width: 14px;
+    height: 14px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    accent-color: #2563eb;
+    cursor: inherit;
+}
+
+.checkout-page .ccoin-toggle:has(input:disabled) {
+    color: #64748b;
+    cursor: not-allowed;
+}
+
+.checkout-page .ccoin-toggle input:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 3px;
+}
+
 .pricing-rows {
     display: flex;
     flex-direction: column;

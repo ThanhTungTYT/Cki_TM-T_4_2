@@ -65,9 +65,7 @@ public class RewardController {
                 .map(this::toTransactionResponse)
                 .toList();
 
-        RewardPolicyResponse policyResponse = policy == null
-                ? null
-                : toPolicyResponse(policy);
+        RewardPolicyResponse policyResponse = toPolicyResponse(policy);
 
         RewardWalletResponse response = new RewardWalletResponse(
                 account == null ? 0 : zero(account.getBalance()),
@@ -95,15 +93,10 @@ public class RewardController {
 
     private RewardPolicyResponse toPolicyResponse(RewardPolicy policy) {
         return new RewardPolicyResponse(
-                policy.getEarnAmountStep(),
-                policy.getEarnPoints(),
-                policy.getPointValue(),
-                policy.getMaxRedeemPercent(),
-                policy.getMinRedeemPoints(),
-                policy.getMaxRedeemPoints(),
-                policy.getExpiryMonths(),
-                policy.getEnabled(),
-                policy.getAllowCombineWithPromotion()
+                BigDecimal.valueOf(1000), 1, BigDecimal.ONE,
+                BigDecimal.valueOf(100), 1000, Integer.MAX_VALUE,
+                policy == null ? 0 : policy.getExpiryMonths(), true,
+                policy == null || Boolean.TRUE.equals(policy.getAllowCombineWithPromotion())
         );
     }
 

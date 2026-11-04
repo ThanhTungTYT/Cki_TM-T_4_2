@@ -685,8 +685,9 @@ export default function AdminPromotions() {
                                 <div>
                                     <h2>Chính sách tích và đổi điểm</h2>
                                     <p>
-                                        Các thông số cấu hình cho chương trình
-                                        khách hàng thân thiết.
+                                        Quy đổi cố định: 1.000đ tích 1 Ccoin;
+                                        1.000 Ccoin giảm 1.000đ. Có thể cấu hình
+                                        thời hạn điểm và kết hợp khuyến mãi.
                                     </p>
                                 </div>
                             </div>
@@ -694,6 +695,7 @@ export default function AdminPromotions() {
                             <label className="promotion-toggle">
                                 <input
                                     type="checkbox"
+                                    disabled
                                     checked={policy.enabled}
                                     onChange={(event) =>
                                         setPolicy((current) => ({
@@ -711,6 +713,7 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="1"
+                                        readOnly
                                         value={policy.earnAmountStep}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -726,6 +729,7 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="1"
+                                        readOnly
                                         value={policy.earnPoints}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -741,6 +745,7 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="1"
+                                        readOnly
                                         value={policy.pointValue}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -757,6 +762,7 @@ export default function AdminPromotions() {
                                         type="number"
                                         min="0"
                                         max="100"
+                                        readOnly
                                         value={policy.maxRedeemPercent}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -772,6 +778,7 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="0"
+                                        readOnly
                                         value={policy.minRedeemPoints}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -787,6 +794,7 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="0"
+                                        readOnly
                                         value={policy.maxRedeemPoints}
                                         onChange={(event) =>
                                             setPolicy((current) => ({

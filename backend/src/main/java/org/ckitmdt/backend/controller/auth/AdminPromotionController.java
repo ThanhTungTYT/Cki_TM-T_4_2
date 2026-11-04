@@ -153,14 +153,14 @@ public class AdminPromotionController {
             return created;
         });
 
-        policy.setEarnAmountStep(request.earnAmountStep());
-        policy.setEarnPoints(request.earnPoints());
-        policy.setPointValue(request.pointValue());
-        policy.setMaxRedeemPercent(request.maxRedeemPercent());
-        policy.setMinRedeemPoints(request.minRedeemPoints());
-        policy.setMaxRedeemPoints(request.maxRedeemPoints());
+        policy.setEarnAmountStep(BigDecimal.valueOf(1000));
+        policy.setEarnPoints(1);
+        policy.setPointValue(BigDecimal.ONE);
+        policy.setMaxRedeemPercent(BigDecimal.valueOf(100));
+        policy.setMinRedeemPoints(1000);
+        policy.setMaxRedeemPoints(Integer.MAX_VALUE);
         policy.setExpiryMonths(request.expiryMonths());
-        policy.setEnabled(request.enabled());
+        policy.setEnabled(true);
         policy.setAllowCombineWithPromotion(request.allowCombineWithPromotion());
         policy.setUpdatedAt(LocalDateTime.now());
         policy.setUpdatedBy(actor.getId());
@@ -455,32 +455,11 @@ public class AdminPromotionController {
     }
 
     private RewardPolicyResponse toRewardPolicyResponse(RewardPolicy policy) {
-        if (policy == null) {
-            return new RewardPolicyResponse(
-                    BigDecimal.valueOf(10000),
-                    1,
-                    BigDecimal.valueOf(100),
-                    BigDecimal.valueOf(20),
-                    100,
-                    5000,
-                    12,
-                    false,
-                    false,
-                    null
-            );
-        }
-
         return new RewardPolicyResponse(
-                policy.getEarnAmountStep(),
-                policy.getEarnPoints(),
-                policy.getPointValue(),
-                policy.getMaxRedeemPercent(),
-                policy.getMinRedeemPoints(),
-                policy.getMaxRedeemPoints(),
-                policy.getExpiryMonths(),
-                Boolean.TRUE.equals(policy.getEnabled()),
-                Boolean.TRUE.equals(policy.getAllowCombineWithPromotion()),
-                policy.getUpdatedAt()
+                BigDecimal.valueOf(1000), 1, BigDecimal.ONE, BigDecimal.valueOf(100),
+                1000, Integer.MAX_VALUE, policy == null ? 0 : policy.getExpiryMonths(),
+                true, policy == null || Boolean.TRUE.equals(policy.getAllowCombineWithPromotion()),
+                policy == null ? null : policy.getUpdatedAt()
         );
     }
 

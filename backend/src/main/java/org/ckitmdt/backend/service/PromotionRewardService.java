@@ -23,6 +23,7 @@ public class PromotionRewardService {
     private final RewardAccountRepository rewardAccountRepository;
     private final RewardPolicyRepository rewardPolicyRepository;
     private final RewardTransactionRepository rewardTransactionRepository;
+    private final RewardExpiryService rewardExpiryService;
 
     public Pricing calculate(
             Long userId,
@@ -163,21 +164,16 @@ public class PromotionRewardService {
         if (requested > 0) {
             policy = rewardPolicyRepository.findById(1L).orElse(null);
 
-            if (policy == null || !Boolean.TRUE.equals(policy.getEnabled())) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Chương trình đổi điểm hiện chưa được bật."
-                );
-            }
-
             if (promotion != null
                     && (!Boolean.TRUE.equals(promotion.getCombinableWithPoints())
-                    || !Boolean.TRUE.equals(policy.getAllowCombineWithPromotion()))) {
+                    || (policy != null && !Boolean.TRUE.equals(policy.getAllowCombineWithPromotion())))) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "Mã khuyến mãi này không được kết hợp với điểm thưởng."
                 );
             }
+
+            if (lockForUpdate) rewardExpiryService.processAccount(userId);
 
             account = (lockForUpdate
                     ? rewardAccountRepository.findByUserIdForUpdate(userId)
@@ -200,64 +196,12 @@ public class PromotionRewardService {
                 );
             }
 
-            int minimumPoints = policy.getMinRedeemPoints() == null
-                    ? 0
-                    : policy.getMinRedeemPoints();
-
-            int maximumPoints = policy.getMaxRedeemPoints() == null
-                    ? 0
-                    : policy.getMaxRedeemPoints();
-
-            if (requested < minimumPoints) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Số điểm đổi chưa đạt mức tối thiểu."
-                );
+            try {
+                pointsUsed = CcoinRules.discountPoints(requested, subtotal.subtract(discount));
+            } catch (IllegalArgumentException exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage());
             }
-
-            if (requested > maximumPoints) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Số điểm đổi vượt quá giới hạn cho phép."
-                );
-            }
-
-            BigDecimal pointValue = policy.getPointValue();
-
-            if (pointValue == null || pointValue.signum() <= 0) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Giá trị quy đổi điểm hiện không hợp lệ."
-                );
-            }
-
-            BigDecimal amountAfterPromotion = subtotal.subtract(discount)
-                    .max(BigDecimal.ZERO);
-
-            BigDecimal maxPercent = policy.getMaxRedeemPercent() == null
-                    ? BigDecimal.ZERO
-                    : policy.getMaxRedeemPercent();
-
-            BigDecimal maximumDiscount = amountAfterPromotion
-                    .multiply(maxPercent)
-                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.DOWN);
-
-            int affordablePoints = maximumDiscount
-                    .divideToIntegralValue(pointValue)
-                    .intValue();
-
-            pointsUsed = Math.min(requested, affordablePoints);
-
-            if (pointsUsed < minimumPoints) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Giá trị đơn hàng không đủ điều kiện để đổi số điểm yêu cầu."
-                );
-            }
-
-            pointsDiscount = pointValue
-                    .multiply(BigDecimal.valueOf(pointsUsed))
-                    .setScale(2, RoundingMode.HALF_UP);
+            pointsDiscount = BigDecimal.valueOf(pointsUsed);
         }
 
         BigDecimal platformFee = BigDecimal.valueOf(10000);
