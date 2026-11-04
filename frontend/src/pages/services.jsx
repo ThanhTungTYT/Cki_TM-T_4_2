@@ -1,6 +1,6 @@
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faMagnifyingGlass,
@@ -28,13 +28,31 @@ function formatPrice(value) {
 
 function Services() {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const categoryQuery = searchParams.get('category') || '';
+    const selectedCategories = useMemo(() => categoryQuery.split(',').map(value => value.trim()).filter(Boolean), [categoryQuery]);
+    const selectedArea = searchParams.get('area') || '';
+
+    const setSelectedCategories = value => setSearchParams(previous => {
+        const next = new URLSearchParams(previous);
+        const current = (previous.get('category') || '').split(',').map(item => item.trim()).filter(Boolean);
+        const categories = typeof value === 'function' ? value(current) : value;
+        if (categories.length) next.set('category', categories.join(','));
+        else next.delete('category');
+        return next;
+    });
+
+    const setSelectedArea = value => setSearchParams(previous => {
+        const next = new URLSearchParams(previous);
+        if (value) next.set('area', value);
+        else next.delete('area');
+        return next;
+    });
     const dispatch = useCartDispatch();
     const [modalService, setModalService] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [bookingNow, setBookingNow] = useState(false);
     const [keyword, setKeyword] = useState('');
-    const [selectedCategories, setSelectedCategories] = useState([]);
-    const [selectedArea, setSelectedArea] = useState('');
     const [maxPrice, setMaxPrice] = useState(null);
     const [minRating, setMinRating] = useState(0);
     const [selectedPricingTypes, setSelectedPricingTypes] = useState([]);
@@ -47,6 +65,10 @@ function Services() {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [retryKey, setRetryKey] = useState(0);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [categoryQuery, selectedArea]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -148,8 +170,12 @@ function Services() {
 
     const clearFilters = () => {
         setKeyword('');
-        setSelectedCategories([]);
-        setSelectedArea('');
+        setSearchParams(previous => {
+            const next = new URLSearchParams(previous);
+            next.delete('category');
+            next.delete('area');
+            return next;
+        });
         setMaxPrice(filterOptions?.priceLimit ?? 0);
         setMinRating(0);
         setSelectedPricingTypes([]);
@@ -478,8 +504,8 @@ function Services() {
                                             <span className="rating">
                                                 <FontAwesomeIcon icon={faStar} />
                                                 {' '}
-                                                {Number(service.rating || 0) > 0
-                                                    ? `${Number(service.rating).toFixed(1)} (${Number(service.reviews || 0)})`
+                                                {Number(service.reviews || 0) > 0
+                                                    ? `${Number(service.rating || 0).toFixed(2)} (${Number(service.reviews).toLocaleString('vi-VN')} đánh giá)`
                                                     : 'Chưa có đánh giá'}
                                             </span>
 

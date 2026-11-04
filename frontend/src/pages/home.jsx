@@ -31,6 +31,35 @@ function Home() {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [searchArea, setSearchArea] = useState('');
+    const [searchCategory, setSearchCategory] = useState('');
+    const [searchFilters, setSearchFilters] = useState(null);
+    const [filtersLoading, setFiltersLoading] = useState(true);
+    const [filtersError, setFiltersError] = useState('');
+    const [filterRetry, setFilterRetry] = useState(0);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        publicServicesApi.getFilters({ signal: controller.signal })
+            .then(options => {
+                if (!controller.signal.aborted) setSearchFilters(options);
+            })
+            .catch(err => {
+                if (!controller.signal.aborted) setFiltersError(err.message || 'Không thể tải bộ lọc dịch vụ.');
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) setFiltersLoading(false);
+            });
+        return () => controller.abort();
+    }, [filterRetry]);
+
+    const handleSearch = event => {
+        event.preventDefault();
+        const params = new URLSearchParams();
+        if (searchArea) params.set('area', searchArea);
+        if (searchCategory) params.set('category', searchCategory);
+        navigate(`/services${params.size ? `?${params.toString()}` : ''}`);
+    };
 
     useEffect(() => {
         const controller = new AbortController();
@@ -77,20 +106,34 @@ function Home() {
                                 lựa chọn gói dịch vụ theo nhu cầu của bạn.
                             </p>
 
-                            <div className="search-box">
-                                <div className="search-item">
+                            <form className="search-box" onSubmit={handleSearch} aria-label="Tìm dịch vụ theo khu vực và loại dịch vụ" aria-busy={filtersLoading}>
+                                <label className="search-item" htmlFor="home-search-area">
                                     <span>KHU VỰC</span>
-                                    <strong>Tất cả quận huyện</strong>
-                                </div>
-                                <div className="search-item">
+                                    <select id="home-search-area" value={searchArea} onChange={event => setSearchArea(event.target.value)} disabled={filtersLoading || !searchFilters}>
+                                        <option value="">{filtersLoading ? 'Đang tải khu vực…' : 'Tất cả khu vực'}</option>
+                                        {(searchFilters?.areas || []).map(area => <option key={area.value} value={area.value}>{area.label}</option>)}
+                                    </select>
+                                </label>
+                                <label className="search-item" htmlFor="home-search-category">
                                     <span>LOẠI DỊCH VỤ</span>
-                                    <strong>Chọn dịch vụ</strong>
-                                </div>
-                                <button type="button" onClick={() => navigate('/services')}>
+                                    <select id="home-search-category" value={searchCategory} onChange={event => setSearchCategory(event.target.value)} disabled={filtersLoading || !searchFilters}>
+                                        <option value="">{filtersLoading ? 'Đang tải loại dịch vụ…' : 'Tất cả loại dịch vụ'}</option>
+                                        {(searchFilters?.categories || []).map(category => <option key={category.value} value={category.value}>{category.label}</option>)}
+                                    </select>
+                                </label>
+                                <button type="submit" disabled={filtersLoading}>
                                     <FontAwesomeIcon icon={faMagnifyingGlass} />
                                     Tìm dịch vụ
                                 </button>
-                            </div>
+                            </form>
+                            {filtersError && <div className="home-search-error" role="alert">
+                                <span>{filtersError}</span>
+                                <button type="button" onClick={() => {
+                                    setFiltersLoading(true);
+                                    setFiltersError('');
+                                    setFilterRetry(value => value + 1);
+                                }}>Tải lại bộ lọc</button>
+                            </div>}
                         </div>
 
                         <div className="hero-image">
