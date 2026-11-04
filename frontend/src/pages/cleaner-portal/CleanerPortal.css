@@ -915,3 +915,109 @@
         padding: 22px;
     }
 }
+/* =========================================
+   HOME BUTTON & LOGOUT BUTTON
+========================================= */
+
+.cl-sidebar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Nút về trang chủ trong sidebar */
+.cl-home-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #e0e7ef;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s, color 0.15s;
+    box-sizing: border-box;
+}
+
+.cl-home-btn:hover {
+    background: rgba(37, 99, 235, 0.35);
+    border-color: rgba(37, 99, 235, 0.6);
+    color: #fff;
+}
+
+/* Nút đăng xuất trong sidebar */
+.cl-logout-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: rgba(220, 38, 38, 0.15);
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    border-radius: 8px;
+    color: #fca5a5;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    transition: background 0.15s;
+    box-sizing: border-box;
+}
+
+.cl-logout-btn:hover {
+    background: rgba(220, 38, 38, 0.3);
+    color: #fff;
+}
+
+/* Nút về trang chủ trên topbar */
+.cl-topbar-home-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: #f1f5f9;
+    border: 1px solid var(--cl-border);
+    border-radius: 6px;
+    color: var(--cl-navy);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+}
+
+.cl-topbar-home-btn:hover {
+    background: var(--cl-primary);
+    border-color: var(--cl-primary);
+    color: #fff;
+}
+
+.cl-topbar-home-btn svg {
+    flex-shrink: 0;
+}
+
+/* Khoảng cách giữa nút trang chủ và thông tin tài khoản */
+.cl-topbar-right {
+    gap: 20px;
+}
+
+/* Responsive */
+@media (max-width: 520px) {
+    .cl-topbar-right {
+        gap: 10px;
+    }
+
+    .cl-topbar-home-btn {
+        padding: 7px 9px;
+        font-size: 11px;
+    }
+
+    .cl-topbar-home-btn span {
+        display: none;
+    }
+}

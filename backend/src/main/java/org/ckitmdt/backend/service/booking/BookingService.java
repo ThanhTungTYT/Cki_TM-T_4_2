@@ -33,6 +33,8 @@ public class BookingService {
     private final CartItemRepository cartItemRepository;
     private final PaymentRepository paymentRepository;
     private final PromotionRewardService promotionRewardService;
+    private final BookingAssignmentRepository bookingAssignmentRepository;
+    private final EmployeeRepository employeeRepository;
 
     @Transactional(readOnly = true)
     public BookingQuoteResponse calculateQuote(
@@ -397,6 +399,48 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
+    public List<BookingResponse> getCleanerBookings(String userEmail) {
+
+        User cleaner = getUserByEmail(userEmail);
+
+        // Chỉ tài khoản Cleaner/Employee mới được sử dụng API này
+        if (!isCleanerRole(cleaner.getRole())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ nhân viên vệ sinh mới được xem danh sách công việc."
+            );
+        }
+
+        // Tìm hồ sơ nhân viên tương ứng với tài khoản đăng nhập
+        Employee employee = employeeRepository.findByUser_Id(cleaner.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy hồ sơ nhân viên."
+                ));
+
+        if (!"ACTIVE".equalsIgnoreCase(employee.getStatus())
+                || !"ACTIVE".equalsIgnoreCase(cleaner.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Tài khoản nhân viên hiện không hoạt động."
+            );
+        }
+
+        // Lấy các công việc đã được nhà cung cấp phân công cho nhân viên
+        return bookingAssignmentRepository
+                .findByEmployee_IdOrderByAssignedAtDesc(employee.getId())
+                .stream()
+                .filter(assignment -> assignment.getBooking() != null)
+                .map(assignment ->
+                        bookingStateEngine.mapToBookingResponse(
+                                assignment.getBooking()
+                        )
+                )
+                .collect(Collectors.toList());
+    }
+
+
+    @Transactional(readOnly = true)
     public BookingResponse getBookingDetail(Long id, String userEmail) {
         User user = getUserByEmail(userEmail);
 
@@ -415,8 +459,9 @@ public class BookingService {
 
         boolean isAdmin = "ADMIN".equalsIgnoreCase(user.getRole())
                 || "STAFF".equalsIgnoreCase(user.getRole());
+        boolean isAssignedCleaner = isAssignedCleaner(booking, user);
 
-        if (!isCustomer && !isPartner && !isAdmin) {
+        if (!isCustomer && !isPartner && !isAdmin && !isAssignedCleaner) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Bạn không có quyền xem đơn hàng này."
@@ -448,6 +493,49 @@ public class BookingService {
                         "Người dùng chưa xác thực hoặc không tồn tại."
                 ));
     }
+
+    private boolean isCleanerRole(String role) {
+        if (role == null) {
+            return false;
+        }
+
+        String normalized = role.trim().toUpperCase(Locale.ROOT);
+
+        return normalized.equals("CLEANER")
+                || normalized.equals("ROLE_CLEANER")
+                || normalized.equals("EMPLOYEE")
+                || normalized.equals("ROLE_EMPLOYEE");
+    }
+
+    private boolean isAssignedCleaner(Booking booking, User user) {
+
+        if (booking == null
+                || booking.getId() == null
+                || user == null
+                || !isCleanerRole(user.getRole())) {
+            return false;
+        }
+
+        return bookingAssignmentRepository
+                .findByBooking_IdOrderByIdAsc(booking.getId())
+                .stream()
+                .filter(assignment -> assignment.getEmployee() != null)
+                .anyMatch(assignment -> {
+
+                    Employee employee = assignment.getEmployee();
+
+                    return employee.getUser() != null
+                            && Objects.equals(
+                            employee.getUser().getId(),
+                            user.getId()
+                    )
+                            && "ACTIVE".equalsIgnoreCase(employee.getStatus())
+                            && "ACTIVE".equalsIgnoreCase(
+                            employee.getUser().getStatus()
+                    );
+                });
+    }
+
 
     private String generateBookingCode() {
         for (int attempt = 0; attempt < 10; attempt++) {

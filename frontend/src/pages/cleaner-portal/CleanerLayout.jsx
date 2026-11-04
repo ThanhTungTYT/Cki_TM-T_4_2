@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import {
     NavLink,
@@ -113,6 +112,12 @@ function Icon({ name, size = 20 }) {
                 <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
             </>
         ),
+        home: (
+            <>
+                <path d="m3 10 9-7 9 7" />
+                <path d="M5 9v12h14V9M9 21v-7h6v7" />
+            </>
+        ),
         menu: (
             <>
                 <path d="M4 6h16M4 12h16M4 18h16" />
@@ -171,10 +176,19 @@ function CleanerLayout() {
                 />
             )}
 
-            <aside className={`cl-sidebar ${mobileMenuOpen ? 'cl-sidebar-open' : ''}`}>
+            <aside
+                className={`cl-sidebar ${
+                    mobileMenuOpen ? 'cl-sidebar-open' : ''
+                }`}
+            >
                 <div className="cl-brand">
-                    <Link to="/cleaner/dashboard" className="cl-brand-link">
+                    <Link
+                        to="/cleaner/dashboard"
+                        className="cl-brand-link"
+                        onClick={closeMobileMenu}
+                    >
                         <div className="cl-brand-logo">C</div>
+
                         <div className="cl-brand-text">
                             <span>CleanMate</span>
                             <small>Cleaner Portal</small>
@@ -185,6 +199,7 @@ function CleanerLayout() {
                         className="cl-mobile-close"
                         onClick={closeMobileMenu}
                         aria-label="Đóng menu"
+                        type="button"
                     >
                         <Icon name="close" />
                     </button>
@@ -213,19 +228,32 @@ function CleanerLayout() {
                 <div className="cl-sidebar-bottom">
                     <div className="cl-sidebar-support">
                         <div className="cl-support-icon">?</div>
+
                         <div>
                             <strong>Cần hỗ trợ?</strong>
                             <span>Liên hệ quản lý của bạn</span>
                         </div>
                     </div>
 
-                    <button
-                        className="cl-logout"
-                        onClick={handleLogout}
-                    >
-                        <Icon name="logout" size={19} />
-                        <span>Đăng xuất</span>
-                    </button>
+                    <div className="cl-sidebar-actions">
+                        <Link
+                            to="/"
+                            className="cl-home-btn"
+                            title="Quay về trang chủ"
+                        >
+                            <Icon name="home" size={17} />
+                            <span>Về trang chủ</span>
+                        </Link>
+
+                        <button
+                            className="cl-logout-btn"
+                            onClick={handleLogout}
+                            type="button"
+                        >
+                            <Icon name="logout" size={17} />
+                            <span>Đăng xuất</span>
+                        </button>
+                    </div>
                 </div>
             </aside>
 
@@ -236,6 +264,7 @@ function CleanerLayout() {
                             className="cl-menu-toggle"
                             onClick={() => setMobileMenuOpen(true)}
                             aria-label="Mở menu"
+                            type="button"
                         >
                             <Icon name="menu" />
                         </button>
@@ -248,6 +277,15 @@ function CleanerLayout() {
                     </div>
 
                     <div className="cl-topbar-right">
+                        <Link
+                            to="/"
+                            className="cl-topbar-home-btn"
+                            title="Quay về trang chủ"
+                        >
+                            <Icon name="home" size={16} />
+                            <span>Về trang chủ</span>
+                        </Link>
+
                         <div className="cl-user-info">
                             <div className="cl-user-avatar">
                                 {userName.charAt(0).toUpperCase()}
