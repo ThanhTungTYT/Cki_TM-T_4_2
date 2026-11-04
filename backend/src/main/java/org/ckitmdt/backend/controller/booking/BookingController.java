@@ -65,6 +65,19 @@ public class BookingController {
         );
     }
 
+    /**
+     * Lấy danh sách phân công chi tiết của Cleaner hiện tại
+     */
+    @GetMapping("/cleaner/me/assignments")
+    public ResponseEntity<List<CleanerAssignmentResponse>> getMyCleanerAssignments(
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(
+                bookingService.getCleanerAssignments(authentication.getName())
+        );
+    }
+
+
 
     /**
      * Xem chi tiết đơn hàng kèm snapshot và timeline trạng thái (CN17)

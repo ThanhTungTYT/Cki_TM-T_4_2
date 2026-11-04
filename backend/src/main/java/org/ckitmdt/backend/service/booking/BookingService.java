@@ -439,6 +439,58 @@ public class BookingService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<CleanerAssignmentResponse> getCleanerAssignments(String userEmail) {
+
+        User cleaner = getUserByEmail(userEmail);
+
+        // Chỉ tài khoản Cleaner/Employee mới được sử dụng API này
+        if (!isCleanerRole(cleaner.getRole())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ nhân viên vệ sinh mới được xem danh sách phân công."
+            );
+        }
+
+        // Tìm hồ sơ nhân viên tương ứng với tài khoản đăng nhập
+        Employee employee = employeeRepository.findByUser_Id(cleaner.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy hồ sơ nhân viên."
+                ));
+
+        if (!"ACTIVE".equalsIgnoreCase(employee.getStatus())
+                || !"ACTIVE".equalsIgnoreCase(cleaner.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Tài khoản nhân viên hiện không hoạt động."
+            );
+        }
+
+        // Lấy từng bản ghi phân công của nhân viên
+        return bookingAssignmentRepository
+                .findByEmployee_IdOrderByAssignedAtDesc(employee.getId())
+                .stream()
+                .filter(assignment -> assignment.getBooking() != null)
+                .map(assignment -> CleanerAssignmentResponse.builder()
+                        .assignmentId(assignment.getId())
+                        .assignmentStatus(assignment.getStatus())
+                        .assignedAt(assignment.getAssignedAt())
+                        .acceptedAt(assignment.getAcceptedAt())
+                        .startedAt(assignment.getStartedAt())
+                        .completedAt(assignment.getCompletedAt())
+                        .assignmentNote(assignment.getNote())
+                        .booking(
+                                bookingStateEngine.mapToBookingResponse(
+                                        assignment.getBooking()
+                                )
+                        )
+                        .build()
+                )
+                .collect(Collectors.toList());
+    }
+
+
 
     @Transactional(readOnly = true)
     public BookingResponse getBookingDetail(Long id, String userEmail) {

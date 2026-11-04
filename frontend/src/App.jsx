@@ -37,13 +37,20 @@ import ProviderComplaints from './pages/provider-portal/ProviderComplaints';
 import CleanerLayout from './pages/cleaner-portal/CleanerLayout';
 import CleanerDashboard from './pages/cleaner-portal/CleanerDashboard';
 import CleanerPlaceholder from './pages/cleaner-portal/CleanerPlaceholder';
+import CleanerJobs from './pages/cleaner-portal/CleanerJobs';
 
 function HomeRoute() {
     let user = {};
 
     try {
-        user = JSON.parse(sessionStorage.getItem('user') || localStorage.getItem('user') || '{}');
-    } catch {}
+        user = JSON.parse(
+            sessionStorage.getItem('user') ||
+            localStorage.getItem('user') ||
+            '{}'
+        );
+    } catch (error) {
+        console.error('Không thể đọc thông tin người dùng:', error);
+    }
 
     const role = String(user.role || '').toUpperCase();
     if (role === 'CLEANER' || role === 'EMPLOYEE' ||
@@ -93,7 +100,7 @@ function App() {
                 <Route path="/cleaner" element={<CleanerLayout />}>
                     <Route index element={<Navigate to="dashboard" replace />} />
                     <Route path="dashboard" element={<CleanerDashboard />} />
-                    <Route path="jobs" element={<CleanerPlaceholder />} />
+                    <Route path="jobs" element={<CleanerJobs />} />
                     <Route path="calendar" element={<CleanerPlaceholder />} />
                     <Route path="history" element={<CleanerPlaceholder />} />
                     <Route path="notifications" element={<CleanerPlaceholder />} />
