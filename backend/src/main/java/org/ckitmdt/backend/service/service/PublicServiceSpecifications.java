@@ -74,8 +74,7 @@ public final class PublicServiceSpecifications {
 
             if (minRating != null) {
                 predicates.add(cb.greaterThanOrEqualTo(
-                        cb.coalesce(root.get("partner").get("ratingAverage"), BigDecimal.ZERO),
-                        BigDecimal.valueOf(minRating)));
+                        serviceAverageRating(root, query, cb), minRating));
             }
 
             if (pricingType != null && !pricingType.isBlank()) {
@@ -143,19 +142,28 @@ public final class PublicServiceSpecifications {
         Subquery<Long> reviewCount = query.subquery(Long.class);
         Root<Review> review = reviewCount.from(Review.class);
         reviewCount.select(cb.count(review));
-        reviewCount.where(cb.equal(review.get("partner").get("id"), root.get("partner").get("id")));
+        reviewCount.where(cb.equal(review.get("service").get("id"), root.get("service").get("id")));
 
         if ("price-asc".equals(sortBy)) {
             query.orderBy(cb.asc(price), cb.asc(root.get("id")));
         } else if ("price-desc".equals(sortBy)) {
             query.orderBy(cb.desc(price), cb.asc(root.get("id")));
         } else if ("rating".equals(sortBy)) {
-            query.orderBy(cb.desc(root.get("partner").get("ratingAverage")), cb.asc(root.get("id")));
+            query.orderBy(cb.desc(serviceAverageRating(root, query, cb)), cb.asc(root.get("id")));
         } else if ("reviews".equals(sortBy)) {
             query.orderBy(cb.desc(reviewCount), cb.asc(root.get("id")));
         } else {
             query.orderBy(cb.desc(reviewCount), cb.asc(root.get("id")));
         }
+    }
+
+    private static Expression<Double> serviceAverageRating(
+            Root<PartnerService> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
+        Subquery<Double> average = query.subquery(Double.class);
+        Root<Review> review = average.from(Review.class);
+        average.select(cb.avg(review.<Integer>get("rating")));
+        average.where(cb.equal(review.get("service").get("id"), root.get("service").get("id")));
+        return cb.coalesce(average, 0D);
     }
 
     private static String pattern(String value) {

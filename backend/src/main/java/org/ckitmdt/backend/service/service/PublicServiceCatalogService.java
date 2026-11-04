@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -64,9 +65,16 @@ public class PublicServiceCatalogService {
                 keyword, category, area, maxPrice, minRating, pricingType, sortBy);
         Pageable pageable = PageRequest.of(page, pageSize, Sort.unsorted());
         Page<PartnerService> result = partnerServiceRepository.findAll(specification, pageable);
+        List<Long> serviceIds = result.getContent().stream()
+                .map(offer -> offer.getService().getId()).distinct().toList();
+        Map<Long, ReviewRepository.ServiceReviewStats> reviewStats = serviceIds.isEmpty()
+                ? Map.of()
+                : reviewRepository.summarizeByServiceIds(serviceIds).stream()
+                        .collect(Collectors.toMap(ReviewRepository.ServiceReviewStats::getServiceId, stats -> stats));
 
         return PublicServicePageDto.builder()
-                .content(result.getContent().stream().map(this::toDto).toList())
+                .content(result.getContent().stream()
+                        .map(offer -> toDto(offer, reviewStats.get(offer.getService().getId()))).toList())
                 .totalElements(result.getTotalElements())
                 .totalPages(result.getTotalPages())
                 .page(result.getNumber())
@@ -118,7 +126,7 @@ public class PublicServiceCatalogService {
                 .value(value).label(label).count(count).build();
     }
 
-    private PublicServiceListItemDto toDto(PartnerService offer) {
+    private PublicServiceListItemDto toDto(PartnerService offer, ReviewRepository.ServiceReviewStats stats) {
         var service = offer.getService();
         var partner = offer.getPartner();
         List<ServicePackageListItemDto> packages = servicePackageRepository
@@ -136,7 +144,6 @@ public class PublicServiceCatalogService {
                         .build())
                 .toList();
 
-        BigDecimal rating = partner.getRatingAverage();
         return PublicServiceListItemDto.builder()
                 .id(service.getId())
                 .name(service.getName())
@@ -149,8 +156,8 @@ public class PublicServiceCatalogService {
                 .pricingType(service.getPricingType())
                 .basePrice(effectivePrice(offer))
                 .estimatedMinutes(service.getEstimatedMinutes())
-                .rating(rating == null ? 0D : rating.doubleValue())
-                .reviews(reviewRepository.countByPartner_Id(partner.getId()))
+                .rating(stats == null || stats.getAverageRating() == null ? 0D : stats.getAverageRating())
+                .reviews(stats == null ? 0L : stats.getReviewCount())
                 .location(findLocation(offer))
                 .packages(packages)
                 .build();
