@@ -1,5 +1,7 @@
 
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { bookingApi } from '../../services/api';
 
 function getCleanerName() {
     try {
@@ -18,42 +20,176 @@ function getCleanerName() {
     }
 }
 
-const STAT_ITEMS = [
-    {
-        title: 'Công việc hôm nay',
-        value: '—',
-        description: 'Chưa có dữ liệu',
-        icon: '📋'
-    },
-    {
-        title: 'Đang thực hiện',
-        value: '—',
-        description: 'Chưa có dữ liệu',
-        icon: '🧹'
-    },
-    {
-        title: 'Chờ xác nhận',
-        value: '—',
-        description: 'Chưa có dữ liệu',
-        icon: '⏳'
-    },
-    {
-        title: 'Đã hoàn thành',
-        value: '—',
-        description: 'Chưa có dữ liệu',
-        icon: '✓'
-    }
-];
+function getLocalDateKey(value) {
+    if (!value) return '';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return '';
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+}
+
+function formatDateTime(value) {
+    if (!value) return 'Chưa xác định';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return 'Chưa xác định';
+
+    return date.toLocaleString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+}
+
+function getStatusInfo(status) {
+    const statusMap = {
+        ASSIGNED: {
+            label: 'Đã phân công',
+            className: 'assigned'
+        },
+        EN_ROUTE: {
+            label: 'Đang di chuyển',
+            className: 'en-route'
+        },
+        IN_PROGRESS: {
+            label: 'Đang thực hiện',
+            className: 'in-progress'
+        },
+        PENDING_COMPLETION: {
+            label: 'Chờ xác nhận',
+            className: 'pending'
+        },
+        COMPLETED: {
+            label: 'Đã hoàn thành',
+            className: 'completed'
+        },
+        CANCELLED: {
+            label: 'Đã hủy',
+            className: 'cancelled'
+        },
+        REJECTED: {
+            label: 'Bị từ chối',
+            className: 'cancelled'
+        }
+    };
+
+    return statusMap[status] || {
+        label: status || 'Chưa xác định',
+        className: 'default'
+    };
+}
 
 function CleanerDashboard() {
     const userName = getCleanerName();
 
-    const today = new Date().toLocaleDateString('vi-VN', {
+    const [bookings, setBookings] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    const fetchBookings = useCallback(async () => {
+        const data = await bookingApi.getCleanerBookings();
+        return Array.isArray(data) ? data : [];
+    }, []);
+
+    const loadBookings = useCallback(async () => {
+        setLoading(true);
+        setError('');
+
+        try {
+            const data = await fetchBookings();
+            setBookings(data);
+        } catch (err) {
+            setError(err.message || 'Không thể tải dữ liệu tổng quan.');
+        } finally {
+            setLoading(false);
+        }
+    }, [fetchBookings]);
+
+    useEffect(() => {
+        let active = true;
+
+        fetchBookings()
+            .then((data) => {
+                if (active) setBookings(data);
+            })
+            .catch((err) => {
+                if (active) {
+                    setError(err.message || 'Không thể tải dữ liệu tổng quan.');
+                }
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [fetchBookings]);
+
+    const today = new Date();
+
+    const todayKey = getLocalDateKey(today);
+
+    const todayLabel = today.toLocaleDateString('vi-VN', {
         weekday: 'long',
         day: '2-digit',
         month: '2-digit',
         year: 'numeric'
     });
+
+    const todayBookings = useMemo(() => {
+        return bookings
+            .filter((booking) => {
+                return getLocalDateKey(booking.scheduledStart) === todayKey;
+            })
+            .sort((a, b) => {
+                return new Date(a.scheduledStart) - new Date(b.scheduledStart);
+            });
+    }, [bookings, todayKey]);
+
+    const stats = useMemo(() => {
+        return [
+            {
+                title: 'Công việc hôm nay',
+                value: todayBookings.length,
+                description: 'Theo lịch được phân công',
+                icon: '📋'
+            },
+            {
+                title: 'Đang thực hiện',
+                value: bookings.filter(
+                    (booking) => booking.status === 'IN_PROGRESS'
+                ).length,
+                description: 'Công việc chưa hoàn tất',
+                icon: '🧹'
+            },
+            {
+                title: 'Chờ xác nhận',
+                value: bookings.filter(
+                    (booking) => booking.status === 'PENDING_COMPLETION'
+                ).length,
+                description: 'Đã báo hoàn thành',
+                icon: '⏳'
+            },
+            {
+                title: 'Đã hoàn thành',
+                value: bookings.filter(
+                    (booking) => booking.status === 'COMPLETED'
+                ).length,
+                description: 'Tổng công việc hoàn tất',
+                icon: '✓'
+            }
+        ];
+    }, [bookings, todayBookings.length]);
 
     return (
         <div className="cl-page">
@@ -65,7 +201,7 @@ function CleanerDashboard() {
 
                 <div className="cl-current-date">
                     <span>Hôm nay</span>
-                    <strong>{today}</strong>
+                    <strong>{todayLabel}</strong>
                 </div>
             </div>
 
@@ -99,20 +235,44 @@ function CleanerDashboard() {
                 <div className="cl-section-heading">
                     <div>
                         <h2>Tình hình công việc</h2>
-                        <p>Tổng quan hoạt động của bạn</p>
+                        <p>
+                            {loading
+                                ? 'Đang tải số liệu...'
+                                : 'Số liệu từ danh sách công việc được phân công'}
+                        </p>
                     </div>
+
+                    <button
+                        type="button"
+                        className="cl-dashboard-refresh"
+                        onClick={loadBookings}
+                        disabled={loading}
+                    >
+                        ↻ {loading ? 'Đang tải...' : 'Làm mới'}
+                    </button>
                 </div>
 
+                {error && (
+                    <div className="cl-dashboard-error">
+                        <span>{error}</span>
+                        <button type="button" onClick={loadBookings}>
+                            Thử lại
+                        </button>
+                    </div>
+                )}
+
                 <div className="cl-stat-grid">
-                    {STAT_ITEMS.map((item, index) => (
-                        <div className="cl-stat-card" key={index}>
+                    {stats.map((item, index) => (
+                        <div className="cl-stat-card" key={item.title}>
                             <div className={`cl-stat-icon cl-stat-icon-${index + 1}`}>
                                 {item.icon}
                             </div>
 
                             <div className="cl-stat-info">
                                 <span>{item.title}</span>
-                                <strong>{item.value}</strong>
+                                <strong>
+                                    {loading ? '—' : item.value}
+                                </strong>
                                 <small>{item.description}</small>
                             </div>
                         </div>
@@ -125,7 +285,9 @@ function CleanerDashboard() {
                     <div className="cl-panel-heading">
                         <div>
                             <h2>Lịch làm việc hôm nay</h2>
-                            <p>Các công việc được phân công trong ngày</p>
+                            <p>
+                                {todayBookings.length} công việc theo lịch hôm nay
+                            </p>
                         </div>
 
                         <Link to="/cleaner/calendar" className="cl-text-link">
@@ -133,14 +295,86 @@ function CleanerDashboard() {
                         </Link>
                     </div>
 
-                    <div className="cl-empty-state">
-                        <div className="cl-empty-icon">📅</div>
-                        <strong>Chưa có dữ liệu lịch làm việc</strong>
-                        <p>
-                            Lịch làm việc sẽ xuất hiện tại đây khi hệ thống
-                            được kết nối với dữ liệu phân công.
-                        </p>
-                    </div>
+                    {loading ? (
+                        <div className="cl-dashboard-message">
+                            Đang tải lịch làm việc...
+                        </div>
+                    ) : error ? (
+                        <div className="cl-dashboard-message">
+                            Chưa thể tải lịch làm việc.
+                        </div>
+                    ) : todayBookings.length === 0 ? (
+                        <div className="cl-empty-state">
+                            <div className="cl-empty-icon">📅</div>
+                            <strong>Hôm nay chưa có công việc</strong>
+                            <p>
+                                Các công việc được phân công trong ngày sẽ
+                                xuất hiện tại đây.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="cl-today-list">
+                            {todayBookings.slice(0, 5).map((booking) => {
+                                const status = getStatusInfo(booking.status);
+
+                                return (
+                                    <div
+                                        className="cl-today-item"
+                                        key={booking.id}
+                                    >
+                                        <div className="cl-today-time">
+                                            {booking.scheduledStart
+                                                ? new Date(
+                                                    booking.scheduledStart
+                                                ).toLocaleTimeString('vi-VN', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })
+                                                : '--:--'}
+                                        </div>
+
+                                        <div className="cl-today-content">
+                                            <strong>
+                                                {booking.customerName || 'Khách hàng'}
+                                            </strong>
+
+                                            <span>
+                                                {booking.items?.length
+                                                    ? booking.items
+                                                        .map((item) => item.serviceName)
+                                                        .filter(Boolean)
+                                                        .join(', ')
+                                                    : 'Chưa có thông tin dịch vụ'}
+                                            </span>
+
+                                            <small>
+                                                {booking.fullAddress || 'Chưa có địa chỉ'}
+                                            </small>
+
+                                            <span
+                                                className={`cl-today-status cl-today-status-${status.className}`}
+                                            >
+                                                {status.label}
+                                            </span>
+                                        </div>
+
+                                        <span className="cl-today-code">
+                                            {booking.bookingCode || `#${booking.id}`}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+
+                            {todayBookings.length > 5 && (
+                                <Link
+                                    to="/cleaner/jobs"
+                                    className="cl-today-more"
+                                >
+                                    Xem thêm {todayBookings.length - 5} công việc
+                                </Link>
+                            )}
+                        </div>
+                    )}
                 </section>
 
                 <section className="cl-panel cl-shortcut-panel">
@@ -194,9 +428,9 @@ function CleanerDashboard() {
             <div className="cl-info-note">
                 <span className="cl-info-note-icon">i</span>
                 <p>
-                    <strong>Lưu ý:</strong> Đây là giao diện tổng quan ban đầu.
-                    Các số liệu và lịch làm việc sẽ được cập nhật sau khi
-                    hoàn thành kết nối API với hệ thống backend.
+                    <strong>Lưu ý:</strong> Số liệu trên trang tổng quan được
+                    lấy từ các đơn hàng đã phân công cho tài khoản Cleaner
+                    hiện tại.
                 </p>
             </div>
         </div>

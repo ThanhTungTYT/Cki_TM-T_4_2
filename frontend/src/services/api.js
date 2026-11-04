@@ -144,6 +144,30 @@ export const bookingApi = {
 
         return handleResponse(res, 'Không thể tải danh sách đơn hàng.');
     },
+    async getCleanerBookings() {
+        const res = await fetch(`${BASE_URL}/bookings/cleaner/me`, {
+            method: 'GET',
+            headers: getAuthHeaders()
+        });
+
+        return handleResponse(res, 'Không thể tải danh sách công việc được giao.');
+    },
+
+    async getCleanerAssignments() {
+        const res = await fetch(
+            `${BASE_URL}/bookings/cleaner/me/assignments`,
+            {
+                method: 'GET',
+                headers: getAuthHeaders()
+            }
+        );
+
+        return handleResponse(
+            res,
+            'Không thể tải danh sách phân công của nhân viên.'
+        );
+    },
+
 
     async getBooking(id) {
         const res = await fetch(`${BASE_URL}/bookings/${id}`, {

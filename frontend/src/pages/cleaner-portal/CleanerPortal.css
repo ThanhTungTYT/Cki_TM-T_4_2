@@ -1021,3 +1021,177 @@
         display: none;
     }
 }
+
+/* =========================
+   CLEANER DASHBOARD - REAL DATA
+========================= */
+
+.cl-dashboard-refresh {
+    border: 1px solid var(--cl-border);
+    border-radius: 8px;
+    padding: 8px 13px;
+    background: #fff;
+    color: var(--cl-primary);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cl-dashboard-refresh:hover {
+    background: var(--cl-primary-light);
+}
+
+.cl-dashboard-refresh:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.cl-dashboard-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.cl-dashboard-error button {
+    border: 0;
+    background: transparent;
+    color: #b91c1c;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.cl-dashboard-message {
+    padding: 35px 15px;
+    text-align: center;
+    color: var(--cl-text-secondary);
+}
+
+.cl-today-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.cl-today-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--cl-border);
+}
+
+.cl-today-item:last-of-type {
+    border-bottom: 0;
+}
+
+.cl-today-time {
+    min-width: 55px;
+    padding-top: 2px;
+    color: var(--cl-primary);
+    font-size: 14px;
+    font-weight: 750;
+}
+
+.cl-today-content {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.cl-today-content strong {
+    color: var(--cl-text);
+    font-size: 13px;
+}
+
+.cl-today-content > span:not(.cl-today-status),
+.cl-today-content small {
+    overflow-wrap: anywhere;
+    color: var(--cl-text-secondary);
+    font-size: 12px;
+}
+
+.cl-today-code {
+    color: var(--cl-text-light);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.cl-today-status {
+    align-self: flex-start;
+    margin-top: 3px;
+    padding: 4px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.cl-today-status-assigned {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.cl-today-status-en-route {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.cl-today-status-in-progress {
+    background: #ecfdf5;
+    color: #047857;
+}
+
+.cl-today-status-pending {
+    background: #fffbeb;
+    color: #b45309;
+}
+
+.cl-today-status-completed {
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.cl-today-status-cancelled {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.cl-today-status-default {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.cl-today-more {
+    display: block;
+    padding: 13px 0 3px;
+    color: var(--cl-primary);
+    font-size: 13px;
+    font-weight: 650;
+    text-align: center;
+}
+
+.cl-today-more:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+    .cl-today-item {
+        flex-wrap: wrap;
+    }
+
+    .cl-today-code {
+        width: 100%;
+        padding-left: 68px;
+    }
+
+    .cl-dashboard-error {
+        align-items: flex-start;
+    }
+}
+
