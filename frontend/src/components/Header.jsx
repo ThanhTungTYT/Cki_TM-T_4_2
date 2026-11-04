@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBroom, faUser, faCartShopping } from '@fortawesome/free-solid-svg-icons';
+import { faBroom, faUser, faCartShopping, faStore } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 import CartDrawer from './CartDrawer';
 import './Header.css';
@@ -51,6 +51,9 @@ function Header() {
                                 </Link>
                             </>
                         )}
+                        <Link to="/rewards" className="cart-btn" title="Cửa hàng đổi thưởng Ccoin" aria-label="Cửa hàng đổi thưởng Ccoin">
+                            <FontAwesomeIcon icon={faStore} />
+                        </Link>
                         <button className="cart-btn" onClick={() => setIsCartOpen(true)} title="Giỏ dịch vụ">
                             <FontAwesomeIcon icon={faCartShopping} />
                             {totalItems > 0 && <span className="cart-badge">{totalItems}</span>}

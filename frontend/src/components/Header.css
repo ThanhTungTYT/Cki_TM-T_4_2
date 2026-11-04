@@ -1,4 +1,10 @@
 .header {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: normal;
+    color: #1e385c;
+    color-scheme: light;
     width: 100%;
     background: #ffffff;
     border-bottom: 1px solid #e2e8f0;
@@ -18,7 +24,7 @@
     gap: 30px;
 }
 
-.logo {
+.header .logo {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -49,7 +55,10 @@
     justify-content: center;
 }
 
-.nav a {
+.header .nav a {
+    font-family: Arial, Helvetica, sans-serif;
+    line-height: 1.5;
+    letter-spacing: normal;
     color: #4b5563;
     font-size: 14px;
     font-weight: 600;
@@ -57,8 +66,8 @@
     transition: color 0.2s;
 }
 
-.nav a:hover,
-.nav a.active {
+.header .nav a:hover,
+.header .nav a.active {
     color: #2563eb;
 }
 
@@ -69,9 +78,9 @@
     flex-shrink: 0;
 }
 
-.login-btn,
-.register-btn,
-.service-btn {
+.header .login-btn,
+.header .register-btn,
+.header .service-btn {
     height: 42px;
     padding: 0 18px;
     display: inline-flex;
@@ -90,41 +99,41 @@
     transition: background 0.2s, color 0.2s, transform 0.2s;
 }
 
-.login-btn {
+.header .login-btn {
     color: #4b5563;
     background: transparent;
     border: none;
 }
 
-.login-btn:hover {
+.header .login-btn:hover {
     color: #2563eb;
 }
 
-.register-btn {
+.header .register-btn {
     color: #4b5563;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
 }
 
-.register-btn:hover {
+.header .register-btn:hover {
     background: #f8fafc;
     border-color: #cbd5e1;
 }
 
-.service-btn {
+.header .service-btn {
     color: white;
     background: #2563eb;
     border: none;
     border-radius: 12px;
 }
 
-.service-btn:hover {
+.header .service-btn:hover {
     background: #1d4ed8;
     transform: translateY(-1px);
 }
 
-.user-btn {
+.header .user-btn {
     height: 42px;
     padding: 0 14px;
     display: flex;
@@ -145,12 +154,12 @@
     font-size: 16px;
 }
 
-.user-btn:hover {
+.header .user-btn:hover {
     background: #2563eb;
     color: white;
 }
 
-.cart-btn {
+.header .cart-btn {
     position: relative;
     width: 42px;
     height: 42px;
@@ -168,7 +177,7 @@
     transition: background 0.2s, color 0.2s, transform 0.2s, border-color 0.2s;
 }
 
-.cart-btn:hover {
+.header .cart-btn:hover {
     background: #2563eb;
     color: #ffffff;
     border-color: #2563eb;

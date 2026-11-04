@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Home from './pages/home';
+import Rewards from './pages/rewards';
 import Login from './pages/login';
 import Register from './pages/register';
 import Services from './pages/services';
@@ -76,6 +77,7 @@ function App() {
                 <Route path="/services" element={<Services />} />
                 <Route path="/service-detail/:id" element={<ServiceDetail />} />
                 <Route path="/provider/:id" element={<Provider />} />
+                <Route path="/rewards" element={<Rewards />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/profile" element={<Profile />} />

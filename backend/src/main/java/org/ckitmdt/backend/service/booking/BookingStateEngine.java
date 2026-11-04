@@ -36,6 +36,7 @@ public class BookingStateEngine {
     private final BookingItemRepository bookingItemRepository;
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
+    private final org.ckitmdt.backend.service.BookingRewardLifecycleService rewardLifecycleService;
 
     @Transactional
     public BookingResponse executeAction(
@@ -159,6 +160,7 @@ public class BookingStateEngine {
                     .createdAt(paidAt)
                     .build());
 
+            rewardLifecycleService.processBooking(savedBooking.getId());
             return mapToBookingResponse(savedBooking);
         }
 
@@ -232,6 +234,7 @@ public class BookingStateEngine {
                 currentUser != null ? currentUser.getEmail() : "SYSTEM"
         );
 
+        rewardLifecycleService.processBooking(savedBooking.getId());
         return mapToBookingResponse(savedBooking);
     }
 

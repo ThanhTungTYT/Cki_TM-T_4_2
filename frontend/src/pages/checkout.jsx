@@ -103,6 +103,7 @@ export default function Checkout() {
     const [voucherCode, setVoucherCode] = useState('');
     const [appliedVoucherCode, setAppliedVoucherCode] = useState('');
     const [redeemPoints, setRedeemPoints] = useState(0);
+    const [ccoinBalance, setCcoinBalance] = useState(0);
     const [quote, setQuote] = useState(null);
     const [quoteLoading, setQuoteLoading] = useState(false);
     const [quoteError, setQuoteError] = useState('');
@@ -197,8 +198,8 @@ export default function Checkout() {
             return;
         }
 
+        setQuoteLoading(true);
         const timer = setTimeout(async () => {
-            setQuoteLoading(true);
             setQuoteError('');
 
             try {
@@ -214,8 +215,11 @@ export default function Checkout() {
                 if (cancelled) return;
 
                 setQuote(result);
+                setCcoinBalance(Number(result.rewardBalance || 0));
                 setRedeemPoints(current =>
-                    Math.min(current, Number(result.rewardBalance || 0))
+                    current > 0 && Number(result.rewardBalance || 0) >= 1000
+                        ? Number(result.rewardBalance)
+                        : 0
                 );
 
                 if (appliedVoucherCode) {
@@ -288,7 +292,7 @@ export default function Checkout() {
     const pointsDiscount = Number(quote?.pointsDiscount || 0);
     const platformFee = Number(quote?.platformFee || 0);
     const finalTotal = Number(quote?.totalAmount || 0);
-    const rewardBalance = Number(quote?.rewardBalance || 0);
+    const rewardBalance = ccoinBalance;
     const pointsUsed = Number(quote?.pointsUsed || 0);
 
     const handleApplyVoucher = () => {
@@ -1016,31 +1020,18 @@ export default function Checkout() {
                                 )}
                             </div>
 
-                            <div className="form-group" style={{ marginBottom: '18px' }}>
-                                <label htmlFor="redeemPoints">Đổi điểm thưởng</label>
-                                <div style={{
-                                    fontSize: '12px',
-                                    color: '#64748b',
-                                    margin: '5px 0'
-                                }}>
-                                    Số dư hiện tại: <strong>{rewardBalance.toLocaleString('vi-VN')} điểm</strong>
-                                </div>
+                            <label className="ccoin-toggle" title={rewardBalance < 1000 ? 'Cần ít nhất 1.000 Ccoin để sử dụng' : 'Mỗi Ccoin giảm 1đ'}>
                                 <input
-                                    id="redeemPoints"
-                                    type="number"
-                                    min="0"
-                                    max={rewardBalance}
-                                    step="1"
-                                    value={redeemPoints}
-                                    onChange={event => setRedeemPoints(
-                                        Math.max(0, Math.min(
-                                            rewardBalance,
-                                            Number(event.target.value) || 0
-                                        ))
-                                    )}
+                                    type="checkbox"
+                                    checked={redeemPoints > 0}
+                                    disabled={rewardBalance < 1000}
+                                    onChange={event => {
+                                        setQuoteLoading(true);
+                                        setRedeemPoints(event.target.checked ? rewardBalance : 0);
+                                    }}
                                 />
-                                <small>Điểm đổi và số tiền giảm được kiểm tra theo chính sách hệ thống.</small>
-                            </div>
+                                Dùng Ccoin giảm giá
+                            </label>
 
                             <div className="pricing-rows">
                                 <div className="price-row">
@@ -1059,7 +1050,7 @@ export default function Checkout() {
                                 )}
                                 {pointsDiscount > 0 && (
                                     <div className="price-row discount-row">
-                                        <span>Giảm từ {pointsUsed.toLocaleString('vi-VN')} điểm</span>
+                                        <span>Giảm từ {pointsUsed.toLocaleString('vi-VN')} Ccoin</span>
                                         <strong>-{formatPrice(pointsDiscount)}</strong>
                                     </div>
                                 )}

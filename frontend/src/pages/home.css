@@ -26,6 +26,7 @@ a {
 }
 
 .home {
+    color-scheme: light;
     min-height: 100vh;
     background: #ffffff;
 }
@@ -585,3 +586,58 @@ a {
     justify-content: center;
     margin-top: 24px;
 }
+
+/* Explicit button styles for the current homepage markup. */
+.home .service-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.home .service-card > p { flex: 1; }
+.home .home-service-image { margin-bottom: 18px; }
+
+.home .service-card > button,
+.home .home-section-action > button,
+.home .home-data-message > button,
+.home .cta > div > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 10px 20px;
+    border: 1px solid #2563eb;
+    border-radius: 9px;
+    background: #2563eb;
+    color: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: background .2s, border-color .2s, box-shadow .2s;
+}
+
+.home .service-card > button {
+    width: 100%;
+    margin-top: 18px;
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+}
+
+.home .home-section-action { margin-top: 28px; }
+.home .home-data-message > button { margin-top: 12px; }
+.home .cta > div > button { margin-top: 24px; background: #fff; border-color: #fff; color: #1d4ed8; }
+
+.home .service-card > button:hover,
+.home .home-section-action > button:hover,
+.home .home-data-message > button:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, .15);
+}
+
+.home .cta > div > button:hover { background: #eff6ff; border-color: #bfdbfe; }
+.home main button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
