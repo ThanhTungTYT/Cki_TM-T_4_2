@@ -58,6 +58,8 @@ export default function AdminRefundManagement() {
     const [decision, setDecision] = useState('APPROVED');
     const [approvedAmount, setApprovedAmount] = useState('');
     const [decisionNote, setDecisionNote] = useState('');
+    const [transferReference, setTransferReference] = useState('');
+    const [transferEvidenceUrl, setTransferEvidenceUrl] = useState('');
 
     const loadRefunds = useCallback(async (showLoading = true) => {
         if (showLoading) setLoading(true);
@@ -185,6 +187,29 @@ export default function AdminRefundManagement() {
             setError(
                 err.message || 'Không thể xử lý yêu cầu hoàn tiền.'
             );
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function handleRecordTransfer(event) {
+        event.preventDefault();
+        if (!selectedRefund || !transferReference.trim()) {
+            setError('Nhập mã giao dịch chuyển khoản để tiếp tục.');
+            return;
+        }
+        setSubmitting(true);
+        setError('');
+        try {
+            const updated = await refundApi.recordTransfer(selectedRefund.id, {
+                transferReference: transferReference.trim(),
+                evidenceUrl: transferEvidenceUrl.trim()
+            });
+            setSelectedRefund(updated);
+            setNotice('Đã ghi nhận chuyển tiền hoàn lại.');
+            await loadRefunds(false);
+        } catch (err) {
+            setError(err.message || 'Không thể ghi nhận chuyển tiền.');
         } finally {
             setSubmitting(false);
         }
@@ -532,6 +557,42 @@ export default function AdminRefundManagement() {
                                         {formatDate(selectedRefund.reviewedAt)}
                                     </p>
                                 </div>
+                            )}
+
+                            {selectedRefund.status === 'APPROVED' && (
+                                <div className="refund-reason-box">
+                                    <strong>Trạng thái chuyển tiền</strong>
+                                    <p>{selectedRefund.refundTransferStatus === 'TRANSFERRED'
+                                        ? `Đã chuyển ${formatDate(selectedRefund.transferredAt)} · ${selectedRefund.transferReference || ''}`
+                                        : 'Đã duyệt, đang chờ ghi nhận giao dịch chuyển khoản.'}</p>
+                                    {selectedRefund.transferEvidenceUrl && (
+                                        <p><a href={selectedRefund.transferEvidenceUrl} target="_blank" rel="noreferrer">Xem chứng từ chuyển khoản</a></p>
+                                    )}
+                                </div>
+                            )}
+
+                            {selectedRefund.status === 'APPROVED'
+                                && selectedRefund.refundTransferStatus !== 'TRANSFERRED' && (
+                                <form onSubmit={handleRecordTransfer}>
+                                    <div className="refund-form-group">
+                                        <label htmlFor="transfer-reference">Mã giao dịch chuyển khoản</label>
+                                        <input id="transfer-reference" value={transferReference}
+                                            onChange={e => setTransferReference(e.target.value)}
+                                            maxLength={150} required disabled={submitting} />
+                                    </div>
+                                    <div className="refund-form-group">
+                                        <label htmlFor="transfer-evidence">Liên kết chứng từ (nếu có)</label>
+                                        <input id="transfer-evidence" type="url" value={transferEvidenceUrl}
+                                            onChange={e => setTransferEvidenceUrl(e.target.value)}
+                                            maxLength={1000} disabled={submitting} />
+                                    </div>
+                                    {error && <div className="refund-alert refund-alert-error">{error}</div>}
+                                    <div className="refund-modal-footer">
+                                        <button className="refund-submit-btn" type="submit" disabled={submitting || !transferReference.trim()}>
+                                            {submitting ? 'Đang lưu...' : 'Ghi nhận đã chuyển tiền'}
+                                        </button>
+                                    </div>
+                                </form>
                             )}
 
                             {selectedRefund.status === 'PENDING_REVIEW' ? (

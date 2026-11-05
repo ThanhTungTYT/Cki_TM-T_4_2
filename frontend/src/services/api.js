@@ -178,6 +178,14 @@ export const bookingApi = {
         return handleResponse(res, 'Không thể tải thông tin đơn hàng.');
     },
 
+    async reschedulePendingBooking(id, scheduledStart) {
+        const res = await fetch(`${BASE_URL}/bookings/${id}/schedule`, {
+            method: 'PUT', headers: getAuthHeaders(),
+            body: JSON.stringify({ scheduledStart })
+        });
+        return handleResponse(res, 'Unable to reschedule booking.');
+    },
+
     async executeAction(id, payload) {
         const res = await fetch(`${BASE_URL}/bookings/${id}/actions`, {
             method: 'POST',
@@ -208,6 +216,14 @@ export const refundApi = {
     },
 
     // Admin/Staff lấy danh sách yêu cầu hoàn tiền
+    async getMyRefunds() {
+        const res = await fetch(`${BASE_URL}/refunds/mine`, {
+            method: 'GET', headers: getAuthHeaders()
+        });
+        const data = await handleResponse(res, 'Unable to load refund requests.');
+        return Array.isArray(data) ? data : [];
+    },
+
     async getAdminRefunds() {
         const res = await fetch(`${BASE_URL}/refunds/admin`, {
             method: 'GET',
@@ -223,6 +239,13 @@ export const refundApi = {
     },
 
     // Admin/Staff duyệt hoặc từ chối yêu cầu hoàn tiền
+    async recordTransfer(id, payload) {
+        const res = await fetch(`${BASE_URL}/refunds/${id}/transfer`, {
+            method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(payload)
+        });
+        return handleResponse(res, 'Unable to record refund transfer.');
+    },
+
     async reviewRefund(id, payload) {
         const res = await fetch(`${BASE_URL}/refunds/${id}/review`, {
             method: 'PUT',

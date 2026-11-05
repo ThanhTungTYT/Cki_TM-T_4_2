@@ -16,6 +16,11 @@ public class CancellationRefundController {
 
     private final CancellationRefundService refundService;
 
+    @GetMapping("/mine")
+    public List<Map<String, Object>> getMyRefunds(Authentication auth) {
+        return refundService.getMyRefunds(auth);
+    }
+
     // Khách hàng gửi yêu cầu hoàn tiền.
     // POST /api/refunds/bookings/{bookingId}/request
     @PostMapping("/bookings/{bookingId}/request")
@@ -45,5 +50,13 @@ public class CancellationRefundController {
             Authentication auth) {
 
         return refundService.reviewRefund(id, body, auth);
+    }
+
+    @PutMapping("/{id}/transfer")
+    public Map<String, Object> recordTransfer(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
+        return refundService.recordTransfer(id, body, auth);
     }
 }

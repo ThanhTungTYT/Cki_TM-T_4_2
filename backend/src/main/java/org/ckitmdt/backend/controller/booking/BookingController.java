@@ -19,6 +19,16 @@ public class BookingController {
     private final BookingService bookingService;
     private final CleanerAssignmentService cleanerAssignmentService;
 
+    @PutMapping("/{id}/schedule")
+    public ResponseEntity<BookingResponse> reschedulePendingBooking(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody BookingRescheduleRequest request
+    ) {
+        return ResponseEntity.ok(bookingService.reschedulePendingBooking(
+                id, request.getScheduledStart(), authentication.getName()));
+    }
+
     /**
      * Báo giá snapshot & kiểm tra năng lực rảnh trước khi đặt (CN07)
      */

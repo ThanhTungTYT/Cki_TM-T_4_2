@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -12,7 +12,9 @@ import {
     faShieldHalved,
     faCircleCheck,
     faHeadset,
-    faCreditCard
+    faCreditCard,
+    faChevronDown,
+    faCheck
 } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -25,6 +27,81 @@ const formatPrice = (value) => {
     }
     return `${Number(value).toLocaleString('vi-VN')}đ`;
 };
+
+function SearchSelect({ id, label, value, options, placeholder, disabled, onChange }) {
+    const [open, setOpen] = useState(false);
+    const rootRef = useRef(null);
+    const triggerRef = useRef(null);
+    const selectedOption = options.find(option => option.value === value);
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const handlePointerDown = event => {
+            if (!rootRef.current?.contains(event.target)) setOpen(false);
+        };
+        const handleKeyDown = event => {
+            if (event.key === 'Escape') {
+                setOpen(false);
+                triggerRef.current?.focus();
+            }
+        };
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [open]);
+
+    return (
+        <div className={`search-item search-select-wrap${open ? ' is-open' : ''}`} ref={rootRef}>
+            <label className="search-select-label" htmlFor={id}>{label}</label>
+            <button
+                ref={triggerRef}
+                id={id}
+                type="button"
+                className="search-select-trigger"
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                aria-controls={`${id}-options`}
+                disabled={disabled}
+                onClick={() => setOpen(current => !current)}
+                onKeyDown={event => {
+                    if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        setOpen(true);
+                    }
+                }}
+            >
+                <span className={!selectedOption ? 'is-placeholder' : ''}>
+                    {selectedOption?.label || placeholder}
+                </span>
+                <FontAwesomeIcon icon={faChevronDown} className="search-select-chevron" />
+            </button>
+            {open && (
+                <div className="search-select-menu" id={`${id}-options`} role="listbox" aria-label={label}>
+                    {options.map(option => (
+                        <button
+                            type="button"
+                            role="option"
+                            aria-selected={option.value === value}
+                            className={`search-select-option${option.value === value ? ' is-selected' : ''}`}
+                            key={option.value || 'all'}
+                            onClick={() => {
+                                onChange(option.value);
+                                setOpen(false);
+                                triggerRef.current?.focus();
+                            }}
+                        >
+                            <span>{option.label}</span>
+                            {option.value === value && <FontAwesomeIcon icon={faCheck} />}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 function Home() {
     const navigate = useNavigate();
@@ -107,20 +184,24 @@ function Home() {
                             </p>
 
                             <form className="search-box" onSubmit={handleSearch} aria-label="Tìm dịch vụ theo khu vực và loại dịch vụ" aria-busy={filtersLoading}>
-                                <label className="search-item" htmlFor="home-search-area">
-                                    <span>KHU VỰC</span>
-                                    <select id="home-search-area" value={searchArea} onChange={event => setSearchArea(event.target.value)} disabled={filtersLoading || !searchFilters}>
-                                        <option value="">{filtersLoading ? 'Đang tải khu vực…' : 'Tất cả khu vực'}</option>
-                                        {(searchFilters?.areas || []).map(area => <option key={area.value} value={area.value}>{area.label}</option>)}
-                                    </select>
-                                </label>
-                                <label className="search-item" htmlFor="home-search-category">
-                                    <span>LOẠI DỊCH VỤ</span>
-                                    <select id="home-search-category" value={searchCategory} onChange={event => setSearchCategory(event.target.value)} disabled={filtersLoading || !searchFilters}>
-                                        <option value="">{filtersLoading ? 'Đang tải loại dịch vụ…' : 'Tất cả loại dịch vụ'}</option>
-                                        {(searchFilters?.categories || []).map(category => <option key={category.value} value={category.value}>{category.label}</option>)}
-                                    </select>
-                                </label>
+                                <SearchSelect
+                                    id="home-search-area"
+                                    label="KHU VỰC"
+                                    value={searchArea}
+                                    options={[{ value: '', label: 'Tất cả khu vực' }, ...(searchFilters?.areas || [])]}
+                                    placeholder={filtersLoading ? 'Đang tải khu vực…' : 'Tất cả khu vực'}
+                                    disabled={filtersLoading || !searchFilters}
+                                    onChange={setSearchArea}
+                                />
+                                <SearchSelect
+                                    id="home-search-category"
+                                    label="LOẠI DỊCH VỤ"
+                                    value={searchCategory}
+                                    options={[{ value: '', label: 'Tất cả loại dịch vụ' }, ...(searchFilters?.categories || [])]}
+                                    placeholder={filtersLoading ? 'Đang tải loại dịch vụ…' : 'Tất cả loại dịch vụ'}
+                                    disabled={filtersLoading || !searchFilters}
+                                    onChange={setSearchCategory}
+                                />
                                 <button type="submit" disabled={filtersLoading}>
                                     <FontAwesomeIcon icon={faMagnifyingGlass} />
                                     Tìm dịch vụ

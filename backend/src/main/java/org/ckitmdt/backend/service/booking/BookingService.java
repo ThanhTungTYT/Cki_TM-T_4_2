@@ -26,6 +26,7 @@ public class BookingService {
     private final BookingStateEngine bookingStateEngine;
     private final UserRepository userRepository;
     private final PartnerRepository partnerRepository;
+    private final PartnerServiceRepository partnerServiceRepository;
     private final AddressRepository addressRepository;
     private final ServiceRepository serviceRepository;
     private final ServicePackageRepository servicePackageRepository;
@@ -56,6 +57,12 @@ public class BookingService {
                         "Không tìm thấy nhà cung cấp."
                 ));
 
+        if (!isActive(partner.getStatus()) || partner.getUser() == null
+                || !isActive(partner.getUser().getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Nhà cung cấp hiện không nhận đặt dịch vụ.");
+        }
+
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -64,6 +71,7 @@ public class BookingService {
         }
 
         int totalEstimatedMinutes = 0;
+        int requiredEmployees = 0;
         BigDecimal subtotal = BigDecimal.ZERO;
         Map<Long, BigDecimal> serviceSubtotals = new HashMap<>();
 
@@ -74,6 +82,18 @@ public class BookingService {
                             HttpStatus.NOT_FOUND,
                             "Dịch vụ không tồn tại: " + itemRequest.getServiceId()
                     ));
+
+            if (!isActive(service.getStatus()) || service.getCategory() == null
+                    || !isActive(service.getCategory().getStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Dịch vụ hiện không nhận đặt.");
+            }
+
+            PartnerService offer = partnerServiceRepository
+                    .findByPartner_IdAndService_IdAndStatusIgnoreCase(
+                            partner.getId(), service.getId(), "ACTIVE")
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Dịch vụ hiện không được nhà cung cấp này cung cấp."));
 
             ServicePackage servicePackage = null;
 
@@ -91,13 +111,17 @@ public class BookingService {
                             "Gói dịch vụ không thuộc dịch vụ đã chọn."
                     );
                 }
+                if (servicePackage.getStatus() != null && !isActive(servicePackage.getStatus())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Gói dịch vụ đã ngừng nhận đặt.");
+                }
             }
 
             int quantity = itemRequest.getQuantity() == null
                     ? 1
                     : itemRequest.getQuantity();
 
-            if (quantity < 1) {
+            if (quantity < 1 || quantity > 100) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "Số lượng dịch vụ phải lớn hơn 0."
@@ -106,7 +130,7 @@ public class BookingService {
 
             BigDecimal unitPrice = servicePackage != null
                     ? servicePackage.getPrice()
-                    : service.getBasePrice();
+                    : offer.getPrice();
 
             if (unitPrice == null || unitPrice.signum() < 0) {
                 throw new ResponseStatusException(
@@ -127,6 +151,15 @@ public class BookingService {
                     : 60;
 
             totalEstimatedMinutes += duration * quantity;
+            int itemEmployees = servicePackage != null
+                    && servicePackage.getEmployeeCount() != null
+                    ? servicePackage.getEmployeeCount() : 1;
+            if (itemEmployees < 1 || itemEmployees > 100
+                    || requiredEmployees > 1000 - itemEmployees * quantity) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Số lượng nhân viên yêu cầu không hợp lệ.");
+            }
+            requiredEmployees += itemEmployees * quantity;
         }
 
         LocalDateTime scheduledStart = request.getScheduledStart();
@@ -136,6 +169,10 @@ public class BookingService {
                     HttpStatus.BAD_REQUEST,
                     "Vui lòng chọn thời gian thực hiện dịch vụ."
             );
+        }
+        if (!scheduledStart.isAfter(LocalDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Thời gian đặt dịch vụ phải ở tương lai.");
         }
 
         LocalDateTime scheduledEnd = scheduledStart.plusMinutes(totalEstimatedMinutes);
@@ -149,18 +186,23 @@ public class BookingService {
                 lockForUpdate
         );
 
-        long overlappingCount = bookingRepository.countOverlappingBookings(
+        long overlappingCount = bookingItemRepository.countReservedEmployees(
                 partner.getId(),
                 scheduledStart,
-                scheduledEnd
+                scheduledEnd,
+                LocalDateTime.now()
         );
-
-        boolean capacityAvailable = overlappingCount < 5;
+        long activeEmployees = employeeRepository.findByPartner_IdOrderByIdAsc(partner.getId())
+                .stream()
+                .filter(employee -> isActive(employee.getStatus())
+                        && employee.getUser() != null && isActive(employee.getUser().getStatus()))
+                .count();
+        boolean capacityAvailable = activeEmployees > 0
+                && overlappingCount + requiredEmployees <= activeEmployees;
 
         String capacityMessage = capacityAvailable
-                ? "Nhà cung cấp còn ca rảnh sẵn sàng tiếp nhận (hiện có "
-                + overlappingCount + " đơn trong khung giờ này)."
-                : "Khung giờ này nhà cung cấp đã đạt giới hạn nhận việc. Vui lòng chọn khung giờ khác.";
+                ? "Còn đủ nhân viên cho khung giờ đã chọn."
+                : "Khung giờ này không còn đủ nhân viên. Vui lòng chọn khung giờ khác.";
 
         BookingQuoteResponse response = BookingQuoteResponse.builder()
                 .partnerId(partner.getId())
@@ -190,6 +232,7 @@ public class BookingService {
             CreateBookingRequest request,
             String userEmail
     ) {
+        User customer = getUserByEmail(userEmail);
         if (request.getIdempotencyKey() != null
                 && !request.getIdempotencyKey().isBlank()) {
             Optional<Booking> existing = bookingRepository.findByIdempotencyKey(
@@ -197,11 +240,18 @@ public class BookingService {
             );
 
             if (existing.isPresent()) {
+                if (existing.get().getCustomer() == null
+                        || !Objects.equals(existing.get().getCustomer().getId(), customer.getId())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Mã yêu cầu này đã được sử dụng.");
+                }
+                if (!sameBookingRequest(existing.get(), request)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Mã yêu cầu đã được dùng cho nội dung đặt dịch vụ khác.");
+                }
                 return bookingStateEngine.mapToBookingResponse(existing.get());
             }
         }
-
-        User customer = getUserByEmail(userEmail);
 
         String paymentMethod = request.getPaymentMethod() == null
                 ? "VNPAY"
@@ -216,7 +266,7 @@ public class BookingService {
 
         boolean cashPayment = "CASH".equals(paymentMethod);
 
-        Partner partner = partnerRepository.findById(request.getPartnerId())
+        Partner partner = partnerRepository.findByIdForUpdate(request.getPartnerId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy nhà cung cấp."
@@ -264,6 +314,11 @@ public class BookingService {
                 .customer(customer)
                 .partner(partner)
                 .address(address)
+                .receiverNameSnapshot(address.getReceiverName())
+                .receiverPhoneSnapshot(address.getPhone())
+                .fullAddressSnapshot(formatAddress(address))
+                .latitudeSnapshot(address.getLatitude())
+                .longitudeSnapshot(address.getLongitude())
                 .scheduledStart(quote.getScheduledStart())
                 .scheduledEnd(quote.getScheduledEnd())
                 .subtotal(quote.getSubtotal())
@@ -318,7 +373,17 @@ public class BookingService {
 
             BigDecimal unitPrice = servicePackage != null
                     ? servicePackage.getPrice()
-                    : service.getBasePrice();
+                    : partnerServiceRepository.findByPartner_IdAndService_IdAndStatusIgnoreCase(
+                            partner.getId(), service.getId(), "ACTIVE")
+                    .map(PartnerService::getPrice)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Dịch vụ hiện không được nhà cung cấp này cung cấp."));
+
+            int itemDuration = servicePackage != null && servicePackage.getDurationMinutes() != null
+                    ? servicePackage.getDurationMinutes()
+                    : service.getEstimatedMinutes() != null ? service.getEstimatedMinutes() : 60;
+            int itemEmployees = servicePackage != null && servicePackage.getEmployeeCount() != null
+                    ? servicePackage.getEmployeeCount() : 1;
 
             String serviceName = service.getName();
 
@@ -332,6 +397,8 @@ public class BookingService {
                     .servicePackage(servicePackage)
                     .serviceName(serviceName)
                     .quantity(quantity)
+                    .employeeCount(itemEmployees)
+                    .durationMinutes(itemDuration)
                     .unitPrice(unitPrice)
                     .totalPrice(unitPrice.multiply(BigDecimal.valueOf(quantity)))
                     .note(itemRequest.getNote())
@@ -531,6 +598,70 @@ public class BookingService {
         return bookingStateEngine.executeAction(id, request, userEmail);
     }
 
+    @Transactional
+    public BookingResponse reschedulePendingBooking(Long bookingId, LocalDateTime newStart, String userEmail) {
+        User customer = getUserByEmail(userEmail);
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Không tìm thấy đơn hàng."));
+        if (booking.getCustomer() == null || !Objects.equals(booking.getCustomer().getId(), customer.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền đổi lịch đơn này.");
+        }
+        if (!BookingStatusEnum.PENDING_PROVIDER.name().equals(booking.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Chỉ có thể đổi lịch khi đơn đang chờ nhà cung cấp xác nhận.");
+        }
+        if (newStart == null || !newStart.isAfter(LocalDateTime.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thời gian mới phải ở tương lai.");
+        }
+        if (booking.getPartner() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Đơn hàng chưa được gắn nhà cung cấp.");
+        }
+        Partner partner = partnerRepository.findByIdForUpdate(booking.getPartner().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Nhà cung cấp không còn hoạt động."));
+        if (!isActive(partner.getStatus()) || partner.getUser() == null
+                || !isActive(partner.getUser().getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Nhà cung cấp hiện không nhận đặt dịch vụ.");
+        }
+
+        List<BookingItem> items = bookingItemRepository.findByBookingId(bookingId);
+        int duration = items.stream()
+                .mapToInt(item -> (item.getDurationMinutes() == null ? 60 : item.getDurationMinutes())
+                        * (item.getQuantity() == null ? 1 : item.getQuantity()))
+                .sum();
+        int requiredEmployees = items.stream()
+                .mapToInt(item -> (item.getEmployeeCount() == null ? 1 : item.getEmployeeCount())
+                        * (item.getQuantity() == null ? 1 : item.getQuantity()))
+                .sum();
+        if (duration <= 0 || requiredEmployees <= 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Không thể xác định thời lượng đơn hàng.");
+        }
+        LocalDateTime newEnd = newStart.plusMinutes(duration);
+        long overlappingEmployees = bookingItemRepository.countReservedEmployeesExcludingBooking(
+                partner.getId(), bookingId, newStart, newEnd, LocalDateTime.now());
+        long activeEmployees = employeeRepository.findByPartner_IdOrderByIdAsc(partner.getId()).stream()
+                .filter(employee -> isActive(employee.getStatus()) && employee.getUser() != null
+                        && isActive(employee.getUser().getStatus()))
+                .count();
+        if (activeEmployees == 0 || overlappingEmployees + requiredEmployees > activeEmployees) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Khung giờ mới không còn đủ nhân viên. Vui lòng chọn thời gian khác.");
+        }
+
+        LocalDateTime oldStart = booking.getScheduledStart();
+        booking.setScheduledStart(newStart);
+        booking.setScheduledEnd(newEnd);
+        booking.setUpdatedAt(LocalDateTime.now());
+        Booking saved = bookingRepository.save(booking);
+        bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                .booking(saved).oldStatus(saved.getStatus()).newStatus(saved.getStatus())
+                .changedBy(customer)
+                .note("Khách hàng đổi lịch từ " + oldStart + " sang " + newStart)
+                .createdAt(LocalDateTime.now()).build());
+        return bookingStateEngine.mapToBookingResponse(saved);
+    }
+
     private User getUserByEmail(String email) {
         if (email == null || email.isBlank()) {
             throw new ResponseStatusException(
@@ -544,6 +675,43 @@ public class BookingService {
                         HttpStatus.UNAUTHORIZED,
                         "Người dùng chưa xác thực hoặc không tồn tại."
                 ));
+    }
+
+    private boolean isActive(String status) {
+        return status != null && "ACTIVE".equalsIgnoreCase(status.trim());
+    }
+
+    private String formatAddress(Address address) {
+        return java.util.stream.Stream.of(address.getStreetAddress(), address.getWard(),
+                        address.getDistrict(), address.getProvince())
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.joining(", "));
+    }
+
+    private boolean sameBookingRequest(Booking booking, CreateBookingRequest request) {
+        if (booking.getPartner() == null || booking.getAddress() == null
+                || !Objects.equals(booking.getPartner().getId(), request.getPartnerId())
+                || !Objects.equals(booking.getAddress().getId(), request.getAddressId())
+                || !Objects.equals(booking.getScheduledStart(), request.getScheduledStart())) {
+            return false;
+        }
+        List<BookingItem> storedItems = bookingItemRepository.findByBookingId(booking.getId());
+        List<BookingItemRequest> requestedItems = request.getItems();
+        if (requestedItems == null || storedItems.size() != requestedItems.size()) {
+            return false;
+        }
+        for (int index = 0; index < storedItems.size(); index++) {
+            BookingItem stored = storedItems.get(index);
+            BookingItemRequest requested = requestedItems.get(index);
+            if (!Objects.equals(stored.getService().getId(), requested.getServiceId())
+                    || !Objects.equals(stored.getServicePackage() != null
+                            ? stored.getServicePackage().getId() : null, requested.getPackageId())
+                    || !Objects.equals(stored.getQuantity(), requested.getQuantity() == null
+                            ? 1 : requested.getQuantity())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isCleanerRole(String role) {

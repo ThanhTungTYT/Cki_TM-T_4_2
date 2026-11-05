@@ -20,6 +20,8 @@ public interface CancellationRefundRepository
 
     List<CancellationRefund> findTop200ByOrderByRequestedAtDesc();
 
+    List<CancellationRefund> findByRequestedBy_IdOrderByRequestedAtDesc(Long userId);
+
     List<CancellationRefund> findByStatusIgnoreCaseOrderByRequestedAtDesc(
             String status
     );

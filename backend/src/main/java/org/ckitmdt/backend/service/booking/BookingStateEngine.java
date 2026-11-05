@@ -44,7 +44,7 @@ public class BookingStateEngine {
             BookingActionRequest request,
             String userEmail) {
 
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy đơn hàng với ID: " + bookingId
@@ -640,6 +640,8 @@ public class BookingStateEngine {
                         .packageName(item.getServicePackage() != null
                                 ? item.getServicePackage().getName() : null)
                         .quantity(item.getQuantity())
+                        .employeeCount(item.getEmployeeCount())
+                        .durationMinutes(item.getDurationMinutes())
                         .unitPrice(item.getUnitPrice())
                         .totalPrice(item.getTotalPrice())
                         .note(item.getNote())
@@ -709,19 +711,25 @@ public class BookingStateEngine {
                         : "CleanMate Partner")
                 .addressId(booking.getAddress() != null
                         ? booking.getAddress().getId() : null)
-                .receiverName(booking.getAddress() != null
-                        ? booking.getAddress().getReceiverName() : null)
-                .receiverPhone(booking.getAddress() != null
-                        ? booking.getAddress().getPhone() : null)
-                .fullAddress(fullAddress)
-                .latitude(booking.getAddress() != null
-                        ? booking.getAddress().getLatitude() : null)
-                .longitude(booking.getAddress() != null
-                        ? booking.getAddress().getLongitude() : null)
+                .receiverName(booking.getReceiverNameSnapshot() != null
+                        ? booking.getReceiverNameSnapshot()
+                        : booking.getAddress() != null ? booking.getAddress().getReceiverName() : null)
+                .receiverPhone(booking.getReceiverPhoneSnapshot() != null
+                        ? booking.getReceiverPhoneSnapshot()
+                        : booking.getAddress() != null ? booking.getAddress().getPhone() : null)
+                .fullAddress(booking.getFullAddressSnapshot() != null
+                        ? booking.getFullAddressSnapshot() : fullAddress)
+                .latitude(booking.getLatitudeSnapshot() != null
+                        ? booking.getLatitudeSnapshot()
+                        : booking.getAddress() != null ? booking.getAddress().getLatitude() : null)
+                .longitude(booking.getLongitudeSnapshot() != null
+                        ? booking.getLongitudeSnapshot()
+                        : booking.getAddress() != null ? booking.getAddress().getLongitude() : null)
                 .scheduledStart(booking.getScheduledStart())
                 .scheduledEnd(booking.getScheduledEnd())
                 .subtotal(booking.getSubtotal())
                 .discountAmount(booking.getDiscountAmount())
+                .pointsDiscount(booking.getPointsDiscount())
                 .totalAmount(booking.getTotalAmount())
                 .status(booking.getStatus())
                 .paymentMethod(paymentMethod)

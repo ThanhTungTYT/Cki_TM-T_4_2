@@ -89,6 +89,11 @@ public class CancellationRefundService {
                 .filter(amount -> amount != null && amount.signum() > 0)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        if (booking.getTotalAmount() != null && booking.getTotalAmount().signum() > 0
+                && requestedAmount.compareTo(booking.getTotalAmount()) > 0) {
+            requestedAmount = booking.getTotalAmount();
+        }
+
         if (requestedAmount.signum() <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -119,6 +124,44 @@ public class CancellationRefundService {
                 .stream()
                 .map(this::row)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getMyRefunds(Authentication auth) {
+        User customer = currentUser(auth);
+        return refundRepository.findByRequestedBy_IdOrderByRequestedAtDesc(customer.getId())
+                .stream().map(this::row).toList();
+    }
+
+    @Transactional
+    public Map<String, Object> recordTransfer(
+            Long id, Map<String, Object> body, Authentication auth) {
+        User operator = requireAdmin(auth);
+        if (body == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu thông tin chuyển tiền.");
+        }
+        CancellationRefund refund = refundRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Không tìm thấy yêu cầu hoàn tiền."));
+        if (!"APPROVED".equalsIgnoreCase(refund.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Chỉ yêu cầu đã duyệt mới được ghi nhận chuyển tiền.");
+        }
+        if (refund.getTransferredAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Yêu cầu này đã được ghi nhận chuyển tiền.");
+        }
+        String reference = text(body.get("transferReference"));
+        String evidenceUrl = text(body.get("evidenceUrl"));
+        if (reference.isBlank() || reference.length() > 150 || evidenceUrl.length() > 1000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Mã giao dịch là bắt buộc (tối đa 150 ký tự); liên kết chứng từ tối đa 1000 ký tự.");
+        }
+        refund.setTransferReference(reference);
+        refund.setTransferEvidenceUrl(evidenceUrl.isBlank() ? null : evidenceUrl);
+        refund.setTransferredBy(operator.getEmail());
+        refund.setTransferredAt(LocalDateTime.now());
+        return row(refundRepository.save(refund));
     }
 
     @Transactional
@@ -338,12 +381,14 @@ public class CancellationRefundService {
         result.put("requestedAt", refund.getRequestedAt());
         result.put("reviewedAt", refund.getReviewedAt());
 
-        result.put(
-                "refundTransferStatus",
-                "APPROVED".equalsIgnoreCase(refund.getStatus())
-                        ? "WAITING_FOR_TRANSFER_EVIDENCE"
-                        : null
-        );
+        result.put("refundTransferStatus", refund.getTransferredAt() != null
+                ? "TRANSFERRED"
+                : "APPROVED".equalsIgnoreCase(refund.getStatus())
+                ? "WAITING_FOR_TRANSFER_EVIDENCE" : null);
+        result.put("transferReference", refund.getTransferReference());
+        result.put("transferEvidenceUrl", refund.getTransferEvidenceUrl());
+        result.put("transferredBy", refund.getTransferredBy());
+        result.put("transferredAt", refund.getTransferredAt());
 
         return result;
     }

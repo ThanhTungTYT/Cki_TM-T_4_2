@@ -36,6 +36,12 @@ public class BookingItem {
 
     private Integer quantity;
 
+    @Column(name = "employee_count")
+    private Integer employeeCount;
+
+    @Column(name = "duration_minutes")
+    private Integer durationMinutes;
+
     @Column(name = "unit_price")
     private BigDecimal unitPrice;
 
