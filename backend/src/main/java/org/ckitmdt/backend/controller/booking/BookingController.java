@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.dto.booking.*;
 import org.ckitmdt.backend.service.booking.BookingService;
+import org.ckitmdt.backend.service.booking.CleanerAssignmentService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +17,7 @@ import java.util.List;
 public class BookingController {
 
     private final BookingService bookingService;
+    private final CleanerAssignmentService cleanerAssignmentService;
 
     /**
      * Báo giá snapshot & kiểm tra năng lực rảnh trước khi đặt (CN07)
@@ -74,6 +76,33 @@ public class BookingController {
     ) {
         return ResponseEntity.ok(
                 bookingService.getCleanerAssignments(authentication.getName())
+        );
+    }
+    /**
+     * Cleaner thực hiện hành động trên một phân công cụ thể.
+     *
+     * Ví dụ:
+     * POST /api/bookings/cleaner/assignments/15/actions/accept
+     * POST /api/bookings/cleaner/assignments/15/actions/start-travel
+     * POST /api/bookings/cleaner/assignments/15/actions/start-job
+     * POST /api/bookings/cleaner/assignments/15/actions/submit-completion
+     */
+    @PostMapping("/cleaner/assignments/{assignmentId}/actions/{action}")
+    public ResponseEntity<CleanerAssignmentResponse> executeCleanerAssignmentAction(
+            Authentication authentication,
+            @PathVariable Long assignmentId,
+            @PathVariable String action,
+            @RequestBody(required = false) BookingActionRequest request
+    ) {
+        String note = request != null ? request.getNote() : null;
+
+        return ResponseEntity.ok(
+                cleanerAssignmentService.executeAction(
+                        assignmentId,
+                        action,
+                        note,
+                        authentication.getName()
+                )
         );
     }
 
