@@ -17,6 +17,8 @@ public class BookingItemResponse {
     private Long packageId;
     private String packageName;
     private Integer quantity;
+    private Integer employeeCount;
+    private Integer durationMinutes;
     private BigDecimal unitPrice;
     private BigDecimal totalPrice;
     private String note;

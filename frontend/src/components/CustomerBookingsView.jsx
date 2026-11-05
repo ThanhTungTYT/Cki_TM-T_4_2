@@ -17,7 +17,8 @@ import {
     faStar,
     faShieldHalved,
     faFileInvoice,
-    faCheck
+    faCheck,
+    faRotateLeft
 } from '@fortawesome/free-solid-svg-icons';
 import { bookingApi, refundApi } from '../services/api';
 import './CustomerBookingsView.css';
@@ -207,6 +208,7 @@ export default function CustomerBookingsView() {
     const highlightId = searchParams.get('id');
 
     const [bookings, setBookings] = useState([]);
+    const [myRefunds, setMyRefunds] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [filterTab, setFilterTab] = useState('ALL');
@@ -219,6 +221,8 @@ export default function CustomerBookingsView() {
     const [showRefundModal, setShowRefundModal] = useState(false);
     const [refundReason, setRefundReason] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
+    const [rescheduleValue, setRescheduleValue] = useState('');
+    const [rescheduleLoading, setRescheduleLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
     const showFeedback = (message, type = 'success') => {
@@ -250,6 +254,7 @@ export default function CustomerBookingsView() {
 
             const mapped = response.map(mapBooking);
             setBookings(mapped);
+            refundApi.getMyRefunds().then(setMyRefunds).catch(() => {});
 
             if (highlightId) {
                 const matched = mapped.find(
@@ -282,6 +287,10 @@ export default function CustomerBookingsView() {
             || bookings[0]
             || null;
     }, [bookings, selectedBookingId, highlightId]);
+
+    const selectedRefund = myRefunds.find(
+        refund => String(refund.bookingId) === String(selectedBooking?.dbId)
+    ) || null;
 
     useEffect(() => {
         if (
@@ -437,6 +446,23 @@ export default function CustomerBookingsView() {
         }
     };
 
+    const handleReschedule = async () => {
+        if (!selectedBooking?.dbId || !rescheduleValue || rescheduleLoading) return;
+        try {
+            setRescheduleLoading(true);
+            const updated = await bookingApi.reschedulePendingBooking(
+                selectedBooking.dbId, rescheduleValue
+            );
+            setBookings(current => current.map(item => String(item.dbId) === String(updated.id)
+                ? mapBooking(updated) : item));
+            showFeedback('Lịch hẹn đã được cập nhật.', 'success');
+        } catch (error) {
+            showFeedback(error.message || 'Không thể đổi lịch đơn hàng.', 'error');
+        } finally {
+            setRescheduleLoading(false);
+        }
+    };
+
     const handleRequestRefund = async () => {
         if (refundLoading) return;
 
@@ -465,10 +491,11 @@ export default function CustomerBookingsView() {
             setRefundLoading(true);
             setActionFeedback('');
 
-            await refundApi.requestRefund(
+            const createdRefund = await refundApi.requestRefund(
                 selectedBooking.dbId,
                 refundReason.trim()
             );
+            setMyRefunds(current => [createdRefund, ...current.filter(item => item.id !== createdRefund.id)]);
 
             setShowRefundModal(false);
             setRefundReason('');
@@ -503,10 +530,16 @@ export default function CustomerBookingsView() {
                 </div>
                 <button
                     type="button"
+                    className="refresh-bookings-button"
                     onClick={loadBookings}
                     disabled={loading}
+                    aria-label={loading ? 'Đang tải đơn hàng' : 'Tải lại đơn hàng'}
+                    title={loading ? 'Đang tải đơn hàng' : 'Tải lại đơn hàng'}
                 >
-                    {loading ? 'Đang tải...' : 'Tải lại'}
+                    <FontAwesomeIcon
+                        icon={faRotateLeft}
+                        className={loading ? 'is-loading' : ''}
+                    />
                 </button>
             </div>
 
@@ -690,7 +723,7 @@ export default function CustomerBookingsView() {
                                         'PENDING_PROVIDER',
                                         'CONFIRMED',
                                         'ASSIGNED'
-                                    ].includes(selectedBooking.status) && selectedBooking.dbId && (
+                                    ].includes(selectedBooking.status) && selectedBooking.dbId && !selectedRefund && (
                                         <div className="customer-action-container">
                                             <button
                                                 type="button"
@@ -703,6 +736,21 @@ export default function CustomerBookingsView() {
                                             <small>
                                                 Việc hủy đơn sẽ được backend kiểm tra theo trạng thái hiện tại.
                                             </small>
+                                        </div>
+                                    )}
+
+                                    {selectedBooking.status === 'PENDING_PROVIDER' && selectedBooking.dbId && (
+                                        <div className="customer-action-container reschedule-panel">
+                                            <label htmlFor="customer-reschedule">Đổi lịch hẹn khi đơn đang chờ nhà cung cấp xác nhận</label>
+                                            <input id="customer-reschedule" type="datetime-local"
+                                                value={rescheduleValue || selectedBooking.scheduledStart?.slice(0, 16) || ''}
+                                                onChange={event => setRescheduleValue(event.target.value)}
+                                                disabled={rescheduleLoading} />
+                                            <button type="button" className="btn-action-accept"
+                                                onClick={handleReschedule} disabled={rescheduleLoading || !rescheduleValue}>
+                                                {rescheduleLoading ? 'Đang cập nhật...' : 'Cập nhật lịch hẹn'}
+                                            </button>
+                                            <small>Khung giờ mới chỉ được lưu khi còn đủ nhân viên.</small>
                                         </div>
                                     )}
 
@@ -733,6 +781,23 @@ export default function CustomerBookingsView() {
                                             <small>
                                                 Yêu cầu sẽ được hệ thống xét duyệt.
                                             </small>
+                                        </div>
+                                    )}
+                                    {selectedRefund && (
+                                        <div className="customer-action-container">
+                                            <strong>Yêu cầu hoàn tiền: {selectedRefund.status}</strong>
+                                            <small>
+                                                {selectedRefund.refundTransferStatus === 'TRANSFERRED'
+                                                    ? `Đã chuyển ${Number(selectedRefund.approvedAmount || 0).toLocaleString('vi-VN')} ₫ · ${selectedRefund.transferReference || ''}`
+                                                    : selectedRefund.status === 'APPROVED'
+                                                        ? 'Yêu cầu đã duyệt, đang chờ chuyển tiền.'
+                                                        : selectedRefund.status === 'REJECTED'
+                                                            ? `Yêu cầu bị từ chối: ${selectedRefund.decisionNote || ''}`
+                                                            : 'Yêu cầu đang chờ xem xét.'}
+                                            </small>
+                                            {selectedRefund.transferEvidenceUrl && (
+                                                <a href={selectedRefund.transferEvidenceUrl} target="_blank" rel="noreferrer">Xem chứng từ chuyển khoản</a>
+                                            )}
                                         </div>
                                     )}
                                 </div>

@@ -63,6 +63,13 @@ public class ServiceReviewService {
         User customer = getCustomer(email);
         Service service = getService(serviceId);
 
+        if (request == null || request.getRating() == null || request.getRating() < 1
+                || request.getRating() > 5 || request.getComment() == null
+                || request.getComment().isBlank() || request.getComment().length() > 2000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Đánh giá cần có số sao từ 1 đến 5 và nội dung tối đa 2000 ký tự.");
+        }
+
         if (reviewRepository.existsByService_IdAndCustomer_Id(serviceId, customer.getId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Bạn đã đánh giá dịch vụ này rồi.");
         }
@@ -78,6 +85,7 @@ public class ServiceReviewService {
         Review review = Review.builder()
                 .booking(completedBookingItem.getBooking())
                 .service(service)
+                .partner(completedBookingItem.getBooking().getPartner())
                 .customer(customer)
                 .rating(request.getRating())
                 .comment(request.getComment().trim())

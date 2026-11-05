@@ -63,6 +63,18 @@ public class CancellationRefund {
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
 
+    @Column(name = "transfer_reference", length = 150)
+    private String transferReference;
+
+    @Column(name = "transfer_evidence_url", length = 1000)
+    private String transferEvidenceUrl;
+
+    @Column(name = "transferred_by", length = 255)
+    private String transferredBy;
+
+    @Column(name = "transferred_at")
+    private LocalDateTime transferredAt;
+
     @PrePersist
     protected void onCreate() {
         if (requestedAt == null) {

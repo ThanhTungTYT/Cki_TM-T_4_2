@@ -26,6 +26,7 @@ public class CartService {
     private final ServiceRepository serviceRepository;
     private final ServicePackageRepository servicePackageRepository;
     private final PartnerRepository partnerRepository;
+    private final PartnerServiceRepository partnerServiceRepository;
 
     /**
      * Lấy hoặc tự động tạo giỏ hàng cho người dùng hiện tại
@@ -63,23 +64,40 @@ public class CartService {
 
         org.ckitmdt.backend.entity.Service service = serviceRepository.findById(request.getServiceId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dịch vụ"));
+        if (!"ACTIVE".equalsIgnoreCase(service.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Dịch vụ hiện không nhận đặt");
+        }
 
         ServicePackage servicePackage = null;
         if (request.getPackageId() != null) {
             servicePackage = servicePackageRepository.findById(request.getPackageId()).orElse(null);
+            if (servicePackage == null || servicePackage.getService() == null
+                    || !servicePackage.getService().getId().equals(service.getId())
+                    || (servicePackage.getStatus() != null
+                    && !"ACTIVE".equalsIgnoreCase(servicePackage.getStatus()))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Gói dịch vụ không hợp lệ hoặc đã ngừng nhận đặt");
+            }
         }
 
         Partner partner = null;
         if (request.getPartnerId() != null) {
-            partner = partnerRepository.findById(request.getPartnerId()).orElse(null);
+            partner = partnerRepository.findById(request.getPartnerId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Không tìm thấy nhà cung cấp"));
+            if (partner.getStatus() == null || !"ACTIVE".equalsIgnoreCase(partner.getStatus())
+                    || partner.getUser() == null || !"ACTIVE".equalsIgnoreCase(partner.getUser().getStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Nhà cung cấp hiện không nhận đặt dịch vụ");
+            }
         }
 
         // Tính đơn giá ước tính
-        BigDecimal unitPrice = servicePackage != null && servicePackage.getPrice() != null
-                ? servicePackage.getPrice()
-                : (service.getBasePrice() != null ? service.getBasePrice() : BigDecimal.ZERO);
+        BigDecimal unitPrice = getUnitPrice(service, servicePackage, partner);
 
         int quantityToAdd = request.getQuantity() != null && request.getQuantity() > 0 ? request.getQuantity() : 1;
+        if (quantityToAdd > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số lượng mỗi dịch vụ không được vượt quá 100");
+        }
 
         // Kiểm tra xem mục này đã có trong giỏ chưa
         Optional<CartItem> existingItemOpt = cartItemRepository.findExistingCartItem(
@@ -131,11 +149,14 @@ public class CartService {
                 cartItemRepository.delete(item);
                 return getCart(userEmail);
             }
+            if (request.getQuantity() > 100) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Số lượng mỗi dịch vụ không được vượt quá 100");
+            }
             item.setQuantity(request.getQuantity());
 
-            BigDecimal unitPrice = item.getServicePackage() != null && item.getServicePackage().getPrice() != null
-                    ? item.getServicePackage().getPrice()
-                    : (item.getService() != null && item.getService().getBasePrice() != null ? item.getService().getBasePrice() : BigDecimal.ZERO);
+            BigDecimal unitPrice = getUnitPrice(
+                    item.getService(), item.getServicePackage(), item.getPartner());
             item.setEstimatedPrice(unitPrice.multiply(BigDecimal.valueOf(request.getQuantity())));
         }
 
@@ -213,13 +234,9 @@ public class CartService {
             List<CartItemResponse> itemResponses = new ArrayList<>();
 
             for (CartItem it : partnerItems) {
-                BigDecimal unitPrice = it.getServicePackage() != null && it.getServicePackage().getPrice() != null
-                        ? it.getServicePackage().getPrice()
-                        : (it.getService() != null && it.getService().getBasePrice() != null ? it.getService().getBasePrice() : BigDecimal.ZERO);
-
-                BigDecimal itemPrice = it.getEstimatedPrice() != null
-                        ? it.getEstimatedPrice()
-                        : unitPrice.multiply(BigDecimal.valueOf(it.getQuantity()));
+                BigDecimal unitPrice = getUnitPrice(
+                        it.getService(), it.getServicePackage(), it.getPartner());
+                BigDecimal itemPrice = unitPrice.multiply(BigDecimal.valueOf(it.getQuantity()));
 
                 groupSubtotal = groupSubtotal.add(itemPrice);
                 totalQuantity += it.getQuantity();
@@ -257,6 +274,27 @@ public class CartService {
                 .totalItems(totalQuantity)
                 .totalAmount(grandTotal)
                 .build();
+    }
+
+    private BigDecimal getUnitPrice(
+            org.ckitmdt.backend.entity.Service service,
+            ServicePackage servicePackage,
+            Partner partner
+    ) {
+        if (servicePackage != null && servicePackage.getPrice() != null) {
+            return servicePackage.getPrice();
+        }
+        if (partner != null) {
+            return partnerServiceRepository
+                    .findByPartner_IdAndService_IdAndStatusIgnoreCase(
+                            partner.getId(), service.getId(), "ACTIVE")
+                    .map(PartnerService::getPrice)
+                    .filter(Objects::nonNull)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "Dịch vụ hiện không được nhà cung cấp này cung cấp."));
+        }
+        return service.getBasePrice() != null ? service.getBasePrice() : BigDecimal.ZERO;
     }
 
     private User getUserByEmail(String email) {

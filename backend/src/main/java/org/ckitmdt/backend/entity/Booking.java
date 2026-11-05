@@ -34,6 +34,21 @@ public class Booking {
     @JoinColumn(name = "address_id", nullable = false)
     private Address address;
 
+    @Column(name = "receiver_name_snapshot")
+    private String receiverNameSnapshot;
+
+    @Column(name = "receiver_phone_snapshot")
+    private String receiverPhoneSnapshot;
+
+    @Column(name = "full_address_snapshot", columnDefinition = "TEXT")
+    private String fullAddressSnapshot;
+
+    @Column(name = "latitude_snapshot", precision = 10, scale = 7)
+    private BigDecimal latitudeSnapshot;
+
+    @Column(name = "longitude_snapshot", precision = 10, scale = 7)
+    private BigDecimal longitudeSnapshot;
+
     @Column(name = "scheduled_start")
     private LocalDateTime scheduledStart;
 
