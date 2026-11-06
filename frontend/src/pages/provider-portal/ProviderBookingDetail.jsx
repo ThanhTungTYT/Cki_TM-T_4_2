@@ -4,6 +4,21 @@ import { providerBookingApi, providerEmployeeApi } from '../../services/provider
 
 const VND = (v) => (v != null ? `${Number(v).toLocaleString('vi-VN')}đ` : '—');
 
+function formatDateTime(val) {
+    if (!val) return '—';
+    try {
+        return new Date(val).toLocaleString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    } catch {
+        return String(val);
+    }
+}
+
 const ASSIGNMENT_STATUS_MAP = {
     ASSIGNED:       { cls: 'pp-badge-assigned',   label: 'Đã giao' },
     ACCEPTED:       { cls: 'pp-badge-confirmed',  label: 'Đã nhận' },
