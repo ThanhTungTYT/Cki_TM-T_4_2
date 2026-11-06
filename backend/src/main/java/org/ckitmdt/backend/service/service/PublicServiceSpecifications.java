@@ -6,7 +6,6 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
-import org.ckitmdt.backend.entity.Address;
 import org.ckitmdt.backend.entity.PartnerService;
 import org.ckitmdt.backend.entity.Review;
 import org.ckitmdt.backend.entity.ServicePackage;
@@ -57,14 +56,11 @@ public final class PublicServiceSpecifications {
             }
 
             if (area != null && !area.isBlank()) {
-                Subquery<Long> addresses = query.subquery(Long.class);
-                Root<Address> address = addresses.from(Address.class);
-                addresses.select(address.get("id"));
-                addresses.where(
-                        cb.equal(address.get("user").get("id"), root.get("partner").get("user").get("id")),
-                        cb.like(fold(cb, address.get("district")), pattern(area))
-                );
-                predicates.add(cb.exists(addresses));
+                for (String areaPart : area.split(",")) {
+                    if (!areaPart.isBlank()) {
+                        predicates.add(cb.like(fold(cb, root.get("partner").get("address")), pattern(areaPart)));
+                    }
+                }
             }
 
             if (maxPrice != null) {
@@ -74,7 +70,7 @@ public final class PublicServiceSpecifications {
 
             if (minRating != null) {
                 predicates.add(cb.greaterThanOrEqualTo(
-                        serviceAverageRating(root, query, cb), minRating));
+                        partnerAverageRating(root, query, cb), minRating));
             }
 
             if (pricingType != null && !pricingType.isBlank()) {
@@ -103,17 +99,7 @@ public final class PublicServiceSpecifications {
                     );
                     searchable.add(cb.exists(packages));
 
-                    Subquery<Long> addresses = query.subquery(Long.class);
-                    Root<Address> address = addresses.from(Address.class);
-                    addresses.select(address.get("id"));
-                    addresses.where(
-                            cb.equal(address.get("user").get("id"), root.get("partner").get("user").get("id")),
-                            cb.or(
-                                    cb.like(fold(cb, address.get("district")), termPattern),
-                                    cb.like(fold(cb, address.get("province")), termPattern)
-                            )
-                    );
-                    searchable.add(cb.exists(addresses));
+                    searchable.add(cb.like(fold(cb, root.get("partner").get("address")), termPattern));
                     predicates.add(cb.or(searchable.toArray(Predicate[]::new)));
                 }
             }
@@ -149,9 +135,13 @@ public final class PublicServiceSpecifications {
         } else if ("price-desc".equals(sortBy)) {
             query.orderBy(cb.desc(price), cb.asc(root.get("id")));
         } else if ("rating".equals(sortBy)) {
-            query.orderBy(cb.desc(serviceAverageRating(root, query, cb)), cb.asc(root.get("id")));
+            query.orderBy(cb.desc(partnerAverageRating(root, query, cb)), cb.asc(root.get("id")));
         } else if ("reviews".equals(sortBy)) {
-            query.orderBy(cb.desc(reviewCount), cb.asc(root.get("id")));
+            Subquery<Long> providerReviewCount = query.subquery(Long.class);
+            Root<Review> providerReview = providerReviewCount.from(Review.class);
+            providerReviewCount.select(cb.count(providerReview));
+            providerReviewCount.where(cb.equal(providerReview.get("partner").get("id"), root.get("partner").get("id")));
+            query.orderBy(cb.desc(providerReviewCount), cb.asc(root.get("id")));
         } else {
             query.orderBy(cb.desc(reviewCount), cb.asc(root.get("id")));
         }
@@ -163,6 +153,15 @@ public final class PublicServiceSpecifications {
         Root<Review> review = average.from(Review.class);
         average.select(cb.avg(review.<Integer>get("rating")));
         average.where(cb.equal(review.get("service").get("id"), root.get("service").get("id")));
+        return cb.coalesce(average, 0D);
+    }
+
+    private static Expression<Double> partnerAverageRating(
+            Root<PartnerService> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
+        Subquery<Double> average = query.subquery(Double.class);
+        Root<Review> review = average.from(Review.class);
+        average.select(cb.avg(review.<Integer>get("rating")));
+        average.where(cb.equal(review.get("partner").get("id"), root.get("partner").get("id")));
         return cb.coalesce(average, 0D);
     }
 

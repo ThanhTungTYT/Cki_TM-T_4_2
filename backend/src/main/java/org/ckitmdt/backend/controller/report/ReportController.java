@@ -9,6 +9,7 @@ import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.ComplaintResponseRepository;
 import org.ckitmdt.backend.repository.ReportTicketRepository;
 import org.ckitmdt.backend.repository.UserRepository;
+import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ public class ReportController {
     private final ComplaintResponseRepository responseRepository;
     private final UserRepository userRepository;
     private final BookingRepository bookingRepository;
+    private final CustomerNotificationService customerNotificationService;
 
     @PostMapping
     @Transactional
@@ -209,6 +211,12 @@ public class ReportController {
 
         reportRepository.save(report);
 
+        if ("CUSTOMER".equals(upper(report.getReporter().getRole()))) {
+            customerNotificationService.notifyCustomer(report.getReporter(), "COMPLAINT_RESPONSE",
+                    "Khiếu nại có phản hồi mới", "Khiếu nại '" + report.getSubject() + "' đã có phản hồi mới.",
+                    "COMPLAINT", report.getId());
+        }
+
         return responseRow(saved);
     }
 
@@ -281,7 +289,13 @@ public class ReportController {
         report.setHandledBy(operator.getEmail());
         report.setUpdatedAt(now);
 
-        return row(reportRepository.save(report));
+        ReportTicket saved = reportRepository.save(report);
+        if ("CUSTOMER".equals(upper(saved.getReporter().getRole()))) {
+            customerNotificationService.notifyCustomer(saved.getReporter(), "COMPLAINT_" + status,
+                    "Cập nhật khiếu nại", "Khiếu nại '" + saved.getSubject() + "' đã chuyển sang trạng thái " + status + ".",
+                    "COMPLAINT", saved.getId());
+        }
+        return row(saved);
     }
 
     private Booking resolveBooking(Map<String, Object> body) {

@@ -6,6 +6,8 @@ import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.dto.booking.BookingActionRequest;
 import org.ckitmdt.backend.dto.booking.BookingActionEnum;
 import org.ckitmdt.backend.service.booking.BookingStateEngine;
+import org.ckitmdt.backend.service.booking.CancellationRefundService;
+import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +22,8 @@ public class VNPayIpnService {
     private final VNPayService vnPayService;
     private final PaymentRepository paymentRepository;
     private final BookingStateEngine bookingStateEngine;
+    private final CancellationRefundService cancellationRefundService;
+    private final CustomerNotificationService customerNotificationService;
 
     @Transactional
     public Map<String, String> process(
@@ -86,14 +90,25 @@ public class VNPayIpnService {
                 return result("99", "Missing transaction number");
             }
 
-            if (payment.getBooking() == null
-                    || !"PENDING_PAYMENT".equals(payment.getBooking().getStatus())
-                    || (payment.getBooking().getHoldExpiresAt() != null
-                    && LocalDateTime.now().isAfter(payment.getBooking().getHoldExpiresAt()))) {
+            LocalDateTime paidAt = LocalDateTime.now();
+            boolean bookingCanAcceptPayment = payment.getBooking() != null
+                    && "PENDING_PAYMENT".equals(payment.getBooking().getStatus())
+                    && (payment.getBooking().getHoldExpiresAt() == null
+                    || !paidAt.isAfter(payment.getBooking().getHoldExpiresAt()));
+            if (!bookingCanAcceptPayment) {
                 payment.setStatus("REVIEW");
                 payment.setTransactionCode(transactionNo);
-                payment.setPaidAt(LocalDateTime.now());
+                payment.setPaidAt(paidAt);
                 paymentRepository.save(payment);
+                if (payment.getBooking() != null) {
+                    cancellationRefundService.createLatePaymentRefund(
+                            payment.getBooking().getId(), payment.getAmount(), transactionNo);
+                    customerNotificationService.notifyCustomer(payment.getBooking().getCustomer(), "PAYMENT_REVIEW",
+                            "Thanh toán cần được kiểm tra", "Thanh toán cho đơn "
+                                    + payment.getBooking().getBookingCode()
+                                    + " đến sau thời hạn giữ chỗ và đang được xử lý hoàn tiền.",
+                            "BOOKING", payment.getBooking().getId());
+                }
                 return result("00", "Confirm Success");
             }
 
@@ -127,6 +142,14 @@ public class VNPayIpnService {
         paymentRepository.save(payment);
 
         if ("SUCCESS".equals(payment.getStatus())) moveBookingToProviderQueue(payment);
+        else if (payment.getBooking() != null) {
+            String title = "FAILED".equals(payment.getStatus()) ? "Thanh toán chưa thành công" : "Thanh toán cần được kiểm tra";
+            String message = "FAILED".equals(payment.getStatus())
+                    ? "Thanh toán cho đơn " + payment.getBooking().getBookingCode() + " chưa thành công. Vui lòng thử lại hoặc chọn phương thức khác."
+                    : "Thanh toán cho đơn " + payment.getBooking().getBookingCode() + " đang được kiểm tra.";
+            customerNotificationService.notifyCustomer(payment.getBooking().getCustomer(),
+                    "PAYMENT_" + payment.getStatus(), title, message, "BOOKING", payment.getBooking().getId());
+        }
 
         return result("00", "Confirm Success");
     }

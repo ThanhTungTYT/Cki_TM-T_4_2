@@ -70,6 +70,22 @@ public class GiftShopService {
         return view(redemption);
     }
 
+    @Transactional
+    public RedemptionView confirmReceived(String email, Long redemptionId) {
+        User user = customer(email);
+        GiftRedemption redemption = redemptions.findByIdForUpdate(redemptionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng quà tặng."));
+        if (!Objects.equals(redemption.getUser().getId(), user.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng quà tặng.");
+        }
+        if ("DELIVERED".equalsIgnoreCase(redemption.getStatus())) return view(redemption);
+        if (!"SHIPPED".equalsIgnoreCase(redemption.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Đơn hàng chưa được chuyển sang trạng thái đang giao.");
+        }
+        redemption.setStatus("DELIVERED");
+        return view(redemptions.save(redemption));
+    }
+
     private User customer(String email) {
         User user = users.findByEmail(email).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         if (!"CUSTOMER".equalsIgnoreCase(user.getRole())) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ khách hàng được đổi quà.");

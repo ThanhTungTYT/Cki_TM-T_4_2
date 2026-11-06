@@ -17,7 +17,24 @@ function formatDateString(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-const TIME_SLOTS = ['08:00', '09:30', '11:00', '13:30', '15:00', '16:30', '18:00'];
+function createIdempotencyKey() {
+    return globalThis.crypto?.randomUUID?.()
+        ? `CHECKOUT-${globalThis.crypto.randomUUID()}`
+        : `CHECKOUT-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function getCheckoutIdempotencyKey() {
+    const storageKey = 'cleanmate_checkout_idempotency_key';
+    try {
+        const existingKey = sessionStorage.getItem(storageKey);
+        if (existingKey) return existingKey;
+        const newKey = createIdempotencyKey();
+        sessionStorage.setItem(storageKey, newKey);
+        return newKey;
+    } catch {
+        return createIdempotencyKey();
+    }
+}
 
 export default function Checkout() {
     const [searchParams] = useSearchParams();
@@ -98,6 +115,9 @@ export default function Checkout() {
     const [selectedTimeSlot, setSelectedTimeSlot] = useState(() =>
         checkoutItems[0]?.scheduledTime || checkoutItems[0]?.time || '08:00'
     );
+    const [availabilitySlots, setAvailabilitySlots] = useState([]);
+    const [availabilityLoading, setAvailabilityLoading] = useState(false);
+    const [availabilityError, setAvailabilityError] = useState('');
 
     const [paymentMethod, setPaymentMethod] = useState('VNPAY');
     const [voucherCode, setVoucherCode] = useState('');
@@ -114,9 +134,7 @@ export default function Checkout() {
     const [bookingSuccessData, setBookingSuccessData] = useState(null);
     const [errorMessage, setErrorMessage] = useState('');
     const [holdSecondsLeft, setHoldSecondsLeft] = useState(15 * 60);
-    const [idempotencyKey] = useState(() =>
-        `IDEM-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    );
+    const [idempotencyKey, setIdempotencyKey] = useState(getCheckoutIdempotencyKey);
 
     useEffect(() => {
         if (!checkoutItems.length) return;
@@ -126,8 +144,49 @@ export default function Checkout() {
         const time = firstItem.scheduledTime || firstItem.time;
 
         if (date) setSelectedDate(date);
-        if (time && TIME_SLOTS.includes(time)) setSelectedTimeSlot(time);
+        if (time && /^\d{2}:\d{2}$/.test(time)) setSelectedTimeSlot(time);
     }, [checkoutItems]);
+
+    useEffect(() => {
+        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+        if (!token || !Number.isInteger(partnerId) || partnerId <= 0
+            || !selectedDate || !quoteItems.length) {
+            setAvailabilitySlots([]);
+            setAvailabilityLoading(false);
+            setAvailabilityError('');
+            return undefined;
+        }
+
+        const controller = new AbortController();
+        setAvailabilitySlots([]);
+        setAvailabilityLoading(true);
+        setAvailabilityError('');
+        bookingApi.getAvailability({
+            partnerId,
+            date: selectedDate,
+            items: quoteItems
+        }, controller.signal)
+            .then(slots => {
+                if (controller.signal.aborted) return;
+                const normalizedSlots = Array.isArray(slots) ? slots : [];
+                setAvailabilitySlots(normalizedSlots);
+                setSelectedTimeSlot(current =>
+                    normalizedSlots.some(slot => slot.time === current && slot.available)
+                        ? current
+                        : normalizedSlots.find(slot => slot.available)?.time || current
+                );
+            })
+            .catch(error => {
+                if (!controller.signal.aborted) {
+                    setAvailabilityError(error.message || 'Không thể tải lịch khả dụng.');
+                }
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) setAvailabilityLoading(false);
+            });
+
+        return () => controller.abort();
+    }, [partnerId, selectedDate, quoteItems]);
 
     useEffect(() => {
         const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
@@ -286,6 +345,9 @@ export default function Checkout() {
 
         return `${String(Math.floor(totalMinutes / 60) % 24).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
     }, [selectedTimeSlot, totalDurationHours]);
+
+    const selectedAvailability = availabilitySlots.find(slot => slot.time === selectedTimeSlot);
+    const selectedSlotAvailable = Boolean(selectedAvailability?.available);
 
     const subtotal = Number(quote?.subtotal || 0);
     const appliedDiscount = Number(quote?.discountAmount || 0);
@@ -502,6 +564,13 @@ export default function Checkout() {
                 type: 'REMOVE_PROVIDER_ITEMS',
                 payload: partnerId
             });
+
+            try {
+                if (sessionStorage.getItem('cleanmate_checkout_idempotency_key') === idempotencyKey) {
+                    sessionStorage.removeItem('cleanmate_checkout_idempotency_key');
+                }
+            } catch {}
+            setIdempotencyKey(createIdempotencyKey());
         } catch (error) {
             setErrorMessage(`Không thể tạo đơn hàng: ${error.message}`);
         } finally {
@@ -865,17 +934,27 @@ export default function Checkout() {
                             <div className="time-slots-section">
                                 <span className="time-section-title">Chọn giờ bắt đầu:</span>
                                 <div className="time-slots-grid">
-                                    {TIME_SLOTS.map(time => (
+                                    {availabilityLoading ? (
+                                        <div className="time-slots-message">Đang tải giờ còn trống…</div>
+                                    ) : availabilityError ? (
+                                        <div className="time-slots-message error">{availabilityError}</div>
+                                    ) : availabilitySlots.length ? availabilitySlots.map(slot => (
                                         <button
-                                            key={time}
+                                            key={slot.time}
                                             type="button"
-                                            className={`time-slot-btn ${selectedTimeSlot === time ? 'active' : ''}`}
-                                            onClick={() => setSelectedTimeSlot(time)}
+                                            className={`time-slot-btn ${selectedTimeSlot === slot.time ? 'active' : ''} ${!slot.available ? 'unavailable' : ''}`}
+                                            onClick={() => setSelectedTimeSlot(slot.time)}
+                                            disabled={!slot.available}
+                                            title={slot.message}
+                                            aria-label={`${slot.time}: ${slot.message}`}
                                         >
                                             <FontAwesomeIcon icon={faClock} />
-                                            <strong>{time}</strong>
+                                            <strong>{slot.time}</strong>
+                                            {!slot.available && <small>{slot.message}</small>}
                                         </button>
-                                    ))}
+                                    )) : (
+                                        <div className="time-slots-message">Không có khung giờ phù hợp trong ngày này.</div>
+                                    )}
                                 </div>
                             </div>
 
@@ -897,9 +976,15 @@ export default function Checkout() {
                                         } : undefined}
                                     >
                                         <FontAwesomeIcon icon={quote?.capacityAvailable ? faCircleCheck : faCircleExclamation} />
-                                        {quoteLoading
-                                            ? 'Đang kiểm tra...'
-                                            : quote?.capacityMessage || quoteError || 'Đang chờ kết quả kiểm tra.'}
+                                        {availabilityLoading
+                                            ? 'Đang tải lịch khả dụng...'
+                                            : availabilityError
+                                                ? availabilityError
+                                                : !selectedSlotAvailable
+                                                    ? selectedAvailability?.message || 'Hãy chọn một khung giờ còn trống.'
+                                                    : quoteLoading
+                                                        ? 'Đang kiểm tra...'
+                                                        : quote?.capacityMessage || quoteError || 'Đang chờ kết quả kiểm tra.'}
                                     </span>
                                 </div>
                             </div>
@@ -1088,7 +1173,7 @@ export default function Checkout() {
                             <button
                                 type="submit"
                                 className="btn-confirm-booking"
-                                disabled={isSubmitting || quoteLoading || !quote || !quote.capacityAvailable}
+                                disabled={isSubmitting || availabilityLoading || !selectedSlotAvailable || quoteLoading || !quote || !quote.capacityAvailable}
                             >
                                 {isSubmitting ? (
                                     <>

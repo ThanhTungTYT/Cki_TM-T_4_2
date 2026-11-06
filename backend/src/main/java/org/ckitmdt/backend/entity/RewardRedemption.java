@@ -25,6 +25,10 @@ public class RewardRedemption {
     @JoinColumn(name = "promotion_id", nullable = false)
     private Promotion promotion;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "booking_id")
+    private Booking booking;
+
     @Column(name = "points_used")
     private Integer pointsUsed;
 

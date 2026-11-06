@@ -2,10 +2,8 @@ package org.ckitmdt.backend.service.service;
 
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.dto.service.*;
-import org.ckitmdt.backend.entity.Address;
 import org.ckitmdt.backend.entity.PartnerService;
 import org.ckitmdt.backend.entity.ServicePackage;
-import org.ckitmdt.backend.repository.AddressRepository;
 import org.ckitmdt.backend.repository.PartnerServiceRepository;
 import org.ckitmdt.backend.repository.ReviewRepository;
 import org.ckitmdt.backend.repository.ServicePackageRepository;
@@ -36,7 +34,6 @@ public class PublicServiceCatalogService {
 
     private final PartnerServiceRepository partnerServiceRepository;
     private final ServicePackageRepository servicePackageRepository;
-    private final AddressRepository addressRepository;
     private final ReviewRepository reviewRepository;
 
     @Transactional(readOnly = true)
@@ -67,14 +64,20 @@ public class PublicServiceCatalogService {
         Page<PartnerService> result = partnerServiceRepository.findAll(specification, pageable);
         List<Long> serviceIds = result.getContent().stream()
                 .map(offer -> offer.getService().getId()).distinct().toList();
+        List<Long> partnerIds = result.getContent().stream()
+                .map(offer -> offer.getPartner().getId()).distinct().toList();
         Map<Long, ReviewRepository.ServiceReviewStats> reviewStats = serviceIds.isEmpty()
                 ? Map.of()
                 : reviewRepository.summarizeByServiceIds(serviceIds).stream()
                         .collect(Collectors.toMap(ReviewRepository.ServiceReviewStats::getServiceId, stats -> stats));
+        Map<Long, ReviewRepository.PartnerReviewStats> partnerStats = partnerIds.isEmpty() ? Map.of()
+                : reviewRepository.summarizeByPartnerIds(partnerIds).stream()
+                        .collect(Collectors.toMap(ReviewRepository.PartnerReviewStats::getPartnerId, stats -> stats));
 
         return PublicServicePageDto.builder()
                 .content(result.getContent().stream()
-                        .map(offer -> toDto(offer, reviewStats.get(offer.getService().getId()))).toList())
+                        .map(offer -> toDto(offer, reviewStats.get(offer.getService().getId()),
+                                partnerStats.get(offer.getPartner().getId()))).toList())
                 .totalElements(result.getTotalElements())
                 .totalPages(result.getTotalPages())
                 .page(result.getNumber())
@@ -94,8 +97,8 @@ public class PublicServiceCatalogService {
 
         for (PartnerService offer : offers) {
             categoryCounts.merge(offer.getService().getCategory().getId(), 1L, Long::sum);
-            String district = findArea(offer);
-            if (!district.isBlank()) areaCounts.merge(district, 1L, Long::sum);
+            String area = providerArea(offer.getPartner().getAddress());
+            if (!area.isBlank()) areaCounts.merge(area, 1L, Long::sum);
             String pricingType = offer.getService().getPricingType();
             if (pricingType != null && !pricingType.isBlank()) pricingCounts.merge(pricingType, 1L, Long::sum);
             BigDecimal price = effectivePrice(offer);
@@ -126,7 +129,8 @@ public class PublicServiceCatalogService {
                 .value(value).label(label).count(count).build();
     }
 
-    private PublicServiceListItemDto toDto(PartnerService offer, ReviewRepository.ServiceReviewStats stats) {
+    private PublicServiceListItemDto toDto(PartnerService offer, ReviewRepository.ServiceReviewStats stats,
+                                           ReviewRepository.PartnerReviewStats partnerStats) {
         var service = offer.getService();
         var partner = offer.getPartner();
         List<ServicePackageListItemDto> packages = servicePackageRepository
@@ -158,7 +162,10 @@ public class PublicServiceCatalogService {
                 .estimatedMinutes(service.getEstimatedMinutes())
                 .rating(stats == null || stats.getAverageRating() == null ? 0D : stats.getAverageRating())
                 .reviews(stats == null ? 0L : stats.getReviewCount())
-                .location(findLocation(offer))
+                .providerRating(partnerStats == null ? null : BigDecimal.valueOf(partnerStats.getAverageRating()))
+                .providerReviews(partnerStats == null ? 0L : partnerStats.getReviewCount())
+                .providerCompletedJobs(partner.getTotalCompletedJobs())
+                .location(providerLocation(partner.getAddress()))
                 .packages(packages)
                 .build();
     }
@@ -169,23 +176,15 @@ public class PublicServiceCatalogService {
         return price == null ? BigDecimal.ZERO : price;
     }
 
-    private String findArea(PartnerService offer) {
-        return providerAddress(offer).map(Address::getDistrict)
-                .filter(value -> !value.isBlank()).orElse("");
+    private String providerLocation(String address) {
+        return address == null || address.isBlank() ? "Chưa cập nhật khu vực" : address.trim();
     }
 
-    private String findLocation(PartnerService offer) {
-        return providerAddress(offer).map(address -> {
-            String district = address.getDistrict() == null ? "" : address.getDistrict().trim();
-            String province = address.getProvince() == null ? "" : address.getProvince().trim();
-            if (district.isBlank()) return province;
-            if (province.isBlank()) return district;
-            return district + ", " + province;
-        }).filter(value -> !value.isBlank()).orElse("Chưa cập nhật khu vực");
-    }
-
-    private java.util.Optional<Address> providerAddress(PartnerService offer) {
-        List<Address> addresses = addressRepository.findProviderAddresses(offer.getPartner().getUser().getId());
-        return addresses.stream().findFirst();
+    private String providerArea(String address) {
+        if (address == null || address.isBlank()) return "";
+        String[] parts = address.split(",");
+        if (parts.length < 2) return address.trim();
+        return String.join(",", java.util.Arrays.copyOfRange(parts, Math.max(0, parts.length - 2), parts.length))
+                .trim();
     }
 }

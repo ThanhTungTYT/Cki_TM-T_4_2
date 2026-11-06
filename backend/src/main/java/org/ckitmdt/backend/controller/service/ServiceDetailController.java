@@ -3,6 +3,7 @@ package org.ckitmdt.backend.controller.service;
 import org.ckitmdt.backend.dto.service.QuoteRequestDto;
 import org.ckitmdt.backend.dto.service.QuoteResponseDto;
 import org.ckitmdt.backend.dto.service.ServiceDetailResponseDto;
+import org.ckitmdt.backend.dto.service.PublicProviderProfileDto;
 import org.ckitmdt.backend.service.service.ServiceDetailService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,11 @@ public class ServiceDetailController {
     @GetMapping("/{id}")
     public ResponseEntity<ServiceDetailResponseDto> getServiceById(@PathVariable Long id) {
         return ResponseEntity.ok(serviceDetailService.getServiceDetail(id));
+    }
+
+    @GetMapping("/providers/{id}")
+    public ResponseEntity<PublicProviderProfileDto> getProviderProfile(@PathVariable Long id) {
+        return ResponseEntity.ok(serviceDetailService.getProviderProfile(id));
     }
 
     @PostMapping("/quotes")

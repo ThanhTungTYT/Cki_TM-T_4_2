@@ -37,10 +37,14 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/customer/notifications").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/customer/notifications/*/read").hasRole("CUSTOMER")
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/api/v1/providers",
                                 "/api/v1/services",
                                 "/api/v1/services/filters",
+                                "/api/v1/services/providers/*",
                                 "/api/v1/services/*",
                                 "/api/v1/services/*/reviews"
                         ).permitAll()
@@ -94,6 +98,15 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/admin/orders/**"
+                        ).hasAnyRole("ADMIN", "STAFF")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/admin/reward-orders",
+                                "/api/admin/reward-orders/**"
+                        ).hasAnyRole("ADMIN", "STAFF")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/admin/reward-orders/*/ship"
                         ).hasAnyRole("ADMIN", "STAFF")
                         .requestMatchers(
                                 HttpMethod.GET,

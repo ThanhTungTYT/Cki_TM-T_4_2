@@ -504,10 +504,16 @@ function Services() {
                                             <span className="rating">
                                                 <FontAwesomeIcon icon={faStar} />
                                                 {' '}
-                                                {Number(service.reviews || 0) > 0
-                                                    ? `${Number(service.rating || 0).toFixed(2)} (${Number(service.reviews).toLocaleString('vi-VN')} đánh giá)`
+                                                {service.providerRating != null && Number(service.providerReviews || 0) > 0
+                                                    ? `${Number(service.providerRating || 0).toFixed(2)} (${Number(service.providerReviews).toLocaleString('vi-VN')} đánh giá)`
                                                     : 'Chưa có đánh giá'}
                                             </span>
+
+                                            {service.providerCompletedJobs != null && (
+                                                <span className="service-completed-jobs">
+                                                    {Number(service.providerCompletedJobs).toLocaleString('vi-VN')} đơn hoàn thành
+                                                </span>
+                                            )}
 
                                             <span className="service-location">
                                                 <FontAwesomeIcon icon={faLocationDot} />
@@ -517,7 +523,7 @@ function Services() {
 
                                         <div className="service-bottom">
                                             <div className="service-price">
-                                                <small>Mức phí</small>
+                                                <small>Giá Provider</small>
                                                 <strong>{formatPrice(service.basePrice)}</strong>
                                             </div>
 
