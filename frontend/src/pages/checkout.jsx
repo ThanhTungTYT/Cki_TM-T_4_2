@@ -118,6 +118,58 @@ export default function Checkout() {
     const [availabilitySlots, setAvailabilitySlots] = useState([]);
     const [availabilityLoading, setAvailabilityLoading] = useState(false);
     const [availabilityError, setAvailabilityError] = useState('');
+    const [calendarMonth, setCalendarMonth] = useState(() => {
+        const date = new Date(`${selectedDate}T00:00:00`);
+        return Number.isNaN(date.getTime()) ? new Date() : new Date(date.getFullYear(), date.getMonth(), 1);
+    });
+    const [calendarAvailability, setCalendarAvailability] = useState({});
+    const [calendarLoading, setCalendarLoading] = useState(false);
+
+    useEffect(() => {
+        const selected = new Date(`${selectedDate}T00:00:00`);
+        if (!Number.isNaN(selected.getTime())) {
+            setCalendarMonth(current => current.getFullYear() === selected.getFullYear()
+                && current.getMonth() === selected.getMonth()
+                ? current
+                : new Date(selected.getFullYear(), selected.getMonth(), 1));
+        }
+    }, [selectedDate]);
+
+    const calendarDays = useMemo(() => {
+        const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+        const mondayOffset = (first.getDay() + 6) % 7;
+        const gridStart = new Date(first);
+        gridStart.setDate(first.getDate() - mondayOffset);
+        return Array.from({ length: 42 }, (_, index) => {
+            const date = new Date(gridStart);
+            date.setDate(gridStart.getDate() + index);
+            return date;
+        });
+    }, [calendarMonth]);
+
+    useEffect(() => {
+        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+        if (!token || !Number.isInteger(partnerId) || partnerId <= 0 || !quoteItems.length) {
+            setCalendarAvailability({});
+            return undefined;
+        }
+
+        const controller = new AbortController();
+        const dates = calendarDays.map(formatDateString);
+        setCalendarLoading(true);
+        bookingApi.getCalendarAvailability({ partnerId, dates, items: quoteItems }, controller.signal)
+            .then(result => {
+                if (!controller.signal.aborted) setCalendarAvailability(result || {});
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) setCalendarAvailability({});
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) setCalendarLoading(false);
+            });
+
+        return () => controller.abort();
+    }, [partnerId, quoteItems, calendarDays]);
 
     const [paymentMethod, setPaymentMethod] = useState('VNPAY');
     const [voucherCode, setVoucherCode] = useState('');
@@ -262,14 +314,15 @@ export default function Checkout() {
             setQuoteError('');
 
             try {
-                const result = await bookingApi.getQuote({
+                const quoteRequest = {
                     partnerId,
                     addressId: defaultAddressId ? Number(defaultAddressId) : null,
                     items: quoteItems,
                     scheduledStart: `${selectedDate}T${selectedTimeSlot}:00`,
                     voucherCode: appliedVoucherCode || null,
                     redeemPoints: Number(redeemPoints) || 0
-                });
+                };
+                const result = await bookingApi.getQuote(quoteRequest);
 
                 if (cancelled) return;
 
@@ -292,14 +345,37 @@ export default function Checkout() {
             } catch (error) {
                 if (cancelled) return;
 
-                setQuote(null);
-                setQuoteError(error.message || 'Không thể tính báo giá.');
-
                 if (appliedVoucherCode) {
+                    // A rejected voucher should not hide the normal checkout quote.
+                    // Recalculate without the code so the customer can still see the
+                    // payable amount and the backend's voucher-specific explanation.
+                    try {
+                        const fallbackQuote = await bookingApi.getQuote({
+                            partnerId,
+                            addressId: defaultAddressId ? Number(defaultAddressId) : null,
+                            items: quoteItems,
+                            scheduledStart: `${selectedDate}T${selectedTimeSlot}:00`,
+                            voucherCode: null,
+                            redeemPoints: Number(redeemPoints) || 0
+                        });
+
+                        if (cancelled) return;
+                        setQuote(fallbackQuote);
+                        setCcoinBalance(Number(fallbackQuote.rewardBalance || 0));
+                        setQuoteError('');
+                    } catch (fallbackError) {
+                        if (cancelled) return;
+                        setQuote(null);
+                        setQuoteError(fallbackError.message || 'Không thể tính báo giá.');
+                    }
+
                     setVoucherMessage({
                         type: 'error',
                         text: error.message || 'Mã khuyến mãi không hợp lệ.'
                     });
+                } else {
+                    setQuote(null);
+                    setQuoteError(error.message || 'Không thể tính báo giá.');
                 }
             } finally {
                 if (!cancelled) setQuoteLoading(false);
@@ -908,26 +984,68 @@ export default function Checkout() {
                             <div className="schedule-pills-row">
                                 <button
                                     type="button"
-                                    className={`pill-btn ${selectedDate === todayStr ? 'active' : ''}`}
+                                    className={`pill-btn ${selectedDate === todayStr ? 'active' : ''} ${calendarAvailability[todayStr] === false ? 'unavailable' : ''}`}
+                                    disabled={calendarLoading || calendarAvailability[todayStr] === false}
                                     onClick={() => setSelectedDate(todayStr)}
                                 >
                                     Hôm nay
                                 </button>
                                 <button
                                     type="button"
-                                    className={`pill-btn ${selectedDate === tomorrowStr ? 'active' : ''}`}
+                                    className={`pill-btn ${selectedDate === tomorrowStr ? 'active' : ''} ${calendarAvailability[tomorrowStr] === false ? 'unavailable' : ''}`}
+                                    disabled={calendarLoading || calendarAvailability[tomorrowStr] === false}
                                     onClick={() => setSelectedDate(tomorrowStr)}
                                 >
                                     Ngày mai
                                 </button>
-                                <div className="custom-date-picker-inline">
-                                    <FontAwesomeIcon icon={faCalendarDays} className="cal-icon" />
-                                    <input
-                                        type="date"
-                                        min={todayStr}
-                                        value={selectedDate}
-                                        onChange={event => setSelectedDate(event.target.value)}
-                                    />
+                                <div className="checkout-calendar" aria-label="Lịch chọn ngày dịch vụ">
+                                    <div className="checkout-calendar-heading">
+                                        <button
+                                            type="button"
+                                            aria-label="Tháng trước"
+                                            disabled={calendarMonth.getFullYear() === new Date().getFullYear()
+                                                && calendarMonth.getMonth() <= new Date().getMonth()}
+                                            onClick={() => setCalendarMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+                                        >‹</button>
+                                        <strong>
+                                            {calendarMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
+                                        </strong>
+                                        <button
+                                            type="button"
+                                            aria-label="Tháng sau"
+                                            onClick={() => setCalendarMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+                                        >›</button>
+                                    </div>
+                                    <div className="checkout-calendar-grid calendar-weekdays" aria-hidden="true">
+                                        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(day => <span key={day}>{day}</span>)}
+                                    </div>
+                                    <div className="checkout-calendar-grid">
+                                        {calendarDays.map(date => {
+                                            const dateKey = formatDateString(date);
+                                            const currentMonth = date.getMonth() === calendarMonth.getMonth();
+                                            const pastDate = dateKey < todayStr;
+                                            const dayAvailable = calendarAvailability[dateKey] === true;
+                                            const unavailable = !calendarLoading && currentMonth
+                                                && calendarAvailability[dateKey] === false;
+                                            return (
+                                                <button
+                                                    key={dateKey}
+                                                    type="button"
+                                                    className={`checkout-calendar-day ${currentMonth ? '' : 'outside-month'} ${selectedDate === dateKey ? 'selected' : ''} ${unavailable ? 'unavailable' : ''} ${calendarLoading && currentMonth ? 'checking' : ''}`}
+                                                    disabled={!currentMonth || pastDate || calendarLoading || !dayAvailable}
+                                                    title={unavailable ? 'Ngày này không còn khung giờ hợp lệ' : undefined}
+                                                    onClick={() => setSelectedDate(dateKey)}
+                                                >
+                                                    {date.getDate()}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="checkout-calendar-legend">
+                                        <span><i className="available-dot" /> Còn giờ</span>
+                                        <span><i className="unavailable-dot" /> Hết giờ</span>
+                                        {calendarLoading && <small>Đang kiểm tra lịch…</small>}
+                                    </div>
                                 </div>
                             </div>
 
