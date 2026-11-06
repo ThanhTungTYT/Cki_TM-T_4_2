@@ -21,4 +21,11 @@ public class BookingExpirationScheduler {
                         BookingStatusEnum.PENDING_PAYMENT.name(), LocalDateTime.now())
                 .forEach(booking -> bookingStateEngine.expirePendingPayment(booking.getId()));
     }
+
+    @Scheduled(fixedDelay = 60_000)
+    public void expirePendingProviderBookings() {
+        bookingRepository.findByStatusAndProviderDeadlineAtBefore(
+                        BookingStatusEnum.PENDING_PROVIDER.name(), LocalDateTime.now())
+                .forEach(booking -> bookingStateEngine.expirePendingProvider(booking.getId()));
+    }
 }

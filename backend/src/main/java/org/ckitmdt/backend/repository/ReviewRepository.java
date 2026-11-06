@@ -37,6 +37,8 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     long countByPartner_Id(Long partnerId);
 
+    List<Review> findByPartner_IdOrderByCreatedAtDesc(Long partnerId);
+
     boolean existsByService_IdAndCustomer_Id(Long serviceId, Long customerId);
 
     @Query(value = "select r from Review r where r.service.id = :serviceId " +

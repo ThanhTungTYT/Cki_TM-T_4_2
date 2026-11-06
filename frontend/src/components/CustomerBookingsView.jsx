@@ -900,7 +900,7 @@ export default function CustomerBookingsView() {
                                             </div>
                                         </div>
                                     ) : (
-                                        <p>Backend chưa cung cấp thông tin nhân viên được phân công.</p>
+                                        <p style={{ color: '#64748b', fontStyle: 'italic', fontSize: 13 }}>Đang chờ đối tác chỉ định nhân viên thực hiện.</p>
                                     )}
                                 </div>
                             </div>

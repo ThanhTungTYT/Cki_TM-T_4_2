@@ -1,4 +1,3 @@
-
 package org.ckitmdt.backend.repository;
 
 import jakarta.persistence.LockModeType;
@@ -20,6 +19,13 @@ public interface BookingAssignmentRepository extends JpaRepository<BookingAssign
     List<BookingAssignment> findByPartner_IdOrderByAssignedAtDesc(Long partnerId);
 
     List<BookingAssignment> findByEmployee_IdOrderByAssignedAtDesc(Long employeeId);
+
+    @Query("""
+            SELECT a FROM BookingAssignment a
+            WHERE a.employee.id = :employeeId
+              AND UPPER(a.status) IN ('ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS')
+            """)
+    List<BookingAssignment> findActiveAssignmentsByEmployeeId(@Param("employeeId") Long employeeId);
 
     // Khóa bản ghi Assignment trong lúc Cleaner thực hiện hành động.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

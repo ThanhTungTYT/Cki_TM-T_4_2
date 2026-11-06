@@ -208,9 +208,13 @@ public class CleanerAssignmentService {
             }
 
             case "DECLINE" -> {
-                if (note != null && !note.isBlank()) {
-                    assignment.setNote("Từ chối: " + note);
+                if (note == null || note.trim().isBlank()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Vui lòng ghi rõ lý do/giải trình từ chối công việc."
+                    );
                 }
+                assignment.setNote("Từ chối: " + note.trim());
             }
 
             default -> throw new ResponseStatusException(
@@ -437,37 +441,13 @@ public class CleanerAssignmentService {
             }
         }
 
-        // Chỉ lưu lịch sử Booking khi trạng thái Booking thực sự thay đổi.
+        // Chỉ lưu lịch sử Booking khi trạng thái Booking thực sự thay đổi (đồng bộ qua BookingStateEngine A02)
         if (!oldBookingStatus.equals(nextBookingStatus)) {
-
-            booking.setStatus(nextBookingStatus);
-            booking.setUpdatedAt(now);
-
-            Booking savedBooking = bookingRepository.save(booking);
-
-            bookingStatusHistoryRepository.save(
-                    BookingStatusHistory.builder()
-                            .booking(savedBooking)
-                            .oldStatus(oldBookingStatus)
-                            .newStatus(nextBookingStatus)
-                            .changedBy(cleanerUser)
-                            .note(
-                                    note != null && !note.isBlank()
-                                            ? note
-                                            : "Cập nhật tiến độ từ hành động Cleaner: " + action
-                            )
-                            .createdAt(now)
-                            .build()
-            );
-
-            log.info(
-                    "Booking [{}] chuyển trạng thái {} -> {}",
-                    booking.getBookingCode(),
-                    oldBookingStatus,
-                    nextBookingStatus
-            );
-
-            customerNotificationService.notifyBookingStatus(savedBooking);
+            org.ckitmdt.backend.dto.booking.BookingStatusEnum targetEnum = org.ckitmdt.backend.dto.booking.BookingStatusEnum.valueOf(nextBookingStatus);
+            String transitionNote = note != null && !note.isBlank()
+                    ? note
+                    : "Cập nhật tiến độ từ hành động Cleaner: " + action;
+            bookingStateEngine.transitionBooking(booking, targetEnum, cleanerUser, transitionNote);
         }
     }
 

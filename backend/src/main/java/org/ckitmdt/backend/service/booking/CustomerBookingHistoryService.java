@@ -3,6 +3,9 @@ package org.ckitmdt.backend.service.booking;
 import org.ckitmdt.backend.dto.booking.BookingHistoryResponseDto;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.repository.BookingRepository;
+import org.ckitmdt.backend.repository.BookingAssignmentRepository;
+import org.ckitmdt.backend.entity.BookingAssignment;
+import org.ckitmdt.backend.entity.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +17,8 @@ public class CustomerBookingHistoryService {
 
     @Autowired
     private BookingRepository bookingRepository;
+    @Autowired
+    private BookingAssignmentRepository bookingAssignmentRepository;
 
     public List<BookingHistoryResponseDto> getCustomerBookings(
             Long customerId,
@@ -31,7 +36,21 @@ public class CustomerBookingHistoryService {
 
         // Chuyển Booking Entity thành DTO
         return bookings.stream()
-                .map(b -> BookingHistoryResponseDto.builder()
+                .map(b -> {
+                    String cleanerName = null;
+                    String cleanerPhone = null;
+                    List<BookingAssignment> asgList = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(b.getId());
+                    BookingAssignment activeAsg = asgList.stream()
+                            .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus()))
+                            .findFirst().orElse(null);
+                    if (activeAsg != null && activeAsg.getEmployee() != null && activeAsg.getEmployee().getUser() != null) {
+                        User cUser = activeAsg.getEmployee().getUser();
+                        cleanerName = cUser.getFullName();
+                        cleanerPhone = cUser.getPhone();
+                    }
+                    return BookingHistoryResponseDto.builder()
+                            .cleanerName(cleanerName)
+                            .cleanerPhone(cleanerPhone)
                         .id(b.getId())
                         .bookingCode(b.getBookingCode())
                         .partnerName(
@@ -50,8 +69,8 @@ public class CustomerBookingHistoryService {
                         .scheduledEnd(b.getScheduledEnd())
                         .createdAt(b.getCreatedAt())
                         .customerNote(b.getCustomerNote())
-                        .build()
-                )
+                        .build();
+                })
                 .collect(Collectors.toList());
     }
 

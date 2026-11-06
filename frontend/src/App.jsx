@@ -37,6 +37,8 @@ import ProviderEmployees from './pages/provider-portal/ProviderEmployees';
 import ProviderSchedule from './pages/provider-portal/ProviderSchedule';
 import ProviderServices from './pages/provider-portal/ProviderServices';
 import ProviderComplaints from './pages/provider-portal/ProviderComplaints';
+import ProviderRevenue from './pages/provider-portal/ProviderRevenue';
+import ProviderReviews from './pages/provider-portal/ProviderReviews';
 import CleanerLayout from './pages/cleaner-portal/CleanerLayout';
 import CleanerDashboard from './pages/cleaner-portal/CleanerDashboard';
 import CleanerPlaceholder from './pages/cleaner-portal/CleanerPlaceholder';
@@ -122,7 +124,8 @@ function App() {
                     <Route path="employees" element={<ProviderEmployees />} />
                     <Route path="schedule" element={<ProviderSchedule />} />
                     <Route path="complaints" element={<ProviderComplaints />} />
-                    <Route path="revenue" element={<Navigate to="/provider-portal/dashboard" replace />} />
+                    <Route path="revenue" element={<ProviderRevenue />} />
+                    <Route path="reviews" element={<ProviderReviews />} />
                 </Route>
             </Routes>
         </BrowserRouter>

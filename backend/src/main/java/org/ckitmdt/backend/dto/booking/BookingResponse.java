@@ -37,6 +37,7 @@ public class BookingResponse {
     private String customerNote;
     private String cancelReason;
     private LocalDateTime holdExpiresAt;
+    private LocalDateTime providerDeadlineAt;
     private Long version;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;

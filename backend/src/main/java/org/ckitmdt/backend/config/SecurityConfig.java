@@ -172,11 +172,13 @@ public class SecurityConfig {
                                 "/api/admin/**"
                         ).hasRole("ADMIN")
                         .requestMatchers(
+                                "/api/provider/**"
+                        ).hasAnyRole("PROVIDER", "PARTNER")
+                        .requestMatchers(
                                 "/api/refunds/**",
                                 "/api/reports/**",
                                 "/api/users/**",
-                                "/api/payments/**",
-                                "/api/provider/**"
+                                "/api/payments/**"
                         ).authenticated()
                         .anyRequest().authenticated()
                 )

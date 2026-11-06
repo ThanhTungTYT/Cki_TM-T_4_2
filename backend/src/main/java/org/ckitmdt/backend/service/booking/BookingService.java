@@ -498,6 +498,7 @@ public class BookingService {
                         ? request.getIdempotencyKey().trim()
                         : null)
                 .holdExpiresAt(cashPayment ? null : now.plusMinutes(15))
+                .providerDeadlineAt(cashPayment ? calculateProviderDeadline(quote.getScheduledStart(), now) : null)
                 .version(0L)
                 .customerNote(request.getCustomerNote())
                 .createdAt(now)
@@ -828,6 +829,7 @@ public class BookingService {
         LocalDateTime oldStart = booking.getScheduledStart();
         booking.setScheduledStart(newStart);
         booking.setScheduledEnd(newEnd);
+        booking.setProviderDeadlineAt(calculateProviderDeadline(newStart, LocalDateTime.now()));
         booking.setUpdatedAt(LocalDateTime.now());
         Booking saved = bookingRepository.save(booking);
         bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
@@ -865,6 +867,18 @@ public class BookingService {
 
     private long effectiveMinimumNoticeMinutes() {
         return Math.max(0, Math.min(minimumNoticeMinutes, 24 * 60));
+    }
+
+    public static LocalDateTime calculateProviderDeadline(LocalDateTime scheduledStart, LocalDateTime fromTime) {
+        if (scheduledStart == null) {
+            return fromTime.plusHours(12);
+        }
+        long hoursUntilService = java.time.Duration.between(fromTime, scheduledStart).toHours();
+        if (hoursUntilService <= 48) {
+            return fromTime.plusHours(3);
+        } else {
+            return fromTime.plusHours(12);
+        }
     }
 
     private long effectiveTravelBufferMinutes() {

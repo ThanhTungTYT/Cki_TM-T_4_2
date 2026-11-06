@@ -2,6 +2,8 @@ package org.ckitmdt.backend.repository;
 
 import jakarta.persistence.LockModeType;
 import org.ckitmdt.backend.entity.Booking;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -49,6 +51,49 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByPartner_IdOrderByCreatedAtDesc(Long partnerId);
 
     @Query("""
+            SELECT b FROM Booking b
+            WHERE b.partner.id = :partnerId
+              AND (:status IS NULL OR UPPER(b.status) = UPPER(:status))
+              AND (:search IS NULL OR LOWER(b.bookingCode) LIKE LOWER(CONCAT('%', :search, '%'))
+                   OR (b.customer IS NOT NULL AND LOWER(b.customer.fullName) LIKE LOWER(CONCAT('%', :search, '%'))))
+            ORDER BY b.createdAt DESC
+            """)
+    Page<Booking> searchBookingsByPartner(
+            @Param("partnerId") Long partnerId,
+            @Param("status") String status,
+            @Param("search") String search,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT b FROM Booking b
+            WHERE b.partner.id = :partnerId
+              AND UPPER(b.status) = 'COMPLETED'
+              AND b.completedAt >= :start
+              AND b.completedAt < :end
+            ORDER BY b.completedAt DESC
+            """)
+    List<Booking> findCompletedBookingsByPartnerAndCompletedDateRange(
+            @Param("partnerId") Long partnerId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+            SELECT COALESCE(SUM(b.totalAmount), 0)
+            FROM Booking b
+            WHERE b.partner.id = :partnerId
+              AND UPPER(b.status) = 'COMPLETED'
+              AND b.completedAt >= :start
+              AND b.completedAt < :end
+            """)
+    BigDecimal sumCompletedOrderValueByPartnerAndCompletedDateRange(
+            @Param("partnerId") Long partnerId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
             SELECT COALESCE(SUM(b.totalAmount), 0)
             FROM Booking b
             WHERE b.status = 'COMPLETED'
@@ -90,6 +135,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     );
 
     List<Booking> findByStatusAndHoldExpiresAtBefore(String status, LocalDateTime expiresAt);
+
+    List<Booking> findByStatusAndProviderDeadlineAtBefore(String status, LocalDateTime expiresAt);
 
     List<Booking> findByStatusIn(List<String> statuses);
 

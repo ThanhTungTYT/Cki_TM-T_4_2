@@ -180,8 +180,14 @@ export const adminProviderChangeRequestApi = {
 
 // ---------- Bookings ----------
 export const providerBookingApi = {
-    async list() {
-        const res = await fetch(`${BASE_URL}/provider/bookings`, {
+    async list(params = {}) {
+        const q = new URLSearchParams();
+        if (params.status) q.set('status', params.status);
+        if (params.search) q.set('search', params.search);
+        if (params.page != null) q.set('page', params.page);
+        if (params.size != null) q.set('size', params.size);
+        const queryStr = q.toString() ? `?${q.toString()}` : '';
+        const res = await fetch(`${BASE_URL}/provider/bookings${queryStr}`, {
             headers: getAuthHeaders(),
         });
         return handleResponse(res, 'Không thể tải danh sách đơn hàng.');
@@ -216,6 +222,18 @@ export const providerBookingApi = {
             }
         );
         return handleResponse(res, 'Không thể từ chối đơn hàng.');
+    },
+
+    async cancel(id, reason) {
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings/${id}/actions/cancel`,
+            {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ action: 'CANCEL', note: reason }),
+            }
+        );
+        return handleResponse(res, 'Không thể hủy đơn hàng.');
     },
 
     // Phân công nhân viên
@@ -285,6 +303,24 @@ export const providerEmployeeApi = {
         });
         return handleResponse(res, 'Không thể cập nhật trạng thái nhân viên.');
     },
+
+    async update(id, payload) {
+        const res = await fetch(`${BASE_URL}/provider/employees/${id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+        });
+        return handleResponse(res, 'Không thể cập nhật thông tin nhân viên.');
+    },
+
+    async resetPassword(id, newPassword = '') {
+        const res = await fetch(`${BASE_URL}/provider/employees/${id}/reset-password`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ newPassword }),
+        });
+        return handleResponse(res, 'Không thể đặt lại mật khẩu.');
+    },
 };
 
 // ---------- Schedule ----------
@@ -310,5 +346,41 @@ export const providerRevenueApi = {
             headers: getAuthHeaders(),
         });
         return handleResponse(res, 'Không thể tải doanh thu.');
+    },
+};
+
+
+// ---------- Notifications ----------
+export const providerNotificationApi = {
+    async list() {
+        const res = await fetch(`${BASE_URL}/provider/notifications`, {
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(res, 'Không thể tải thông báo.');
+    },
+
+    async markRead(id) {
+        const res = await fetch(`${BASE_URL}/provider/notifications/${id}/read`, {
+            method: 'PATCH',
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(res, 'Không thể đánh dấu đã đọc.');
+    },
+
+    async markAllRead() {
+        const res = await fetch(`${BASE_URL}/provider/notifications/read-all`, {
+            method: 'PATCH',
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(res, 'Không thể đánh dấu đã đọc tất cả.');
+    },
+};
+// ---------- Reviews & Feedback ----------
+export const providerReviewApi = {
+    async list() {
+        const res = await fetch(`${BASE_URL}/provider/reviews`, {
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(res, 'Không thể tải đánh giá của khách hàng.');
     },
 };

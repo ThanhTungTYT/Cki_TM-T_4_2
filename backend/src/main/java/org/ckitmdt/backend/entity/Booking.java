@@ -74,6 +74,9 @@ public class Booking {
     @Column(name = "hold_expires_at")
     private LocalDateTime holdExpiresAt;
 
+    @Column(name = "provider_deadline_at")
+    private LocalDateTime providerDeadlineAt;
+
     @Version
     @Column(nullable = false)
     @Builder.Default

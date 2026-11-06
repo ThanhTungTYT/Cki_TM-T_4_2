@@ -19,6 +19,8 @@ import org.ckitmdt.backend.repository.BookingStatusHistoryRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.entity.Payment;
+import org.ckitmdt.backend.entity.AdminNotification;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +47,7 @@ public class BookingStateEngine {
     private final org.ckitmdt.backend.service.CustomerNotificationService customerNotificationService;
     private final EmployeeRepository employeeRepository;
     private final PartnerRepository partnerRepository;
+    private final AdminNotificationRepository adminNotificationRepository;
 
     @Transactional
     public BookingResponse executeAction(
@@ -112,14 +115,15 @@ public class BookingStateEngine {
 
         validateActorPermission(booking, currentUser, action);
 
-        if (action == BookingActionEnum.CANCEL
-                && currentUser != null
-                && isStaffRole(normalizeRole(currentUser.getRole()))
-                && (request.getNote() == null || request.getNote().isBlank())) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Admin/Staff phải ghi rõ lý do khi hủy đơn hàng."
-            );
+        if (action == BookingActionEnum.CANCEL && currentUser != null) {
+            String uRole = normalizeRole(currentUser.getRole());
+            boolean isPartnerActor = booking.getPartner() != null && booking.getPartner().getUser() != null && booking.getPartner().getUser().getId().equals(currentUser.getId());
+            if ((isStaffRole(uRole) || isPartnerActor) && (request.getNote() == null || request.getNote().isBlank())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        (isPartnerActor ? "Nhà cung cấp" : "Admin/Staff") + " phải ghi rõ lý do khi hủy đơn hàng."
+                );
+            }
         }
 
         if (action == BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT) {
@@ -246,6 +250,9 @@ public class BookingStateEngine {
         String oldStatus = booking.getStatus();
 
         booking.setStatus(targetStatus.name());
+        if (targetStatus == BookingStatusEnum.PENDING_PROVIDER) {
+            booking.setProviderDeadlineAt(BookingService.calculateProviderDeadline(booking.getScheduledStart(), now));
+        }
         booking.setUpdatedAt(now);
 
         if (targetStatus == BookingStatusEnum.COMPLETED) {
@@ -316,6 +323,83 @@ public class BookingStateEngine {
         return mapToBookingResponse(savedBooking);
     }
 
+    /**
+     * Đồng bộ hóa và tập trung logic chuyển trạng thái đơn hàng (A02).
+     * Tất cả các dịch vụ (CleanerAssignmentService, ProviderBookingController, ...) đều ủy quyền chuyển trạng thái qua phương thức này.
+     */
+    @Transactional
+    public Booking transitionBooking(
+            Booking booking,
+            BookingStatusEnum targetStatus,
+            User currentUser,
+            String note
+    ) {
+        String oldStatus = booking.getStatus();
+        LocalDateTime now = LocalDateTime.now();
+
+        booking.setStatus(targetStatus.name());
+        booking.setUpdatedAt(now);
+
+        if (targetStatus == BookingStatusEnum.COMPLETED) {
+            booking.setCompletedAt(now);
+            List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
+            for (BookingAssignment a : assignments) {
+                if (!"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus())) {
+                    a.setStatus("COMPLETED");
+                    if (a.getCompletedAt() == null) a.setCompletedAt(now);
+                    bookingAssignmentRepository.save(a);
+
+                    Employee emp = a.getEmployee();
+                    if (emp != null) {
+                        emp.setTotalCompletedJobs((emp.getTotalCompletedJobs() != null ? emp.getTotalCompletedJobs() : 0) + 1);
+                        employeeRepository.save(emp);
+                    }
+                }
+            }
+            if (booking.getPartner() != null) {
+                Partner p = booking.getPartner();
+                p.setTotalCompletedJobs((p.getTotalCompletedJobs() != null ? p.getTotalCompletedJobs() : 0) + 1);
+                partnerRepository.save(p);
+            }
+        }
+
+        if (targetStatus == BookingStatusEnum.CANCELLED || targetStatus == BookingStatusEnum.REJECTED) {
+            booking.setCancelledAt(now);
+            if (note != null && !note.isBlank()) {
+                booking.setCancelReason(note);
+            }
+            List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
+            for (BookingAssignment a : assignments) {
+                if (!"COMPLETED".equalsIgnoreCase(a.getStatus())) {
+                    a.setStatus("CANCELLED");
+                    bookingAssignmentRepository.save(a);
+                }
+            }
+        }
+
+        Booking savedBooking = bookingRepository.save(booking);
+
+        bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                .booking(savedBooking)
+                .oldStatus(oldStatus)
+                .newStatus(targetStatus.name())
+                .changedBy(currentUser)
+                .note(note != null && !note.isBlank() ? note : "Chuyển trạng thái sang " + targetStatus.name())
+                .createdAt(now)
+                .build());
+
+        log.info(
+                "Booking [{}] chuyển trạng thái {} -> {} qua transitionBooking, user [{}]",
+                savedBooking.getBookingCode(),
+                oldStatus,
+                targetStatus.name(),
+                currentUser != null ? currentUser.getEmail() : "SYSTEM"
+        );
+
+        customerNotificationService.notifyBookingStatus(savedBooking);
+        return savedBooking;
+    }
+
     @Transactional
     public void expirePendingPayment(Long bookingId) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
@@ -344,6 +428,50 @@ public class BookingStateEngine {
                 .build());
 
         customerNotificationService.notifyBookingStatus(saved);
+        rewardLifecycleService.processBooking(saved.getId());
+    }
+
+    @Transactional
+    public void expirePendingProvider(Long bookingId) {
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
+
+        if (booking == null
+                || !BookingStatusEnum.PENDING_PROVIDER.name().equals(booking.getStatus())
+                || booking.getProviderDeadlineAt() == null
+                || LocalDateTime.now().isBefore(booking.getProviderDeadlineAt())) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String oldStatus = booking.getStatus();
+
+        booking.setStatus(BookingStatusEnum.EXPIRED.name());
+        booking.setUpdatedAt(now);
+        booking.setCancelReason("Đối tác quá hạn tiếp nhận đơn hàng.");
+
+        Booking saved = bookingRepository.save(booking);
+
+        bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                .booking(saved)
+                .oldStatus(oldStatus)
+                .newStatus(BookingStatusEnum.EXPIRED.name())
+                .note("Hết thời gian chờ đối tác tiếp nhận đơn hàng.")
+                .createdAt(now)
+                .build());
+
+        // Thông báo cho khách hàng
+        customerNotificationService.notifyBookingStatus(saved);
+
+        // Thông báo cho Admin (đơn tiền mặt không cần hoàn tiền, chỉ thông báo)
+        adminNotificationRepository.save(AdminNotification.builder()
+                .type("BOOKING_PROVIDER_EXPIRED")
+                .title("Đơn hàng quá hạn tiếp nhận")
+                .message("Đơn hàng #" + saved.getBookingCode() + " đã quá hạn mà đối tác không tiếp nhận. Đơn đã được tự động kết thúc.")
+                .referenceType("BOOKING")
+                .referenceId(saved.getId())
+                .createdAt(now)
+                .build());
+
         rewardLifecycleService.processBooking(saved.getId());
     }
 
@@ -531,6 +659,8 @@ public class BookingStateEngine {
                                 "Nhà cung cấp không thể hủy đơn ở trạng thái hiện tại."
                         );
                     }
+
+
                 }
 
                 if ((isAdmin || isStaff)
@@ -641,7 +771,7 @@ public class BookingStateEngine {
 
         switch (status) {
             case PENDING_PAYMENT -> {
-                if (isCustomer || isAdmin || isStaff) {
+                if (isCustomer || isAdmin || isStaff || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
@@ -658,7 +788,7 @@ public class BookingStateEngine {
             }
 
             case CONFIRMED -> {
-                if (isCustomer || isAdmin || isStaff) {
+                if (isCustomer || isAdmin || isStaff || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
@@ -872,6 +1002,7 @@ public class BookingStateEngine {
                 .customerNote(booking.getCustomerNote())
                 .cancelReason(booking.getCancelReason())
                 .holdExpiresAt(booking.getHoldExpiresAt())
+                .providerDeadlineAt(booking.getProviderDeadlineAt())
                 .version(booking.getVersion())
                 .createdAt(booking.getCreatedAt())
                 .completedAt(booking.getCompletedAt())
