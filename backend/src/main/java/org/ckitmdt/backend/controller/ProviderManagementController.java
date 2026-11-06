@@ -12,6 +12,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
+import org.ckitmdt.backend.entity.AdminNotification;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -38,6 +40,7 @@ public class ProviderManagementController {
     private final BusinessChangeRequestRepository changeRequestRepository;
     private final ReportTicketRepository reportTicketRepository;
     private final ComplaintResponseRepository complaintResponseRepository;
+    private final AdminNotificationRepository notificationRepository;
 
     private User currentUser(Authentication auth) {
         if (auth == null || auth.getName() == null) {
@@ -650,6 +653,24 @@ public class ProviderManagementController {
                 .note(text(body.get("note")))
                 .build();
         assignment = assignmentRepository.save(assignment);
+        // Tạo thông báo cho Cleaner vừa được giao việc
+        User cleanerUser = employee.getUser();
+
+        if (cleanerUser != null) {
+            String bookingCode = booking.getBookingCode() != null
+                    ? booking.getBookingCode()
+                    : String.valueOf(booking.getId());
+
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(cleanerUser)
+                    .type("BOOKING_ASSIGNED")
+                    .title("Bạn có công việc mới")
+                    .message("Bạn vừa được phân công thực hiện đơn hàng " + bookingCode + ". Vui lòng kiểm tra danh sách công việc.")
+                    .referenceType("BOOKING_ASSIGNMENT")
+                    .referenceId(assignment.getId())
+                    .createdAt(now)
+                    .build());
+        }
 
         // Cập nhật trạng thái đơn sang ASSIGNED nếu chưa
         if ("CONFIRMED".equalsIgnoreCase(booking.getStatus())) {
