@@ -231,6 +231,22 @@ export const bookingApi = {
         });
 
         return handleResponse(res, 'Không thể thực hiện thao tác với đơn hàng.');
+    },
+
+    async executeCleanerAssignmentAction(assignmentId, action, note) {
+        const res = await fetch(
+            `${BASE_URL}/bookings/cleaner/assignments/${assignmentId}/actions/${action}`,
+            {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ note })
+            }
+        );
+
+        return handleResponse(
+            res,
+            'Không thể cập nhật trạng thái phân công của nhân viên.'
+        );
     }
 };
 

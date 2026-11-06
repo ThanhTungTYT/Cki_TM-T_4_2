@@ -1,5 +1,5 @@
 import { NavLink, Link, useNavigate, Outlet } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import React, { Component, useEffect, useState } from 'react';
 import { providerDashboardApi } from '../../services/providerApi';
 import './ProviderPortal.css';
 
@@ -89,6 +89,50 @@ const NAV_ITEMS = [
     { to: '/provider-portal/schedule',   label: 'Lịch làm việc', icon: <IconCalendar /> },
     { to: '/provider-portal/complaints', label: 'Khiếu nại',     icon: <IconShieldAlert /> },
 ];
+
+class ProviderErrorBoundary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+    componentDidCatch(error, errorInfo) {
+        console.error('Provider portal error:', error, errorInfo);
+    }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="pp-card" style={{ maxWidth: 600, margin: '40px auto', padding: 24, textAlign: 'center' }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+                    <h2 style={{ fontSize: 18, color: '#0f172a', marginBottom: 8 }}>Đã xảy ra sự cố khi tải trang</h2>
+                    <p style={{ color: '#64748b', fontSize: 13.5, marginBottom: 16 }}>
+                        {this.state.error?.message || 'Lỗi không xác định'}
+                    </p>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                        <button
+                            className="pp-btn pp-btn-outline"
+                            onClick={() => window.location.reload()}
+                        >
+                            Tải lại trang
+                        </button>
+                        <button
+                            className="pp-btn pp-btn-primary"
+                            onClick={() => {
+                                this.setState({ hasError: false, error: null });
+                                window.location.href = '/provider-portal/bookings';
+                            }}
+                        >
+                            Về danh sách đơn hàng
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
 
 function ProviderLayout() {
     const navigate = useNavigate();
@@ -203,7 +247,7 @@ function ProviderLayout() {
                 </header>
 
                 <main className="pp-content">
-                    <Outlet />
+                    <ProviderErrorBoundary><Outlet /></ProviderErrorBoundary>
                 </main>
             </div>
         </div>

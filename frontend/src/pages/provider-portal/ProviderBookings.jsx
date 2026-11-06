@@ -5,10 +5,15 @@ import { providerBookingApi } from '../../services/providerApi';
 const VND = (v) => (v != null ? `${Number(v).toLocaleString('vi-VN')}đ` : '—');
 
 const STATUS_CONFIG = {
-    PENDING_PROVIDER: { cls: 'pp-badge-pending',   label: 'Chờ duyệt' },
-    CONFIRMED:        { cls: 'pp-badge-confirmed',  label: 'Đã xác nhận' },
-    ASSIGNED:         { cls: 'pp-badge-assigned',   label: 'Đã phân công' },
-    COMPLETED:        { cls: 'pp-badge-completed',  label: 'Hoàn thành' },
+    PENDING_PROVIDER:      { cls: 'pp-badge-pending',   label: 'Chờ duyệt' },
+    CONFIRMED:             { cls: 'pp-badge-confirmed', label: 'Đã xác nhận' },
+    ASSIGNED:              { cls: 'pp-badge-assigned',  label: 'Đã phân công' },
+    EN_ROUTE:              { cls: 'pp-badge-progress',  label: 'Đang di chuyển' },
+    IN_PROGRESS:           { cls: 'pp-badge-progress',  label: 'Đang thực hiện' },
+    PENDING_COMPLETION:    { cls: 'pp-badge-waiting',   label: 'Chờ nghiệm thu' },
+    COMPLETED:             { cls: 'pp-badge-completed', label: 'Hoàn thành' },
+    CANCELLED:             { cls: 'pp-badge-cancelled', label: 'Đã hủy' },
+    REJECTED:              { cls: 'pp-badge-cancelled', label: 'Bị từ chối' },
     CANCELLED_BY_CUSTOMER: { cls: 'pp-badge-cancelled', label: 'KH hủy' },
     CANCELLED_BY_PROVIDER: { cls: 'pp-badge-cancelled', label: 'NCC hủy' },
     CANCELLED_BY_ADMIN:    { cls: 'pp-badge-cancelled', label: 'Admin hủy' },
@@ -25,6 +30,8 @@ const STATUS_FILTERS = [
     { value: 'PENDING_PROVIDER', label: 'Chờ duyệt' },
     { value: 'CONFIRMED', label: 'Đã xác nhận' },
     { value: 'ASSIGNED', label: 'Đã phân công' },
+    { value: 'IN_PROGRESS', label: 'Đang làm' },
+    { value: 'PENDING_COMPLETION', label: 'Chờ nghiệm thu' },
     { value: 'COMPLETED', label: 'Hoàn thành' },
     { value: 'CANCEL', label: 'Đã hủy' },
 ];

@@ -5,7 +5,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.ckitmdt.backend.dto.booking.*;
 import org.ckitmdt.backend.entity.Booking;
+import org.ckitmdt.backend.entity.BookingAssignment;
 import org.ckitmdt.backend.entity.BookingStatusHistory;
+import org.ckitmdt.backend.entity.Employee;
+import org.ckitmdt.backend.entity.Partner;
+import org.ckitmdt.backend.repository.EmployeeRepository;
+import org.ckitmdt.backend.repository.PartnerRepository;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.BookingAssignmentRepository;
 import org.ckitmdt.backend.repository.BookingItemRepository;
@@ -38,6 +43,8 @@ public class BookingStateEngine {
     private final PaymentRepository paymentRepository;
     private final org.ckitmdt.backend.service.BookingRewardLifecycleService rewardLifecycleService;
     private final org.ckitmdt.backend.service.CustomerNotificationService customerNotificationService;
+    private final EmployeeRepository employeeRepository;
+    private final PartnerRepository partnerRepository;
 
     @Transactional
     public BookingResponse executeAction(
@@ -196,22 +203,89 @@ public class BookingStateEngine {
                 action
         );
 
+        LocalDateTime now = LocalDateTime.now();
+
+        // Cập nhật trạng thái BookingAssignment của Cleaner (nếu có)
+        if (currentUser != null && isCleanerRole(normalizeRole(currentUser.getRole()))) {
+            final Long currentUserId = currentUser.getId();
+            bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId())
+                    .stream()
+                    .filter(a -> a.getEmployee() != null && a.getEmployee().getUser() != null
+                            && a.getEmployee().getUser().getId().equals(currentUserId))
+                    .filter(a -> !"DECLINED".equalsIgnoreCase(a.getStatus()) && !"CANCELLED".equalsIgnoreCase(a.getStatus()))
+                    .findFirst()
+                    .ifPresent(assignment -> {
+                        if (action == BookingActionEnum.START_TRAVEL) {
+                            assignment.setStatus("EN_ROUTE");
+                            if (assignment.getAcceptedAt() == null) assignment.setAcceptedAt(now);
+                        } else if (action == BookingActionEnum.START_JOB) {
+                            assignment.setStatus("IN_PROGRESS");
+                            if (assignment.getAcceptedAt() == null) assignment.setAcceptedAt(now);
+                            if (assignment.getStartedAt() == null) assignment.setStartedAt(now);
+                        } else if (action == BookingActionEnum.SUBMIT_COMPLETION) {
+                            assignment.setStatus("WORK_SUBMITTED");
+                            if (assignment.getCompletedAt() == null) assignment.setCompletedAt(now);
+                        }
+                        bookingAssignmentRepository.saveAndFlush(assignment);
+                    });
+        }
+
+        // Kiểm tra xem tất cả cleaner hoạt động đã nộp kết quả hoàn thành chưa
+        if (action == BookingActionEnum.SUBMIT_COMPLETION) {
+            List<BookingAssignment> activeAssignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId())
+                    .stream()
+                    .filter(a -> !"DECLINED".equalsIgnoreCase(a.getStatus()) && !"CANCELLED".equalsIgnoreCase(a.getStatus()))
+                    .toList();
+            boolean allSubmitted = !activeAssignments.isEmpty() && activeAssignments.stream()
+                    .allMatch(a -> "WORK_SUBMITTED".equalsIgnoreCase(a.getStatus()) || "COMPLETED".equalsIgnoreCase(a.getStatus()));
+            if (!allSubmitted) {
+                targetStatus = BookingStatusEnum.IN_PROGRESS;
+            }
+        }
+
         String oldStatus = booking.getStatus();
 
         booking.setStatus(targetStatus.name());
-        booking.setUpdatedAt(LocalDateTime.now());
+        booking.setUpdatedAt(now);
 
         if (targetStatus == BookingStatusEnum.COMPLETED) {
-            booking.setCompletedAt(LocalDateTime.now());
+            booking.setCompletedAt(now);
+            List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
+            for (BookingAssignment a : assignments) {
+                if (!"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus())) {
+                    a.setStatus("COMPLETED");
+                    if (a.getCompletedAt() == null) a.setCompletedAt(now);
+                    bookingAssignmentRepository.save(a);
+
+                    Employee emp = a.getEmployee();
+                    if (emp != null) {
+                        emp.setTotalCompletedJobs((emp.getTotalCompletedJobs() != null ? emp.getTotalCompletedJobs() : 0) + 1);
+                        employeeRepository.save(emp);
+                    }
+                }
+            }
+            if (booking.getPartner() != null) {
+                Partner p = booking.getPartner();
+                p.setTotalCompletedJobs((p.getTotalCompletedJobs() != null ? p.getTotalCompletedJobs() : 0) + 1);
+                partnerRepository.save(p);
+            }
         }
 
         if (targetStatus == BookingStatusEnum.CANCELLED
                 || targetStatus == BookingStatusEnum.REJECTED) {
-            booking.setCancelledAt(LocalDateTime.now());
+            booking.setCancelledAt(now);
 
             if (request.getNote() != null
                     && !request.getNote().isBlank()) {
                 booking.setCancelReason(request.getNote());
+            }
+
+            List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
+            for (BookingAssignment a : assignments) {
+                if (!"COMPLETED".equalsIgnoreCase(a.getStatus())) {
+                    a.setStatus("CANCELLED");
+                    bookingAssignmentRepository.save(a);
+                }
             }
         }
 
@@ -304,11 +378,13 @@ public class BookingStateEngine {
             };
 
             case EN_ROUTE -> switch (action) {
+                case START_TRAVEL -> BookingStatusEnum.EN_ROUTE;
                 case START_JOB -> BookingStatusEnum.IN_PROGRESS;
                 default -> invalidTransition(currentStatus, action);
             };
 
             case IN_PROGRESS -> switch (action) {
+                case START_JOB -> BookingStatusEnum.IN_PROGRESS;
                 case SUBMIT_COMPLETION -> BookingStatusEnum.PENDING_COMPLETION;
                 default -> invalidTransition(currentStatus, action);
             };
@@ -494,7 +570,9 @@ public class BookingStateEngine {
                                 && (assignment.getStatus() == null
                                 || "ASSIGNED".equalsIgnoreCase(assignment.getStatus())
                                 || "ACCEPTED".equalsIgnoreCase(assignment.getStatus())
-                                || "IN_PROGRESS".equalsIgnoreCase(assignment.getStatus()))
+                                || "EN_ROUTE".equalsIgnoreCase(assignment.getStatus())
+                                || "IN_PROGRESS".equalsIgnoreCase(assignment.getStatus())
+                                || "WORK_SUBMITTED".equalsIgnoreCase(assignment.getStatus()))
                 );
     }
 
@@ -702,7 +780,57 @@ public class BookingStateEngine {
         String paymentMethod = cashPayment ? "CASH" : "VNPAY";
         String paymentStatus = alreadyPaid ? "PAID" : "UNPAID";
 
+        List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
+        List<CleanerAssignmentResponse> assignmentResponses = assignments.stream()
+                .map(a -> {
+                    Employee emp = a.getEmployee();
+                    User empUser = emp != null ? emp.getUser() : null;
+                    return CleanerAssignmentResponse.builder()
+                            .assignmentId(a.getId())
+                            .assignmentStatus(a.getStatus())
+                            .assignedAt(a.getAssignedAt())
+                            .acceptedAt(a.getAcceptedAt())
+                            .startedAt(a.getStartedAt())
+                            .completedAt(a.getCompletedAt())
+                            .assignmentNote(a.getNote())
+                            .employeeId(emp != null ? emp.getId() : null)
+                            .employeeCode(emp != null ? emp.getEmployeeCode() : null)
+                            .employeeName(empUser != null ? empUser.getFullName() : null)
+                            .employeePhone(empUser != null ? empUser.getPhone() : null)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        BookingAssignment primaryAssignment = assignments.stream()
+                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus()))
+                .findFirst()
+                .orElse(null);
+
+        String cleanerName = null;
+        String cleanerPhone = null;
+        String cleanerAvatar = null;
+        java.math.BigDecimal cleanerRating = null;
+        Integer cleanerCompletedJobs = null;
+
+        if (primaryAssignment != null && primaryAssignment.getEmployee() != null) {
+            Employee emp = primaryAssignment.getEmployee();
+            User empUser = emp.getUser();
+            if (empUser != null) {
+                cleanerName = empUser.getFullName();
+                cleanerPhone = empUser.getPhone();
+                cleanerAvatar = empUser.getAvatarUrl();
+            }
+            cleanerCompletedJobs = emp.getTotalCompletedJobs();
+            cleanerRating = emp.getRatingAverage();
+        }
+
         return BookingResponse.builder()
+                .cleanerName(cleanerName)
+                .cleanerPhone(cleanerPhone)
+                .cleanerAvatar(cleanerAvatar)
+                .cleanerRating(cleanerRating)
+                .cleanerCompletedJobs(cleanerCompletedJobs)
+                .assignments(assignmentResponses)
                 .id(booking.getId())
                 .bookingCode(booking.getBookingCode())
                 .customerId(booking.getCustomer() != null

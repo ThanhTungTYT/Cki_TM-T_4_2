@@ -49,6 +49,7 @@ public class SecurityConfig {
                                 "/api/v1/services/*/reviews"
                         ).permitAll()
                         .requestMatchers(
+                                "/error",
                                 "/api/auth/login",
                                 "/api/auth/register",
                                 "/api/auth/google",

@@ -227,6 +227,14 @@ export const providerBookingApi = {
         return handleResponse(res, 'Không thể tải phân công.');
     },
 
+    async getAvailableEmployees(bookingId) {
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings/${bookingId}/available-employees`,
+            { headers: getAuthHeaders() }
+        );
+        return handleResponse(res, 'Không thể tải danh sách nhân viên khả dụng.');
+    },
+
     async assign(bookingId, employeeId, note = '') {
         const res = await fetch(
             `${BASE_URL}/provider/bookings/${bookingId}/assignments`,

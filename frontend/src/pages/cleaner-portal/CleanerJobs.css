@@ -569,6 +569,14 @@
     background: #059669;
 }
 
+.cj-action-decline {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+.cj-action-decline:hover:not(:disabled) {
+    background: #fecaca;
+}
 .cj-action-complete:hover:not(:disabled) {
     background: #047857;
 }

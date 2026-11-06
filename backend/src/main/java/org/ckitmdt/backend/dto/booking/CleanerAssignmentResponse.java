@@ -1,4 +1,3 @@
-
 package org.ckitmdt.backend.dto.booking;
 
 import lombok.*;
@@ -25,6 +24,14 @@ public class CleanerAssignmentResponse {
     private LocalDateTime completedAt;
 
     private String assignmentNote;
+
+    private Long employeeId;
+
+    private String employeeName;
+
+    private String employeeCode;
+
+    private String employeePhone;
 
     private BookingResponse booking;
 }
