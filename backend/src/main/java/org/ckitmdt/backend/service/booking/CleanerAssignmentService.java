@@ -441,37 +441,13 @@ public class CleanerAssignmentService {
             }
         }
 
-        // Chỉ lưu lịch sử Booking khi trạng thái Booking thực sự thay đổi.
+        // Chỉ lưu lịch sử Booking khi trạng thái Booking thực sự thay đổi (đồng bộ qua BookingStateEngine A02)
         if (!oldBookingStatus.equals(nextBookingStatus)) {
-
-            booking.setStatus(nextBookingStatus);
-            booking.setUpdatedAt(now);
-
-            Booking savedBooking = bookingRepository.save(booking);
-
-            bookingStatusHistoryRepository.save(
-                    BookingStatusHistory.builder()
-                            .booking(savedBooking)
-                            .oldStatus(oldBookingStatus)
-                            .newStatus(nextBookingStatus)
-                            .changedBy(cleanerUser)
-                            .note(
-                                    note != null && !note.isBlank()
-                                            ? note
-                                            : "Cập nhật tiến độ từ hành động Cleaner: " + action
-                            )
-                            .createdAt(now)
-                            .build()
-            );
-
-            log.info(
-                    "Booking [{}] chuyển trạng thái {} -> {}",
-                    booking.getBookingCode(),
-                    oldBookingStatus,
-                    nextBookingStatus
-            );
-
-            customerNotificationService.notifyBookingStatus(savedBooking);
+            org.ckitmdt.backend.dto.booking.BookingStatusEnum targetEnum = org.ckitmdt.backend.dto.booking.BookingStatusEnum.valueOf(nextBookingStatus);
+            String transitionNote = note != null && !note.isBlank()
+                    ? note
+                    : "Cập nhật tiến độ từ hành động Cleaner: " + action;
+            bookingStateEngine.transitionBooking(booking, targetEnum, cleanerUser, transitionNote);
         }
     }
 

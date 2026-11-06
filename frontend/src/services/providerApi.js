@@ -224,6 +224,18 @@ export const providerBookingApi = {
         return handleResponse(res, 'Không thể từ chối đơn hàng.');
     },
 
+    async cancel(id, reason) {
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings/${id}/actions/cancel`,
+            {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ action: 'CANCEL', note: reason }),
+            }
+        );
+        return handleResponse(res, 'Không thể hủy đơn hàng.');
+    },
+
     // Phân công nhân viên
     async getAssignments(bookingId) {
         const res = await fetch(
@@ -361,5 +373,14 @@ export const providerNotificationApi = {
             headers: getAuthHeaders(),
         });
         return handleResponse(res, 'Không thể đánh dấu đã đọc tất cả.');
+    },
+};
+// ---------- Reviews & Feedback ----------
+export const providerReviewApi = {
+    async list() {
+        const res = await fetch(`${BASE_URL}/provider/reviews`, {
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(res, 'Không thể tải đánh giá của khách hàng.');
     },
 };

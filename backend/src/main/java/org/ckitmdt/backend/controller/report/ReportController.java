@@ -10,6 +10,8 @@ import org.ckitmdt.backend.repository.ComplaintResponseRepository;
 import org.ckitmdt.backend.repository.ReportTicketRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.ckitmdt.backend.service.CustomerNotificationService;
+import org.ckitmdt.backend.entity.AdminNotification;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,7 @@ public class ReportController {
     private final UserRepository userRepository;
     private final BookingRepository bookingRepository;
     private final CustomerNotificationService customerNotificationService;
+    private final AdminNotificationRepository notificationRepository;
 
     @PostMapping
     @Transactional
@@ -294,6 +297,17 @@ public class ReportController {
             customerNotificationService.notifyCustomer(saved.getReporter(), "COMPLAINT_" + status,
                     "Cập nhật khiếu nại", "Khiếu nại '" + saved.getSubject() + "' đã chuyển sang trạng thái " + status + ".",
                     "COMPLAINT", saved.getId());
+        }
+        if (saved.getBooking() != null && saved.getBooking().getPartner() != null && saved.getBooking().getPartner().getUser() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(saved.getBooking().getPartner().getUser())
+                    .type("COMPLAINT_" + status)
+                    .title("Khiếu nại #" + saved.getId() + " đã được xử lý (" + status + ")")
+                    .message("Khiếu nại liên quan đến đơn hàng #" + saved.getBooking().getBookingCode() + " đã được cập nhật trạng thái " + status + (resolution.isBlank() ? "." : ": " + resolution))
+                    .referenceType("REPORT_TICKET")
+                    .referenceId(saved.getId())
+                    .createdAt(now)
+                    .build());
         }
         return row(saved);
     }

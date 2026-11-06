@@ -287,6 +287,18 @@ export default function CustomerBookingHistory() {
                                                             </strong>
                                                         </div>
                                                     </div>
+
+                                                    {booking.cleanerName && (
+                                                        <div className="booking-history-info">
+                                                            <FontAwesomeIcon icon={faUser} />
+                                                            <div>
+                                                                <span>Nhân viên thực hiện</span>
+                                                                <strong>
+                                                                    {booking.cleanerName} {booking.cleanerPhone ? `(${booking.cleanerPhone})` : ''}
+                                                                </strong>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {booking.fullAddress && (

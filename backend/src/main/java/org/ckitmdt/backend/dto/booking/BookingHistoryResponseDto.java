@@ -23,4 +23,6 @@ public class BookingHistoryResponseDto {
     private LocalDateTime scheduledEnd;
     private LocalDateTime createdAt;
     private String customerNote;
+    private String cleanerName;
+    private String cleanerPhone;
 }

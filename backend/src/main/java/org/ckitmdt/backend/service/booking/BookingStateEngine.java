@@ -115,14 +115,15 @@ public class BookingStateEngine {
 
         validateActorPermission(booking, currentUser, action);
 
-        if (action == BookingActionEnum.CANCEL
-                && currentUser != null
-                && isStaffRole(normalizeRole(currentUser.getRole()))
-                && (request.getNote() == null || request.getNote().isBlank())) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Admin/Staff phải ghi rõ lý do khi hủy đơn hàng."
-            );
+        if (action == BookingActionEnum.CANCEL && currentUser != null) {
+            String uRole = normalizeRole(currentUser.getRole());
+            boolean isPartnerActor = booking.getPartner() != null && booking.getPartner().getUser() != null && booking.getPartner().getUser().getId().equals(currentUser.getId());
+            if ((isStaffRole(uRole) || isPartnerActor) && (request.getNote() == null || request.getNote().isBlank())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        (isPartnerActor ? "Nhà cung cấp" : "Admin/Staff") + " phải ghi rõ lý do khi hủy đơn hàng."
+                );
+            }
         }
 
         if (action == BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT) {
@@ -320,6 +321,83 @@ public class BookingStateEngine {
         customerNotificationService.notifyBookingStatus(savedBooking);
         rewardLifecycleService.processBooking(savedBooking.getId());
         return mapToBookingResponse(savedBooking);
+    }
+
+    /**
+     * Đồng bộ hóa và tập trung logic chuyển trạng thái đơn hàng (A02).
+     * Tất cả các dịch vụ (CleanerAssignmentService, ProviderBookingController, ...) đều ủy quyền chuyển trạng thái qua phương thức này.
+     */
+    @Transactional
+    public Booking transitionBooking(
+            Booking booking,
+            BookingStatusEnum targetStatus,
+            User currentUser,
+            String note
+    ) {
+        String oldStatus = booking.getStatus();
+        LocalDateTime now = LocalDateTime.now();
+
+        booking.setStatus(targetStatus.name());
+        booking.setUpdatedAt(now);
+
+        if (targetStatus == BookingStatusEnum.COMPLETED) {
+            booking.setCompletedAt(now);
+            List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
+            for (BookingAssignment a : assignments) {
+                if (!"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus())) {
+                    a.setStatus("COMPLETED");
+                    if (a.getCompletedAt() == null) a.setCompletedAt(now);
+                    bookingAssignmentRepository.save(a);
+
+                    Employee emp = a.getEmployee();
+                    if (emp != null) {
+                        emp.setTotalCompletedJobs((emp.getTotalCompletedJobs() != null ? emp.getTotalCompletedJobs() : 0) + 1);
+                        employeeRepository.save(emp);
+                    }
+                }
+            }
+            if (booking.getPartner() != null) {
+                Partner p = booking.getPartner();
+                p.setTotalCompletedJobs((p.getTotalCompletedJobs() != null ? p.getTotalCompletedJobs() : 0) + 1);
+                partnerRepository.save(p);
+            }
+        }
+
+        if (targetStatus == BookingStatusEnum.CANCELLED || targetStatus == BookingStatusEnum.REJECTED) {
+            booking.setCancelledAt(now);
+            if (note != null && !note.isBlank()) {
+                booking.setCancelReason(note);
+            }
+            List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
+            for (BookingAssignment a : assignments) {
+                if (!"COMPLETED".equalsIgnoreCase(a.getStatus())) {
+                    a.setStatus("CANCELLED");
+                    bookingAssignmentRepository.save(a);
+                }
+            }
+        }
+
+        Booking savedBooking = bookingRepository.save(booking);
+
+        bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                .booking(savedBooking)
+                .oldStatus(oldStatus)
+                .newStatus(targetStatus.name())
+                .changedBy(currentUser)
+                .note(note != null && !note.isBlank() ? note : "Chuyển trạng thái sang " + targetStatus.name())
+                .createdAt(now)
+                .build());
+
+        log.info(
+                "Booking [{}] chuyển trạng thái {} -> {} qua transitionBooking, user [{}]",
+                savedBooking.getBookingCode(),
+                oldStatus,
+                targetStatus.name(),
+                currentUser != null ? currentUser.getEmail() : "SYSTEM"
+        );
+
+        customerNotificationService.notifyBookingStatus(savedBooking);
+        return savedBooking;
     }
 
     @Transactional
@@ -581,6 +659,8 @@ public class BookingStateEngine {
                                 "Nhà cung cấp không thể hủy đơn ở trạng thái hiện tại."
                         );
                     }
+
+
                 }
 
                 if ((isAdmin || isStaff)
@@ -691,7 +771,7 @@ public class BookingStateEngine {
 
         switch (status) {
             case PENDING_PAYMENT -> {
-                if (isCustomer || isAdmin || isStaff) {
+                if (isCustomer || isAdmin || isStaff || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
@@ -708,7 +788,7 @@ public class BookingStateEngine {
             }
 
             case CONFIRMED -> {
-                if (isCustomer || isAdmin || isStaff) {
+                if (isCustomer || isAdmin || isStaff || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }

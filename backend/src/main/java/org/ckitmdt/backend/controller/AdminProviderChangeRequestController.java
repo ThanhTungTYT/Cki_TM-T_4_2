@@ -11,6 +11,8 @@ import org.ckitmdt.backend.repository.BusinessChangeRequestRepository;
 import org.ckitmdt.backend.repository.PartnerRepository;
 import org.ckitmdt.backend.repository.PartnerServiceRepository;
 import org.ckitmdt.backend.repository.ServiceRepository;
+import org.ckitmdt.backend.entity.AdminNotification;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,7 @@ public class AdminProviderChangeRequestController {
     private final PartnerServiceRepository partnerServiceRepository;
     private final ServiceRepository serviceRepository;
     private final ObjectMapper objectMapper;
+    private final AdminNotificationRepository notificationRepository;
 
     private static final Set<String> VALID_STATUSES = Set.of(
             "PENDING_REVIEW",
@@ -117,6 +120,18 @@ public class AdminProviderChangeRequestController {
 
         requestRepository.save(request);
 
+        if (request.getPartner() != null && request.getPartner().getUser() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(request.getPartner().getUser())
+                    .type("CHANGE_REQUEST_APPROVED")
+                    .title("Yêu cầu cập nhật hồ sơ đã được phê duyệt")
+                    .message("Yêu cầu #" + request.getId() + " (" + request.getRequestType() + ") đã được phê duyệt thành công.")
+                    .referenceType("CHANGE_REQUEST")
+                    .referenceId(request.getId())
+                    .createdAt(LocalDateTime.now())
+                    .build());
+        }
+
         return toResponse(request);
     }
 
@@ -149,6 +164,18 @@ public class AdminProviderChangeRequestController {
 
         requestRepository.save(request);
 
+        if (request.getPartner() != null && request.getPartner().getUser() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(request.getPartner().getUser())
+                    .type("CHANGE_REQUEST_REJECTED")
+                    .title("Yêu cầu cập nhật hồ sơ bị từ chối")
+                    .message("Yêu cầu #" + request.getId() + " (" + request.getRequestType() + ") đã bị từ chối: " + reason + ". Vui lòng tạo yêu cầu mới kèm thông tin đầy đủ.")
+                    .referenceType("CHANGE_REQUEST")
+                    .referenceId(request.getId())
+                    .createdAt(LocalDateTime.now())
+                    .build());
+        }
+
         return toResponse(request);
     }
 
@@ -173,8 +200,8 @@ public class AdminProviderChangeRequestController {
             );
         }
 
-        request.setStatus("NEEDS_INFORMATION");
-        request.setRejectReason(note);
+        request.setStatus("REJECTED");
+        request.setRejectReason("Cần bổ sung thông tin: " + note + ". Vui lòng tạo yêu cầu mới kèm đầy đủ thông tin/tài liệu được yêu cầu.");
         request.setReviewedBy(getActor(authentication));
         request.setReviewedAt(LocalDateTime.now());
         request.setUpdatedAt(LocalDateTime.now());

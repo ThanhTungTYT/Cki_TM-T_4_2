@@ -6,7 +6,7 @@ import "./AdminProviderChangeRequests.css";
 const STATUS_OPTIONS = [
     { value: "", label: "Tất cả trạng thái" },
     { value: "PENDING_REVIEW", label: "Chờ duyệt" },
-    { value: "NEEDS_INFORMATION", label: "Cần bổ sung thông tin" },
+    { value: "REJECTED", label: "Cần bổ sung thông tin" },
     { value: "APPROVED", label: "Đã phê duyệt" },
     { value: "REJECTED", label: "Đã từ chối" },
     { value: "WITHDRAWN", label: "Đã rút yêu cầu" },
@@ -17,7 +17,7 @@ const STATUS_CONFIG = {
         label: "Chờ duyệt",
         className: "badge-warning",
     },
-    NEEDS_INFORMATION: {
+    REJECTED: {
         label: "Cần bổ sung thông tin",
         className: "badge-info",
     },
@@ -352,7 +352,7 @@ function AdminProviderChangeRequests() {
     ).length;
 
     const needInfoCount = requests.filter(
-        (item) => item.status === "NEEDS_INFORMATION"
+        (item) => item.status === "REJECTED"
     ).length;
 
     const approvedCount = requests.filter(

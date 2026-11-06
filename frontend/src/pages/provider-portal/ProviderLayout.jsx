@@ -80,6 +80,14 @@ function IconTrendingUp() {
         </svg>
     );
 }
+function IconStar() {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="pp-nav-icon">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+        </svg>
+    );
+}
+
 function IconLogOut() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
@@ -96,6 +104,8 @@ const NAV_ITEMS = [
     { to: '/provider-portal/services',   label: 'Dịch vụ',       icon: <IconBroom /> },
     { to: '/provider-portal/employees',  label: 'Nhân viên',     icon: <IconUsers /> },
     { to: '/provider-portal/schedule',   label: 'Lịch làm việc', icon: <IconCalendar /> },
+    { to: '/provider-portal/revenue',    label: 'Doanh thu',     icon: <IconTrendingUp /> },
+    { to: '/provider-portal/reviews',    label: 'Đánh giá',      icon: <IconStar /> },
     { to: '/provider-portal/complaints', label: 'Khiếu nại',     icon: <IconShieldAlert /> },
 ];
 

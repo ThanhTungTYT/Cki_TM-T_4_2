@@ -88,6 +88,8 @@ function ProviderBookingDetail() {
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState('');
     const [assignNote, setAssignNote] = useState('');
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [ticker, setTicker] = useState(0);
 
@@ -191,6 +193,27 @@ function ProviderBookingDetail() {
         }
     }
 
+
+    async function handleCancel() {
+        if (!cancelReason.trim()) {
+            setActionError('Vui lòng nhập lý do hủy đơn hàng.');
+            return;
+        }
+        clearMessages();
+        setSubmitting(true);
+        try {
+            await providerBookingApi.cancel(id, cancelReason);
+            setActionMsg('Đã hủy đơn hàng thành công.');
+            setShowCancelModal(false);
+            setCancelReason('');
+            loadBooking();
+        } catch (e) {
+            setActionError(`❌ ${e.message}`);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
     async function handleRemoveAssignment(assignmentId) {
         if (!window.confirm('Xóa phân công này?')) return;
         clearMessages();
@@ -211,6 +234,7 @@ function ProviderBookingDetail() {
     const canAccept = status === 'PENDING_PROVIDER';
     const canReject = status === 'PENDING_PROVIDER';
     const canAssign = status === 'PENDING_PROVIDER' || status === 'CONFIRMED' || status === 'ASSIGNED';
+    const canCancel = status === 'CONFIRMED' || status === 'ASSIGNED';
     const assignments = booking.assignments || [];
     const declinedAssignments = assignments.filter((a) => (a.status || '').toUpperCase() === 'DECLINED');
 
@@ -441,7 +465,10 @@ function ProviderBookingDetail() {
                     {/* Items */}
                     {booking.items?.length > 0 && (
                         <div className="pp-card">
-                            <p className="pp-card-title">Dịch vụ đã đặt</p>
+                            <p className="pp-card-title" style={{ marginBottom: 6 }}>Dịch vụ đã đặt</p>
+<div style={{ fontSize: 12, color: 'var(--pp-muted)', marginBottom: 12, background: '#f8fafc', padding: '6px 10px', borderRadius: 6 }}>
+    ℹ️ <strong>Lưu ý:</strong> Thời gian hoàn thành là ước tính dự kiến (~2-3 giờ). Khung giờ phục vụ bắt đầu theo đúng yêu cầu hẹn của khách.
+</div>
                             <div className="pp-table-wrap">
                                 <table className="pp-table">
                                     <thead>
@@ -650,7 +677,22 @@ function ProviderBookingDetail() {
                                 </button>
                             )}
 
-                            {!canAccept && !canReject && !canAssign && (
+                            {canCancel && (
+                                <button
+                                    className="pp-btn pp-btn-danger"
+                                    style={{ width: '100%', justifyContent: 'center' }}
+                                    onClick={() => {
+                                        clearMessages();
+                                        setCancelReason('');
+                                        setShowCancelModal(true);
+                                    }}
+                                    disabled={submitting}
+                                >
+                                    ✕ Hủy đơn hàng
+                                </button>
+                            )}
+
+                            {!canAccept && !canReject && !canAssign && !canCancel && (
                                 <p style={{ color: 'var(--pp-muted)', fontSize: 13, textAlign: 'center', margin: '8px 0' }}>
                                     Không có thao tác khả dụng ở trạng thái này.
                                 </p>
@@ -694,6 +736,43 @@ function ProviderBookingDetail() {
                 </div>
             )}
 
+            {/* Cancel modal (F04) */}
+            {showCancelModal && (
+                <div className="pp-modal-overlay">
+                    <div className="pp-modal">
+                        <div className="pp-modal-header">
+                            <span className="pp-modal-title">Hủy đơn hàng #{booking.bookingCode}</span>
+                            <button className="pp-modal-close" onClick={() => setShowCancelModal(false)}>×</button>
+                        </div>
+                        <div className="pp-modal-body">
+                            <p style={{ fontSize: 13, color: '#dc2626', marginTop: 0 }}>
+                                ⚠️ Bạn đang thực hiện hủy đơn hàng đã tiếp nhận. Vui lòng ghi rõ lý do hủy để thông báo cho khách hàng và ban quản trị.
+                            </p>
+                            <div className="pp-form-group">
+                                <label className="pp-label">Lý do hủy đơn hàng *</label>
+                                <textarea
+                                    className="pp-textarea"
+                                    placeholder="Nhập lý do hủy (ví dụ: Nhân viên gặp sự cố đột xuất không thể sắp xếp thay thế kịp...)"
+                                    value={cancelReason}
+                                    onChange={(e) => setCancelReason(e.target.value)}
+                                />
+                            </div>
+                            {actionError && <div className="pp-alert pp-alert-error">{actionError}</div>}
+                        </div>
+                        <div className="pp-modal-footer">
+                            <button className="pp-btn pp-btn-ghost" onClick={() => setShowCancelModal(false)}>Quay lại</button>
+                            <button
+                                className="pp-btn pp-btn-danger"
+                                onClick={handleCancel}
+                                disabled={submitting || !cancelReason.trim()}
+                            >
+                                {submitting ? 'Đang hủy...' : 'Xác nhận hủy đơn'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Assign modal */}
             {showAssignModal && (
                 <div className="pp-modal-overlay">
@@ -717,7 +796,10 @@ function ProviderBookingDetail() {
                                         {formatDateTime(booking.scheduledStart)}
                                     </strong>
                                 </div>
-                                <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
+                                <div style={{ fontSize: 11.5, color: '#1e40af', background: '#eff6ff', padding: '6px 10px', borderRadius: 6, marginBottom: 8 }}>
+    💡 <strong>Quy định:</strong> Mỗi nhân viên chỉ làm tối đa 1 dịch vụ trong ngày để đảm bảo chất lượng phục vụ tốt nhất.
+</div>
+<div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
                                     <span style={{ color: '#16a34a', fontWeight: 600 }}>
                                         🟢 {availableData.availableCount || 0} nhân viên trống lịch
                                     </span>
