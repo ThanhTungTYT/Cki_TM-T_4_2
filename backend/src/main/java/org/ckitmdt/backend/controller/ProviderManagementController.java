@@ -49,6 +49,12 @@ public class ProviderManagementController {
     private final AdminNotificationRepository notificationRepository;
     private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
     private final CustomerNotificationService customerNotificationService;
+    private final PaymentRepository paymentRepository;
+
+    private static final java.util.regex.Pattern EMAIL_PATTERN =
+            java.util.regex.Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$");
+    private static final java.util.regex.Pattern PHONE_PATTERN =
+            java.util.regex.Pattern.compile("^(0|\\+84)[0-9]{9,10}$");
 
     private User currentUser(Authentication auth) {
         if (auth == null || auth.getName() == null) {
@@ -527,11 +533,19 @@ public class ProviderManagementController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email nhân viên không được để trống.");
         }
 
+        if (!EMAIL_PATTERN.matcher(email).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Định dạng email không hợp lệ.");
+        }
+
         if (userRepository.findByEmail(email).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email đã được sử dụng.");
         }
 
         String phone = text(body.get("phone"));
+        if (!phone.isBlank() && !PHONE_PATTERN.matcher(phone).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số điện thoại không đúng định dạng (cần 10 số, bắt đầu bằng 0 hoặc +84).");
+        }
+
         String rawPassword = text(body.get("password"));
         if (rawPassword.isBlank()) {
             rawPassword = "Cleanmate@2024"; // mật khẩu mặc định
@@ -551,8 +565,11 @@ public class ProviderManagementController {
                 .build();
         empUser = userRepository.save(empUser);
 
-        // Tạo mã nhân viên tự động
-        String empCode = "EMP-" + partner.getId() + "-" + System.currentTimeMillis() % 100000;
+        // Tạo mã nhân viên tự động không trùng lặp
+        String empCode;
+        do {
+            empCode = "EMP-" + partner.getId() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase(Locale.ROOT);
+        } while (employeeRepository.existsByEmployeeCode(empCode));
 
         Employee employee = Employee.builder()
                 .partner(partner)
@@ -816,16 +833,18 @@ public class ProviderManagementController {
             String oldStatus = booking.getStatus();
             booking.setStatus("CONFIRMED");
             booking.setUpdatedAt(now);
-            bookingRepository.save(booking);
+            Booking confirmedBooking = bookingRepository.save(booking);
 
             bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
-                    .booking(booking)
+                    .booking(confirmedBooking)
                     .oldStatus(oldStatus)
                     .newStatus("CONFIRMED")
                     .changedBy(partner.getUser())
                     .note("Đối tác tiếp nhận đơn và phân công nhân viên.")
                     .createdAt(now)
                     .build());
+
+            customerNotificationService.notifyBookingStatus(confirmedBooking);
         }
         BookingAssignment assignment = BookingAssignment.builder()
                 .booking(booking)
@@ -1362,6 +1381,87 @@ public class ProviderManagementController {
     }
 
     // =========================================================
+    // PROVIDER NOTIFICATIONS
+    // =========================================================
+
+    @GetMapping("/notifications")
+    @Transactional(readOnly = true)
+    public Map<String, Object> getNotifications(Authentication auth) {
+        Partner partner = currentPartner(auth);
+        User user = partner.getUser();
+
+        List<AdminNotification> notifications = notificationRepository
+                .findTop100ByRecipient_IdOrderByCreatedAtDesc(user.getId());
+
+        long unreadCount = notificationRepository
+                .countByRecipient_IdAndReadAtIsNull(user.getId());
+
+        List<Map<String, Object>> items = notifications.stream()
+                .map(this::notificationRow)
+                .toList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("unreadCount", unreadCount);
+        result.put("items", items);
+        return result;
+    }
+
+    @PatchMapping("/notifications/{id}/read")
+    @Transactional
+    public Map<String, Object> markNotificationRead(
+            @PathVariable Long id,
+            Authentication auth) {
+        Partner partner = currentPartner(auth);
+        User user = partner.getUser();
+
+        AdminNotification notification = notificationRepository
+                .findByIdAndRecipient_Id(id, user.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy thông báo."
+                ));
+
+        if (notification.getReadAt() == null) {
+            notification.setReadAt(LocalDateTime.now());
+            notificationRepository.save(notification);
+        }
+
+        return notificationRow(notification);
+    }
+
+    @PatchMapping("/notifications/read-all")
+    @Transactional
+    public Map<String, Object> markAllNotificationsRead(Authentication auth) {
+        Partner partner = currentPartner(auth);
+        User user = partner.getUser();
+
+        List<AdminNotification> unread = notificationRepository
+                .findByRecipient_IdAndReadAtIsNull(user.getId());
+
+        LocalDateTime now = LocalDateTime.now();
+        for (AdminNotification n : unread) {
+            n.setReadAt(now);
+            notificationRepository.save(n);
+        }
+
+        return Map.of("message", "Đã đánh dấu đọc tất cả thông báo.", "count", unread.size());
+    }
+
+    private Map<String, Object> notificationRow(AdminNotification n) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", n.getId());
+        row.put("type", n.getType());
+        row.put("title", n.getTitle());
+        row.put("message", n.getMessage());
+        row.put("referenceType", n.getReferenceType());
+        row.put("referenceId", n.getReferenceId());
+        row.put("read", n.getReadAt() != null);
+        row.put("readAt", n.getReadAt());
+        row.put("createdAt", n.getCreatedAt());
+        return row;
+    }
+
+    // =========================================================
     // PRIVATE HELPERS
     // =========================================================
 
@@ -1457,13 +1557,46 @@ public class ProviderManagementController {
                 ? "" : booking.getCustomer().getFullName());
         row.put("customerPhone", booking.getCustomer() == null
                 ? "" : booking.getCustomer().getPhone());
+        row.put("receiverName", booking.getReceiverNameSnapshot() != null
+                ? booking.getReceiverNameSnapshot()
+                : (booking.getAddress() != null ? booking.getAddress().getReceiverName() : ""));
+        row.put("receiverPhone", booking.getReceiverPhoneSnapshot() != null
+                ? booking.getReceiverPhoneSnapshot()
+                : (booking.getAddress() != null ? booking.getAddress().getPhone() : ""));
+        row.put("fullAddress", booking.getFullAddressSnapshot() != null
+                ? booking.getFullAddressSnapshot()
+                : (booking.getAddress() != null ? booking.getAddress().getStreetAddress() : ""));
+        row.put("customerNote", booking.getCustomerNote());
         row.put("scheduledStart", booking.getScheduledStart());
         row.put("scheduledEnd", booking.getScheduledEnd());
         row.put("status", booking.getStatus());
         row.put("totalAmount", booking.getTotalAmount());
+        row.put("providerDeadlineAt", booking.getProviderDeadlineAt());
         row.put("createdAt", booking.getCreatedAt());
         row.put("completedAt", booking.getCompletedAt());
         row.put("cancelReason", booking.getCancelReason());
+
+        // Lịch sử trạng thái
+        row.put("statusHistory", bookingStatusHistoryRepository.findByBookingIdOrderByCreatedAtAsc(booking.getId())
+                .stream()
+                .map(h -> {
+                    Map<String, Object> hm = new LinkedHashMap<>();
+                    hm.put("id", h.getId());
+                    hm.put("oldStatus", h.getOldStatus());
+                    hm.put("newStatus", h.getNewStatus());
+                    hm.put("changedByName", h.getChangedBy() != null ? h.getChangedBy().getFullName() : "Hệ thống");
+                    hm.put("note", h.getNote());
+                    hm.put("createdAt", h.getCreatedAt());
+                    return hm;
+                })
+                .toList());
+
+        // Thông tin thanh toán
+        List<Payment> payments = paymentRepository.findByBooking_Id(booking.getId());
+        boolean isCash = payments.stream().anyMatch(p -> "CASH".equalsIgnoreCase(p.getPaymentProvider()));
+        boolean isPaid = payments.stream().anyMatch(p -> "SUCCESS".equalsIgnoreCase(p.getStatus()));
+        row.put("paymentMethod", isCash ? "CASH" : "VNPAY");
+        row.put("paymentStatus", isPaid ? "PAID" : "UNPAID");
 
         row.put("items", bookingItemRepository.findByBookingId(booking.getId())
                 .stream()

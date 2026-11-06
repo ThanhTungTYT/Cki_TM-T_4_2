@@ -15,6 +15,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     boolean existsByPartner_IdAndUser_Id(Long partnerId, Long userId);
 
+    boolean existsByEmployeeCode(String employeeCode);
+
     // Tìm hồ sơ nhân viên thông qua tài khoản đăng nhập
     Optional<Employee> findByUser_Id(Long userId);
 }

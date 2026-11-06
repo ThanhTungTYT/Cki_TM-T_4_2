@@ -19,6 +19,8 @@ import org.ckitmdt.backend.repository.BookingStatusHistoryRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.entity.Payment;
+import org.ckitmdt.backend.entity.AdminNotification;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +47,7 @@ public class BookingStateEngine {
     private final org.ckitmdt.backend.service.CustomerNotificationService customerNotificationService;
     private final EmployeeRepository employeeRepository;
     private final PartnerRepository partnerRepository;
+    private final AdminNotificationRepository adminNotificationRepository;
 
     @Transactional
     public BookingResponse executeAction(
@@ -246,6 +249,9 @@ public class BookingStateEngine {
         String oldStatus = booking.getStatus();
 
         booking.setStatus(targetStatus.name());
+        if (targetStatus == BookingStatusEnum.PENDING_PROVIDER) {
+            booking.setProviderDeadlineAt(BookingService.calculateProviderDeadline(booking.getScheduledStart(), now));
+        }
         booking.setUpdatedAt(now);
 
         if (targetStatus == BookingStatusEnum.COMPLETED) {
@@ -344,6 +350,50 @@ public class BookingStateEngine {
                 .build());
 
         customerNotificationService.notifyBookingStatus(saved);
+        rewardLifecycleService.processBooking(saved.getId());
+    }
+
+    @Transactional
+    public void expirePendingProvider(Long bookingId) {
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
+
+        if (booking == null
+                || !BookingStatusEnum.PENDING_PROVIDER.name().equals(booking.getStatus())
+                || booking.getProviderDeadlineAt() == null
+                || LocalDateTime.now().isBefore(booking.getProviderDeadlineAt())) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String oldStatus = booking.getStatus();
+
+        booking.setStatus(BookingStatusEnum.EXPIRED.name());
+        booking.setUpdatedAt(now);
+        booking.setCancelReason("Đối tác quá hạn tiếp nhận đơn hàng.");
+
+        Booking saved = bookingRepository.save(booking);
+
+        bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                .booking(saved)
+                .oldStatus(oldStatus)
+                .newStatus(BookingStatusEnum.EXPIRED.name())
+                .note("Hết thời gian chờ đối tác tiếp nhận đơn hàng.")
+                .createdAt(now)
+                .build());
+
+        // Thông báo cho khách hàng
+        customerNotificationService.notifyBookingStatus(saved);
+
+        // Thông báo cho Admin (đơn tiền mặt không cần hoàn tiền, chỉ thông báo)
+        adminNotificationRepository.save(AdminNotification.builder()
+                .type("BOOKING_PROVIDER_EXPIRED")
+                .title("Đơn hàng quá hạn tiếp nhận")
+                .message("Đơn hàng #" + saved.getBookingCode() + " đã quá hạn mà đối tác không tiếp nhận. Đơn đã được tự động kết thúc.")
+                .referenceType("BOOKING")
+                .referenceId(saved.getId())
+                .createdAt(now)
+                .build());
+
         rewardLifecycleService.processBooking(saved.getId());
     }
 
@@ -872,6 +922,7 @@ public class BookingStateEngine {
                 .customerNote(booking.getCustomerNote())
                 .cancelReason(booking.getCancelReason())
                 .holdExpiresAt(booking.getHoldExpiresAt())
+                .providerDeadlineAt(booking.getProviderDeadlineAt())
                 .version(booking.getVersion())
                 .createdAt(booking.getCreatedAt())
                 .completedAt(booking.getCompletedAt())

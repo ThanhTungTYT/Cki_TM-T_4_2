@@ -15,6 +15,8 @@ public interface AdminNotificationRepository
 
     long countByRecipient_IdAndReadAtIsNull(Long recipientId);
 
+    List<AdminNotification> findByRecipient_IdAndReadAtIsNull(Long recipientId);
+
     Optional<AdminNotification> findByIdAndRecipient_Id(
             Long id,
             Long recipientId

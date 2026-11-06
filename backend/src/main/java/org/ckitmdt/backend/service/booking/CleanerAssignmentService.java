@@ -208,9 +208,13 @@ public class CleanerAssignmentService {
             }
 
             case "DECLINE" -> {
-                if (note != null && !note.isBlank()) {
-                    assignment.setNote("Từ chối: " + note);
+                if (note == null || note.trim().isBlank()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Vui lòng ghi rõ lý do/giải trình từ chối công việc."
+                    );
                 }
+                assignment.setNote("Từ chối: " + note.trim());
             }
 
             default -> throw new ResponseStatusException(

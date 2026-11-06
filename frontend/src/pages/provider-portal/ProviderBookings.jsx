@@ -4,6 +4,21 @@ import { providerBookingApi } from '../../services/providerApi';
 
 const VND = (v) => (v != null ? `${Number(v).toLocaleString('vi-VN')}đ` : '—');
 
+function formatDateTime(val) {
+    if (!val) return '—';
+    try {
+        return new Date(val).toLocaleString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    } catch {
+        return String(val);
+    }
+}
+
 const STATUS_CONFIG = {
     PENDING_PROVIDER:      { cls: 'pp-badge-pending',   label: 'Chờ duyệt' },
     CONFIRMED:             { cls: 'pp-badge-confirmed', label: 'Đã xác nhận' },
@@ -12,6 +27,7 @@ const STATUS_CONFIG = {
     IN_PROGRESS:           { cls: 'pp-badge-progress',  label: 'Đang thực hiện' },
     PENDING_COMPLETION:    { cls: 'pp-badge-waiting',   label: 'Chờ nghiệm thu' },
     COMPLETED:             { cls: 'pp-badge-completed', label: 'Hoàn thành' },
+    EXPIRED:               { cls: 'pp-badge-cancelled', label: 'Quá hạn' },
     CANCELLED:             { cls: 'pp-badge-cancelled', label: 'Đã hủy' },
     REJECTED:              { cls: 'pp-badge-cancelled', label: 'Bị từ chối' },
     CANCELLED_BY_CUSTOMER: { cls: 'pp-badge-cancelled', label: 'KH hủy' },
@@ -33,6 +49,7 @@ const STATUS_FILTERS = [
     { value: 'IN_PROGRESS', label: 'Đang làm' },
     { value: 'PENDING_COMPLETION', label: 'Chờ nghiệm thu' },
     { value: 'COMPLETED', label: 'Hoàn thành' },
+    { value: 'EXPIRED', label: 'Quá hạn' },
     { value: 'CANCEL', label: 'Đã hủy' },
 ];
 
@@ -127,19 +144,16 @@ function ProviderBookings() {
                                             </td>
                                             <td>{b.customerName || '—'}</td>
                                             <td>{b.customerPhone || '—'}</td>
-                                            <td>
-                                                {b.scheduledStart
-                                                    ? new Date(b.scheduledStart).toLocaleString('vi-VN', {
-                                                          day: '2-digit',
-                                                          month: '2-digit',
-                                                          year: 'numeric',
-                                                          hour: '2-digit',
-                                                          minute: '2-digit',
-                                                      })
-                                                    : '—'}
-                                            </td>
+                                            <td>{formatDateTime(b.scheduledStart)}</td>
                                             <td>{VND(b.totalAmount)}</td>
-                                            <td>{statusBadge(b.status)}</td>
+                                            <td>
+                                                <div>{statusBadge(b.status)}</div>
+                                                {b.status === 'PENDING_PROVIDER' && b.providerDeadlineAt && (
+                                                    <div style={{ fontSize: 11, color: '#d97706', marginTop: 4, fontWeight: 600 }}>
+                                                        ⏱️ Hạn: {formatDateTime(b.providerDeadlineAt)}
+                                                    </div>
+                                                )}
+                                            </td>
                                             <td>
                                                 <button
                                                     className="pp-btn pp-btn-outline pp-btn-sm"

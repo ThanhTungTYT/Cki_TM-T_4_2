@@ -1,9 +1,18 @@
 import { NavLink, Link, useNavigate, Outlet } from 'react-router-dom';
 import React, { Component, useEffect, useState } from 'react';
-import { providerDashboardApi } from '../../services/providerApi';
+import { providerDashboardApi, providerNotificationApi } from '../../services/providerApi';
 import './ProviderPortal.css';
 
 // Icons (SVG inline để không phụ thuộc thêm thư viện)
+function IconBell() {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 18, height: 18 }}>
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+    );
+}
+
 function IconHome() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
@@ -138,6 +147,42 @@ function ProviderLayout() {
     const navigate = useNavigate();
     const [businessName, setBusinessName] = useState('');
     const [userName, setUserName] = useState('');
+    const [notifications, setNotifications] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [showNotifs, setShowNotifs] = useState(false);
+
+    function loadNotifications() {
+        providerNotificationApi.list()
+            .then(data => {
+                if (data) {
+                    setNotifications(data.items || []);
+                    setUnreadCount(data.unreadCount || 0);
+                }
+            })
+            .catch(() => {});
+    }
+
+    async function handleNotificationClick(notif) {
+        if (!notif.read) {
+            try {
+                await providerNotificationApi.markRead(notif.id);
+                setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+                setUnreadCount(prev => Math.max(0, prev - 1));
+            } catch {}
+        }
+        setShowNotifs(false);
+        if (notif.referenceType === 'BOOKING' && notif.referenceId) {
+            navigate(`/provider-portal/bookings/${notif.referenceId}`);
+        }
+    }
+
+    async function handleMarkAllRead() {
+        try {
+            await providerNotificationApi.markAllRead();
+            setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+            setUnreadCount(0);
+        } catch {}
+    }
 
     useEffect(() => {
         // Lấy thông tin từ storage
@@ -169,6 +214,9 @@ function ProviderLayout() {
                 }
             })
             .catch(() => {});
+        loadNotifications();
+        const interval = setInterval(loadNotifications, 30000);
+        return () => clearInterval(interval);
     }, [navigate]);
 
     function handleLogout() {
@@ -239,6 +287,150 @@ function ProviderLayout() {
                             <IconHome />
                             <span>Về trang chủ</span>
                         </Link>
+                        {/* Notification Bell Dropdown */}
+                        <div style={{ position: 'relative' }}>
+                            <button
+                                type="button"
+                                onClick={() => setShowNotifs(!showNotifs)}
+                                style={{
+                                    position: 'relative',
+                                    background: showNotifs ? '#f1f5f9' : 'transparent',
+                                    border: '1px solid #cbd5e1',
+                                    borderRadius: '50%',
+                                    width: 36,
+                                    height: 36,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    color: '#334155'
+                                }}
+                                title="Thông báo đối tác"
+                            >
+                                <IconBell />
+                                {unreadCount > 0 && (
+                                    <span style={{
+                                        position: 'absolute',
+                                        top: -4,
+                                        right: -4,
+                                        background: '#ef4444',
+                                        color: '#fff',
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        minWidth: 18,
+                                        height: 18,
+                                        borderRadius: 9,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '0 4px',
+                                        border: '2px solid #fff'
+                                    }}>
+                                        {unreadCount > 99 ? '99+' : unreadCount}
+                                    </span>
+                                )}
+                            </button>
+
+                            {showNotifs && (
+                                <div style={{
+                                    position: 'absolute',
+                                    right: 0,
+                                    top: 44,
+                                    width: 350,
+                                    maxHeight: 440,
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: 10,
+                                    boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+                                    zIndex: 1000,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    overflow: 'hidden'
+                                }}>
+                                    <div style={{
+                                        padding: '10px 14px',
+                                        borderBottom: '1px solid #f1f5f9',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        background: '#f8fafc'
+                                    }}>
+                                        <strong style={{ fontSize: 13.5, color: '#0f172a' }}>
+                                            Thông báo ({unreadCount})
+                                        </strong>
+                                        {unreadCount > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={handleMarkAllRead}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: '#2563eb',
+                                                    fontSize: 12,
+                                                    cursor: 'pointer',
+                                                    fontWeight: 600
+                                                }}
+                                            >
+                                                Đọc tất cả
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div style={{ overflowY: 'auto', flex: 1, maxHeight: 380 }}>
+                                        {notifications.length === 0 ? (
+                                            <div style={{ padding: '24px 16px', textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                                                Không có thông báo nào.
+                                            </div>
+                                        ) : (
+                                            notifications.map((n) => {
+                                                const isDeclined = n.type === 'ASSIGNMENT_DECLINED';
+                                                return (
+                                                    <div
+                                                        key={n.id}
+                                                        onClick={() => handleNotificationClick(n)}
+                                                        style={{
+                                                            padding: '10px 14px',
+                                                            borderBottom: '1px solid #f1f5f9',
+                                                            background: n.read ? '#ffffff' : (isDeclined ? '#fff1f2' : '#f0fdf4'),
+                                                            cursor: 'pointer',
+                                                            transition: 'background 0.2s',
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            gap: 3
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <span style={{
+                                                                fontSize: 12.5,
+                                                                fontWeight: n.read ? 600 : 700,
+                                                                color: isDeclined ? '#e11d48' : '#0f172a'
+                                                            }}>
+                                                                {isDeclined ? '⚠️ ' : '🔔 '}{n.title}
+                                                            </span>
+                                                            {!n.read && (
+                                                                <span style={{
+                                                                    width: 7,
+                                                                    height: 7,
+                                                                    borderRadius: '50%',
+                                                                    background: isDeclined ? '#e11d48' : '#2563eb'
+                                                                }} />
+                                                            )}
+                                                        </div>
+                                                        <p style={{ margin: 0, fontSize: 12, color: '#475569', lineHeight: 1.4 }}>
+                                                            {n.message}
+                                                        </p>
+                                                        <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                                                            {n.createdAt ? new Date(n.createdAt).toLocaleString('vi-VN') : ''}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="pp-topbar-user">
                             <div className="pp-topbar-avatar">{initial}</div>
                             <span>{userName || 'Đối tác'}</span>

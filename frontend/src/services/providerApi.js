@@ -312,3 +312,30 @@ export const providerRevenueApi = {
         return handleResponse(res, 'Không thể tải doanh thu.');
     },
 };
+
+
+// ---------- Notifications ----------
+export const providerNotificationApi = {
+    async list() {
+        const res = await fetch(`${BASE_URL}/provider/notifications`, {
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(res, 'Không thể tải thông báo.');
+    },
+
+    async markRead(id) {
+        const res = await fetch(`${BASE_URL}/provider/notifications/${id}/read`, {
+            method: 'PATCH',
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(res, 'Không thể đánh dấu đã đọc.');
+    },
+
+    async markAllRead() {
+        const res = await fetch(`${BASE_URL}/provider/notifications/read-all`, {
+            method: 'PATCH',
+            headers: getAuthHeaders(),
+        });
+        return handleResponse(res, 'Không thể đánh dấu đã đọc tất cả.');
+    },
+};
