@@ -13,6 +13,7 @@ export default function Rewards() {
     const [wallet, setWallet] = useState(null);
     const [gifts, setGifts] = useState([]);
     const [history, setHistory] = useState([]);
+    const [vouchers, setVouchers] = useState([]);
     const [loading, setLoading] = useState(Boolean(token));
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -21,19 +22,21 @@ export default function Rewards() {
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState('');
     const [pending, setPending] = useState(null);
+    const [copiedVoucher, setCopiedVoucher] = useState('');
     const dialog = useRef(null);
+    const ordersDialog = useRef(null);
     const busy = useRef(false);
 
     async function refresh() {
-        const [nextWallet, nextGifts, nextHistory] = await Promise.all([rewardApi.wallet(), rewardApi.gifts(), rewardApi.history()]);
-        setWallet(nextWallet); setGifts(nextGifts); setHistory(nextHistory);
+        const [nextWallet, nextGifts, nextHistory, nextVouchers] = await Promise.all([rewardApi.wallet(), rewardApi.gifts(), rewardApi.history(), rewardApi.vouchers()]);
+        setWallet(nextWallet); setGifts(nextGifts); setHistory(nextHistory); setVouchers(nextVouchers);
     }
 
     useEffect(() => {
         if (!token) return;
         let active = true;
-        Promise.all([rewardApi.wallet(), rewardApi.gifts(), rewardApi.history()])
-            .then(([w, g, h]) => { if (active) { setWallet(w); setGifts(g); setHistory(h); } })
+        Promise.all([rewardApi.wallet(), rewardApi.gifts(), rewardApi.history(), rewardApi.vouchers()])
+            .then(([w, g, h, v]) => { if (active) { setWallet(w); setGifts(g); setHistory(h); setVouchers(v); } })
             .catch(e => { if (active) setError(e.message); })
             .finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
@@ -65,8 +68,29 @@ export default function Rewards() {
         finally { busy.current = false; setSubmitting(false); }
     }
 
+    async function copyVoucher(code) {
+        try {
+            await navigator.clipboard.writeText(code);
+            setCopiedVoucher(code);
+            window.setTimeout(() => setCopiedVoucher(current => current === code ? '' : current), 1800);
+        } catch {
+            setError('Không thể sao chép mã voucher. Bạn có thể chọn và sao chép mã trực tiếp.');
+        }
+    }
+
+    async function confirmReceived(orderId) {
+        try {
+            const updated = await rewardApi.confirmReceived(orderId);
+            setHistory(current => current.map(order => order.id === updated.id ? updated : order));
+            setSuccess(`Đã xác nhận nhận quà cho đơn #${updated.id}.`);
+        } catch (e) {
+            setError(e.message);
+        }
+    }
+
     return <div className="rewards-shell"><Header /><main className="rewards-page">
         <div className="rewards-heading"><span>CLEANMATE REWARDS</span><h1>Cửa hàng Ccoin</h1><p>Đổi điểm chăm nhà, nhận quà thiết thực.</p></div>
+        {token && <button type="button" className="rewards-orders-trigger" onClick={() => ordersDialog.current?.showModal()}>Đơn hàng khuyến mãi <span>{history.length}</span></button>}
         {!token ? <div className="rewards-panel"><p>Đăng nhập để xem Ccoin và đổi quà.</p><Link to="/login">Đăng nhập</Link></div> : <>
             <section className="rewards-wallet"><div><span>Số dư của bạn</span><strong>{number(wallet?.balance)} <small>Ccoin</small></strong></div><p>Mỗi 1.000đ trong tổng tiền đơn đã thanh toán và hoàn tất = 1 Ccoin.<br />Dùng Ccoin đổi quà hoặc giảm giá tại checkout: 1.000 Ccoin = 1.000đ.</p></section>
             {loading && <p role="status">Đang tải cửa hàng…</p>}
@@ -78,7 +102,33 @@ export default function Rewards() {
                 <button disabled={!wallet || wallet.balance < gift.pointsCost || gift.stock < 1} onClick={() => openGift(gift)}>{gift.stock < 1 ? 'Hết quà' : wallet?.balance < gift.pointsCost ? 'Chưa đủ Ccoin' : 'Đổi phần quà'}</button>
             </article>)}</section>
             {!loading && !error && !gifts.length && <p>Cửa hàng chưa có quà. Vui lòng quay lại sau.</p>}
-            <section className="rewards-panel"><h2>Quà đã đổi</h2>{!history.length ? <p>Bạn chưa có yêu cầu đổi quà.</p> : history.map(item => <article className="rewards-history" key={item.id}><div><strong>#{item.id} · {item.giftName}</strong><p>{item.recipientName} · {item.phone}</p><p>{item.address}</p><small>{new Date(item.createdAt).toLocaleString('vi-VN')}</small></div><div><strong>−{number(item.pointsUsed)} Ccoin</strong><p>{({ PENDING: 'Chờ xử lý giao quà', SHIPPED: 'Đang giao', DELIVERED: 'Đã giao' })[item.status] || item.status}</p></div></article>)}</section>
+            <section className="rewards-panel rewards-voucher-panel">
+                <h2>Voucher của bạn</h2>
+                <p className="rewards-voucher-intro">Voucher được cấp riêng cho tài khoản của bạn. Sao chép mã để áp dụng tại bước checkout.</p>
+                {!vouchers.length ? <p>Bạn chưa có voucher nào.</p> : vouchers.map(voucher => {
+                    const expired = voucher.expiresAt && new Date(voucher.expiresAt) < new Date();
+                    const status = String(voucher.status || '').toUpperCase();
+                    const available = status === 'AVAILABLE' && !expired;
+                    const statusLabel = available ? 'Có thể sử dụng'
+                        : expired || status === 'EXPIRED' ? 'Đã hết hạn'
+                            : status === 'USED' ? 'Đã sử dụng'
+                                : status === 'HELD' ? `Đang giữ${voucher.bookingId ? ` cho đơn #${voucher.bookingId}` : ' cho đơn hàng'}`
+                                    : 'Không khả dụng';
+                    const discount = voucher.discountType === 'PERCENT'
+                        ? `Giảm ${number(voucher.discountValue)}%`
+                        : `Giảm ${number(voucher.discountValue)}đ`;
+                    return <article className="rewards-voucher" key={voucher.id}>
+                        <div className="rewards-voucher-main">
+                            <strong>{voucher.name || 'Voucher CleanMate'}</strong>
+                            <span>{discount}</span>
+                            {voucher.description && <p>{voucher.description}</p>}
+                            <small>{voucher.expiresAt ? `Hạn dùng: ${new Date(voucher.expiresAt).toLocaleDateString('vi-VN')}` : 'Không có hạn sử dụng riêng'}</small>
+                        </div>
+                        <div className="rewards-voucher-code"><code>{voucher.code}</code><span className={available ? 'is-available' : 'is-unavailable'}>{statusLabel}</span></div>
+                        <button type="button" disabled={!available} onClick={() => copyVoucher(voucher.code)}>{available ? copiedVoucher === voucher.code ? 'Đã sao chép' : 'Sao chép mã' : 'Không khả dụng'}</button>
+                    </article>;
+                })}
+            </section>
             <section className="rewards-panel"><h2>Lịch sử Ccoin</h2>{!wallet?.transactions?.length ? <p>Chưa có giao dịch Ccoin.</p> : wallet.transactions.slice(0, 30).map(item => <div className="rewards-history" key={item.id}><span>{item.description}<small>{new Date(item.createdAt).toLocaleString('vi-VN')}</small></span><strong>{item.points > 0 ? '+' : ''}{number(item.points)} Ccoin</strong></div>)}</section>
         </>}
         <dialog className="rewards-dialog" ref={dialog} onCancel={event => { if (submitting) event.preventDefault(); }}>
@@ -89,6 +139,14 @@ export default function Rewards() {
                 {formError && <p role="alert" className="rewards-error">{formError}</p>}
                 <div className="rewards-dialog-actions"><button type="button" disabled={submitting} onClick={() => dialog.current.close()}>Đóng</button><button type="submit" disabled={submitting}>{submitting ? 'Đang đổi…' : pending ? 'Thử lại yêu cầu' : 'Xác nhận đổi quà'}</button></div>
             </form>}
+        </dialog>
+        <dialog className="rewards-orders-dialog" ref={ordersDialog}>
+            <div className="rewards-orders-header"><div><span>LỊCH SỬ MUA QUÀ</span><h2>Đơn hàng khuyến mãi</h2></div><button type="button" aria-label="Đóng" onClick={() => ordersDialog.current?.close()}>×</button></div>
+            {!history.length ? <p className="rewards-orders-empty">Bạn chưa có đơn đổi quà nào.</p> : <div className="rewards-orders-list">{history.map(order => <article className="rewards-order-item" key={order.id}>
+                <div className="rewards-order-title"><div><strong>{order.giftName}</strong><small>Đơn #{order.id} · {new Date(order.createdAt).toLocaleString('vi-VN')}</small></div><span className={`rewards-order-status ${String(order.status).toLowerCase()}`}>{({ PENDING: 'Đang xử lý', SHIPPED: 'Đang giao', DELIVERED: 'Đã giao' })[order.status] || order.status}</span></div>
+                <div className="rewards-order-info"><span>Người nhận: <strong>{order.recipientName}</strong></span><span>Điện thoại: <strong>{order.phone}</strong></span><span>Địa chỉ: <strong>{order.address}</strong></span><span>Đã dùng: <strong>{number(order.pointsUsed)} Ccoin</strong></span></div>
+                {order.status === 'SHIPPED' && <button type="button" className="rewards-order-received" onClick={() => confirmReceived(order.id)}>Đã nhận hàng</button>}
+            </article>)}</div>}
         </dialog>
     </main><Footer /></div>;
 }

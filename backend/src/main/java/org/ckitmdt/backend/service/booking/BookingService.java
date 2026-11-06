@@ -7,12 +7,15 @@ import org.ckitmdt.backend.entity.*;
 import org.ckitmdt.backend.repository.*;
 import org.ckitmdt.backend.service.PromotionRewardService;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -20,6 +23,18 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class BookingService {
+    @Value("${booking.availability.minimum-notice-minutes:120}")
+    private long minimumNoticeMinutes;
+
+    @Value("${booking.availability.travel-buffer-minutes:30}")
+    private long travelBufferMinutes;
+
+    @Value("${booking.availability.opening-time:08:00}")
+    private LocalTime openingTime;
+
+    @Value("${booking.availability.closing-time:20:00}")
+    private LocalTime closingTime;
+
     private final BookingRepository bookingRepository;
     private final BookingItemRepository bookingItemRepository;
     private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
@@ -44,6 +59,127 @@ public class BookingService {
     ) {
         User customer = getUserByEmail(userEmail);
         return calculateQuoteInternal(request, customer, false).response();
+    }
+
+    @Transactional(readOnly = true)
+    public List<BookingAvailabilitySlotResponse> getAvailability(
+            BookingAvailabilityRequest request, String userEmail) {
+        getUserByEmail(userEmail);
+        if (request == null || request.getDate() == null || request.getItems() == null
+                || request.getItems().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Cần chọn nhà cung cấp, ngày và ít nhất một dịch vụ.");
+        }
+        if (request.getDate().isBefore(LocalDate.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Không thể xem lịch của ngày đã qua.");
+        }
+
+        Partner partner = partnerRepository.findById(request.getPartnerId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Không tìm thấy nhà cung cấp."));
+        if (!isActive(partner.getStatus()) || partner.getUser() == null
+                || !isActive(partner.getUser().getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Nhà cung cấp hiện không nhận đặt dịch vụ.");
+        }
+
+        long durationMinutes = 0;
+        long requiredEmployees = 0;
+        for (BookingItemRequest item : request.getItems()) {
+            if (item == null || item.getServiceId() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Dịch vụ không hợp lệ.");
+            }
+            org.ckitmdt.backend.entity.Service service = serviceRepository.findById(item.getServiceId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Không tìm thấy dịch vụ."));
+            if (!isActive(service.getStatus()) || service.getCategory() == null
+                    || !isActive(service.getCategory().getStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Dịch vụ hiện không nhận đặt.");
+            }
+            PartnerService offer = partnerServiceRepository
+                    .findByPartner_IdAndService_IdAndStatusIgnoreCase(
+                            partner.getId(), service.getId(), "ACTIVE")
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Dịch vụ hiện không được nhà cung cấp này cung cấp."));
+            if (offer.getPrice() == null || offer.getPrice().signum() < 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Giá dịch vụ của nhà cung cấp hiện không hợp lệ.");
+            }
+
+            int quantity = item.getQuantity() == null ? 1 : item.getQuantity();
+            if (quantity < 1 || quantity > 100) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Số lượng dịch vụ phải từ 1 đến 100.");
+            }
+            ServicePackage servicePackage = null;
+            if (item.getPackageId() != null) {
+                servicePackage = servicePackageRepository.findById(item.getPackageId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                "Không tìm thấy gói dịch vụ."));
+                if (servicePackage.getService() == null
+                        || !Objects.equals(servicePackage.getService().getId(), service.getId())
+                        || (servicePackage.getStatus() != null && !isActive(servicePackage.getStatus()))) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Gói dịch vụ không hợp lệ hoặc đã ngừng nhận đặt.");
+                }
+            }
+            int duration = servicePackage != null && servicePackage.getDurationMinutes() != null
+                    ? servicePackage.getDurationMinutes()
+                    : service.getEstimatedMinutes() != null ? service.getEstimatedMinutes() : 60;
+            int employees = servicePackage != null && servicePackage.getEmployeeCount() != null
+                    ? servicePackage.getEmployeeCount() : 1;
+            if (duration <= 0 || employees <= 0 || employees > 100) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Thời lượng hoặc số nhân viên của dịch vụ không hợp lệ.");
+            }
+            durationMinutes += (long) duration * quantity;
+            requiredEmployees += (long) employees * quantity;
+        }
+        if (durationMinutes <= 0 || durationMinutes > Integer.MAX_VALUE
+                || requiredEmployees <= 0 || requiredEmployees > Integer.MAX_VALUE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Không thể xác định thời lượng hoặc nhân lực cần thiết.");
+        }
+        int totalDurationMinutes = Math.toIntExact(durationMinutes);
+        int employeesNeeded = Math.toIntExact(requiredEmployees);
+
+        long activeEmployees = employeeRepository.findByPartner_IdOrderByIdAsc(partner.getId()).stream()
+                .filter(employee -> isActive(employee.getStatus()) && employee.getUser() != null
+                        && isActive(employee.getUser().getStatus()))
+                .count();
+        List<LocalTime> slots = List.of(
+                LocalTime.of(8, 0), LocalTime.of(9, 30), LocalTime.of(11, 0),
+                LocalTime.of(13, 30), LocalTime.of(15, 0), LocalTime.of(16, 30),
+                LocalTime.of(18, 0));
+        LocalDateTime now = LocalDateTime.now();
+
+        return slots.stream().map(time -> {
+            LocalDateTime start = LocalDateTime.of(request.getDate(), time);
+            LocalDateTime end = start.plusMinutes(totalDurationMinutes);
+            boolean meetsNotice = !start.isBefore(now.plusMinutes(effectiveMinimumNoticeMinutes()));
+            boolean withinWorkingHours = isWithinWorkingHours(start, end);
+            long reservedEmployees = meetsNotice && withinWorkingHours
+                    ? bookingItemRepository.countReservedEmployees(
+                            partner.getId(),
+                            start.minusMinutes(effectiveTravelBufferMinutes()),
+                            end.plusMinutes(effectiveTravelBufferMinutes()),
+                            now)
+                    : activeEmployees;
+            boolean available = meetsNotice && withinWorkingHours && activeEmployees > 0
+                    && reservedEmployees + employeesNeeded <= activeEmployees;
+            String message = !meetsNotice ? "Cần đặt trước ít nhất "
+                    + effectiveMinimumNoticeMinutes() + " phút"
+                    : !withinWorkingHours ? "Ngoài giờ phục vụ"
+                    : available ? "Còn khả dụng" : "Không đủ nhân viên";
+            return BookingAvailabilitySlotResponse.builder()
+                    .time(time.toString())
+                    .scheduledStart(start)
+                    .scheduledEnd(end)
+                    .available(available)
+                    .message(message)
+                    .build();
+        }).toList();
     }
 
     private QuoteCalculation calculateQuoteInternal(
@@ -170,12 +306,15 @@ public class BookingService {
                     "Vui lòng chọn thời gian thực hiện dịch vụ."
             );
         }
-        if (!scheduledStart.isAfter(LocalDateTime.now())) {
+        LocalDateTime now = LocalDateTime.now();
+        if (scheduledStart.isBefore(now.plusMinutes(effectiveMinimumNoticeMinutes()))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Thời gian đặt dịch vụ phải ở tương lai.");
+                    "Thời gian đặt phải cách thời điểm hiện tại ít nhất "
+                            + effectiveMinimumNoticeMinutes() + " phút.");
         }
 
         LocalDateTime scheduledEnd = scheduledStart.plusMinutes(totalEstimatedMinutes);
+        boolean withinWorkingHours = isWithinWorkingHours(scheduledStart, scheduledEnd);
 
         PromotionRewardService.Pricing pricing = promotionRewardService.calculate(
                 customer.getId(),
@@ -188,21 +327,23 @@ public class BookingService {
 
         long overlappingCount = bookingItemRepository.countReservedEmployees(
                 partner.getId(),
-                scheduledStart,
-                scheduledEnd,
-                LocalDateTime.now()
+                scheduledStart.minusMinutes(effectiveTravelBufferMinutes()),
+                scheduledEnd.plusMinutes(effectiveTravelBufferMinutes()),
+                now
         );
         long activeEmployees = employeeRepository.findByPartner_IdOrderByIdAsc(partner.getId())
                 .stream()
                 .filter(employee -> isActive(employee.getStatus())
                         && employee.getUser() != null && isActive(employee.getUser().getStatus()))
                 .count();
-        boolean capacityAvailable = activeEmployees > 0
+        boolean capacityAvailable = withinWorkingHours && activeEmployees > 0
                 && overlappingCount + requiredEmployees <= activeEmployees;
 
-        String capacityMessage = capacityAvailable
+        String capacityMessage = !withinWorkingHours
+                ? "Lịch hẹn phải nằm trong giờ phục vụ (" + openingTime + "–" + closingTime + ")."
+                : capacityAvailable
                 ? "Còn đủ nhân viên cho khung giờ đã chọn."
-                : "Khung giờ này không còn đủ nhân viên. Vui lòng chọn khung giờ khác.";
+                : "Khung giờ này không còn đủ nhân viên hoặc cần thêm thời gian di chuyển. Vui lòng chọn khung giờ khác.";
 
         BookingQuoteResponse response = BookingQuoteResponse.builder()
                 .partnerId(partner.getId())
@@ -638,8 +779,19 @@ public class BookingService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Không thể xác định thời lượng đơn hàng.");
         }
         LocalDateTime newEnd = newStart.plusMinutes(duration);
+        if (newStart.isBefore(LocalDateTime.now().plusMinutes(effectiveMinimumNoticeMinutes()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Lịch mới cần được đặt trước ít nhất "
+                            + effectiveMinimumNoticeMinutes() + " phút.");
+        }
+        if (!isWithinWorkingHours(newStart, newEnd)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Lịch mới nằm ngoài giờ phục vụ.");
+        }
         long overlappingEmployees = bookingItemRepository.countReservedEmployeesExcludingBooking(
-                partner.getId(), bookingId, newStart, newEnd, LocalDateTime.now());
+                partner.getId(), bookingId,
+                newStart.minusMinutes(effectiveTravelBufferMinutes()),
+                newEnd.plusMinutes(effectiveTravelBufferMinutes()), LocalDateTime.now());
         long activeEmployees = employeeRepository.findByPartner_IdOrderByIdAsc(partner.getId()).stream()
                 .filter(employee -> isActive(employee.getStatus()) && employee.getUser() != null
                         && isActive(employee.getUser().getStatus()))
@@ -679,6 +831,20 @@ public class BookingService {
 
     private boolean isActive(String status) {
         return status != null && "ACTIVE".equalsIgnoreCase(status.trim());
+    }
+
+    private boolean isWithinWorkingHours(LocalDateTime start, LocalDateTime end) {
+        return start != null && end != null && start.toLocalDate().equals(end.toLocalDate())
+                && !start.toLocalTime().isBefore(openingTime)
+                && !end.toLocalTime().isAfter(closingTime);
+    }
+
+    private long effectiveMinimumNoticeMinutes() {
+        return Math.max(0, Math.min(minimumNoticeMinutes, 24 * 60));
+    }
+
+    private long effectiveTravelBufferMinutes() {
+        return Math.max(0, Math.min(travelBufferMinutes, 12 * 60));
     }
 
     private String formatAddress(Address address) {

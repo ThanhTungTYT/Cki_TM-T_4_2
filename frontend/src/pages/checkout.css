@@ -764,6 +764,46 @@
     cursor: pointer;
 }
 
+.time-slot-btn.unavailable,
+.time-slot-btn:disabled {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+.time-slot-btn.unavailable:hover,
+.time-slot-btn:disabled:hover {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    transform: none;
+}
+
+.time-slot-btn.unavailable small {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.time-slots-message {
+    grid-column: 1 / -1;
+    padding: 12px 14px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.time-slots-message.error {
+    border-color: #fecaca;
+    background: #fff7f7;
+    color: #b91c1c;
+}
+
 .checkout-page .ccoin-toggle input[type="checkbox"] {
     appearance: auto;
     flex: 0 0 14px;

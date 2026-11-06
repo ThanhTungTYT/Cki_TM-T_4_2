@@ -15,7 +15,9 @@ async function request(path, options = {}) {
 
 export const rewardApi = {
     wallet: () => request('/me'),
+    vouchers: () => request('/vouchers'),
     gifts: () => request('/gifts'),
     history: () => request('/redemptions'),
-    redeem: body => request('/redemptions', { method: 'POST', body: JSON.stringify(body) })
+    redeem: body => request('/redemptions', { method: 'POST', body: JSON.stringify(body) }),
+    confirmReceived: id => request(`/redemptions/${id}/received`, { method: 'POST' })
 };

@@ -10,6 +10,7 @@ import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.CancellationRefundRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.repository.UserRepository;
+import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,35 @@ public class CancellationRefundService {
     private final BookingRepository bookingRepository;
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
+    private final CustomerNotificationService customerNotificationService;
+
+    @Transactional
+    public void createLatePaymentRefund(Long bookingId, BigDecimal receivedAmount,
+            String transactionNo) {
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
+        if (booking == null || booking.getCustomer() == null
+                || receivedAmount == null || receivedAmount.signum() <= 0
+                || refundRepository.existsByBooking_Id(bookingId)) {
+            return;
+        }
+
+        BigDecimal requestedAmount = receivedAmount;
+        if (booking.getTotalAmount() != null && booking.getTotalAmount().signum() > 0
+                && requestedAmount.compareTo(booking.getTotalAmount()) > 0) {
+            requestedAmount = booking.getTotalAmount();
+        }
+
+        refundRepository.save(CancellationRefund.builder()
+                .booking(booking)
+                .requestedBy(booking.getCustomer())
+                .requestedAmount(requestedAmount)
+                .status("PENDING_REVIEW")
+                .cancellationReason("Thanh toán VNPay thành công sau khi thời hạn giữ chỗ đã kết thúc. "
+                        + "Đơn không được khôi phục; cần đối soát và hoàn tiền. Mã giao dịch: "
+                        + (transactionNo == null || transactionNo.isBlank() ? "không có" : transactionNo))
+                .requestedAt(LocalDateTime.now())
+                .build());
+    }
 
     @Transactional
     public Map<String, Object> requestRefund(
@@ -161,7 +191,14 @@ public class CancellationRefundService {
         refund.setTransferEvidenceUrl(evidenceUrl.isBlank() ? null : evidenceUrl);
         refund.setTransferredBy(operator.getEmail());
         refund.setTransferredAt(LocalDateTime.now());
-        return row(refundRepository.save(refund));
+        CancellationRefund saved = refundRepository.save(refund);
+        if (saved.getRequestedBy() != null) {
+            customerNotificationService.notifyCustomer(saved.getRequestedBy(), "REFUND_TRANSFERRED",
+                    "Đã chuyển khoản hoàn tiền", "Khoản hoàn tiền cho đơn "
+                            + saved.getBooking().getBookingCode() + " đã được ghi nhận chuyển khoản.",
+                    "REFUND", saved.getId());
+        }
+        return row(saved);
     }
 
     @Transactional
@@ -226,7 +263,14 @@ public class CancellationRefundService {
         refund.setReviewedBy(operator.getEmail());
         refund.setReviewedAt(now);
 
-        return row(refundRepository.save(refund));
+        CancellationRefund saved = refundRepository.save(refund);
+        if (saved.getRequestedBy() != null) {
+            String message = "Yêu cầu hoàn tiền cho đơn " + saved.getBooking().getBookingCode()
+                    + ("APPROVED".equals(status) ? " đã được duyệt." : " đã bị từ chối.");
+            customerNotificationService.notifyCustomer(saved.getRequestedBy(), "REFUND_" + status,
+                    "Cập nhật yêu cầu hoàn tiền", message, "REFUND", saved.getId());
+        }
+        return row(saved);
     }
 
     private boolean isSuccessfulPayment(Payment payment) {

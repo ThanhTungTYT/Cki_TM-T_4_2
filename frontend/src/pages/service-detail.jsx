@@ -20,9 +20,10 @@ import {
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import ServiceReviews from '../components/ServiceReviews';
+import ServicePackageModal from '../components/ServicePackageModal';
+import { useCartDispatch } from '../context/CartContext';
+import { publicServicesApi } from '../services/api';
 import './service-detail.css';
-
-const API_URL = 'http://localhost:8080/api/v1/services';
 
 function formatPrice(value) {
     if (value === null || value === undefined || value === '') {
@@ -80,10 +81,20 @@ function formatRating(value) {
 function ServiceDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const dispatch = useCartDispatch();
 
     const [service, setService] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
+    const [bookingProvider, setBookingProvider] = useState(null);
+    const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+
+    const addBookingToCart = async item => {
+        await dispatch({ type: 'ADD_ITEM', payload: item });
+        setIsPackageModalOpen(false);
+        setBookingProvider(null);
+        navigate('/checkout');
+    };
 
     useEffect(() => {
         const controller = new AbortController();
@@ -100,26 +111,7 @@ function ServiceDetail() {
             }
 
             try {
-                const response = await fetch(`${API_URL}/${id}`, {
-                    method: 'GET',
-                    headers: {
-                        Accept: 'application/json'
-                    },
-                    signal: controller.signal
-                });
-
-                const data = await response.json().catch(() => null);
-
-                if (!response.ok) {
-                    throw new Error(
-                        data?.message ||
-                        data?.detail ||
-                        data?.error ||
-                        (response.status === 404
-                            ? 'Không tìm thấy dịch vụ hoặc dịch vụ đã ngừng hoạt động.'
-                            : `Không thể tải dịch vụ. Mã lỗi: ${response.status}`)
-                    );
-                }
+                const data = await publicServicesApi.getServiceDetail(id, { signal: controller.signal });
 
                 if (!data || data.id == null) {
                     throw new Error('Backend không trả về thông tin dịch vụ hợp lệ.');
@@ -402,7 +394,7 @@ function ServiceDetail() {
                                     }}
                                 >
                                     <h3 style={{
-                                        color: '#15966f',
+                                        color: '#2563eb',
                                         margin: '0 0 15px',
                                         fontSize: '19px'
                                     }}>
@@ -412,7 +404,7 @@ function ServiceDetail() {
                                     <p>
                                         <FontAwesomeIcon icon={faTag} />
                                         {' '}Giá:
-                                        <strong style={{ color: '#15966f', marginLeft: '5px' }}>
+                                        <strong style={{ color: '#2563eb', marginLeft: '5px' }}>
                                             {formatPrice(item.price)}
                                         </strong>
                                     </p>
@@ -499,8 +491,8 @@ function ServiceDetail() {
                                                 width: '55px',
                                                 height: '55px',
                                                 borderRadius: '50%',
-                                                background: '#e5f7ef',
-                                                color: '#15966f',
+                                                background: '#eaf2ff',
+                                                color: '#2563eb',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
@@ -521,7 +513,7 @@ function ServiceDetail() {
                                             </h3>
 
                                             <span style={{
-                                                color: '#15966f',
+                                                color: '#2563eb',
                                                 fontSize: '13px'
                                             }}>
                                                 <FontAwesomeIcon icon={faCheckCircle} />
@@ -567,7 +559,7 @@ function ServiceDetail() {
                                         </span>
 
                                         <h3 style={{
-                                            color: '#15966f',
+                                            color: '#2563eb',
                                             margin: '5px 0 0'
                                         }}>
                                             {formatPrice(provider.price)}
@@ -576,18 +568,19 @@ function ServiceDetail() {
 
                                     <button
                                         type="button"
-                                        onClick={() => navigate(`/provider/${provider.providerId}`)}
-                                        style={{
-                                            width: '100%',
-                                            marginTop: '15px',
-                                            padding: '11px',
-                                            border: '1px solid #15966f',
-                                            borderRadius: '8px',
-                                            background: '#fff',
-                                            color: '#15966f',
-                                            cursor: 'pointer',
-                                            fontWeight: 600
+                                        className="detail-book-provider-button"
+                                        onClick={() => {
+                                            setBookingProvider(provider);
+                                            setIsPackageModalOpen(true);
                                         }}
+                                    >
+                                        <FontAwesomeIcon icon={faCalendarCheck} /> Đặt với nhà cung cấp này
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        className="detail-provider-profile-button"
+                                        onClick={() => navigate(`/provider/${provider.providerId}`)}
                                     >
                                         Xem hồ sơ nhà cung cấp
                                     </button>
@@ -606,6 +599,22 @@ function ServiceDetail() {
             </main>
 
             <Footer />
+
+            <ServicePackageModal
+                key={bookingProvider?.providerId ?? 'no-provider'}
+                service={bookingProvider ? {
+                    ...service,
+                    providerId: bookingProvider.providerId,
+                    providerName: bookingProvider.businessName,
+                    basePrice: bookingProvider.price
+                } : null}
+                isOpen={isPackageModalOpen}
+                onClose={() => {
+                    setIsPackageModalOpen(false);
+                    setBookingProvider(null);
+                }}
+                onConfirm={addBookingToCart}
+            />
         </div>
     );
 }

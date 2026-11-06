@@ -22,6 +22,10 @@ public class GiftShopController {
     public GiftShopService.RedemptionView redeem(Authentication auth, @Valid @RequestBody GiftShopService.RedeemRequest request) {
         return shop.redeem(auth.getName(), request);
     }
+    @PostMapping("/redemptions/{id}/received")
+    public GiftShopService.RedemptionView confirmReceived(Authentication auth, @PathVariable Long id) {
+        return shop.confirmReceived(auth.getName(), id);
+    }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, String>> handleBusinessError(ResponseStatusException exception) {

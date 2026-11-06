@@ -22,6 +22,7 @@ public class BookingRewardLifecycleService {
     private final RewardTransactionRepository rewardTransactionRepository;
     private final BookingPromotionRepository bookingPromotionRepository;
     private final PromotionRepository promotionRepository;
+    private final RewardRedemptionRepository rewardRedemptionRepository;
     private final UserRepository userRepository;
 
     @Transactional
@@ -34,16 +35,42 @@ public class BookingRewardLifecycleService {
 
         String status = booking.getStatus().trim().toUpperCase();
 
-        if ("COMPLETED".equals(status)) {
-            earnPointsIfEligible(booking);
-            return;
-        }
-
         if ("CANCELLED".equals(status)
                 || "REJECTED".equals(status)
                 || "EXPIRED".equals(status)) {
             refundRedeemedPoints(booking);
             releasePromotionUsage(booking);
+            releaseHeldVouchers(booking);
+            return;
+        }
+
+        if (paymentRepository.existsByBooking_IdAndStatus(booking.getId(), "SUCCESS")) {
+            consumeHeldVouchers(booking);
+        }
+
+        if ("COMPLETED".equals(status)) {
+            earnPointsIfEligible(booking);
+        }
+    }
+
+    private void consumeHeldVouchers(Booking booking) {
+        List<RewardRedemption> held = rewardRedemptionRepository
+                .findByBookingAndStatusForUpdate(booking.getId(), "HELD");
+        for (RewardRedemption voucher : held) {
+            voucher.setStatus("USED");
+            rewardRedemptionRepository.save(voucher);
+        }
+    }
+
+    private void releaseHeldVouchers(Booking booking) {
+        List<RewardRedemption> held = rewardRedemptionRepository
+                .findByBookingAndStatusForUpdate(booking.getId(), "HELD");
+        LocalDateTime now = LocalDateTime.now();
+        for (RewardRedemption voucher : held) {
+            boolean expired = voucher.getExpiresAt() != null && !now.isBefore(voucher.getExpiresAt());
+            voucher.setStatus(expired ? "EXPIRED" : "AVAILABLE");
+            voucher.setBooking(null);
+            rewardRedemptionRepository.save(voucher);
         }
     }
 

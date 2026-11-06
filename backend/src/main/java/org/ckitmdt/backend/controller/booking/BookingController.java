@@ -19,6 +19,15 @@ public class BookingController {
     private final BookingService bookingService;
     private final CleanerAssignmentService cleanerAssignmentService;
 
+    @PostMapping("/availability")
+    public ResponseEntity<List<BookingAvailabilitySlotResponse>> getAvailability(
+            Authentication authentication,
+            @Valid @RequestBody BookingAvailabilityRequest request
+    ) {
+        return ResponseEntity.ok(bookingService.getAvailability(
+                request, authentication.getName()));
+    }
+
     @PutMapping("/{id}/schedule")
     public ResponseEntity<BookingResponse> reschedulePendingBooking(
             Authentication authentication,

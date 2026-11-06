@@ -24,6 +24,7 @@ public class PromotionRewardService {
     private final RewardPolicyRepository rewardPolicyRepository;
     private final RewardTransactionRepository rewardTransactionRepository;
     private final RewardExpiryService rewardExpiryService;
+    private final RewardRedemptionRepository rewardRedemptionRepository;
 
     public Pricing calculate(
             Long userId,
@@ -36,6 +37,7 @@ public class PromotionRewardService {
         BigDecimal discount = BigDecimal.ZERO;
         BigDecimal pointsDiscount = BigDecimal.ZERO;
         Promotion promotion = null;
+        RewardRedemption voucher = null;
         RewardAccount account = null;
         RewardPolicy policy = null;
         int pointsUsed = 0;
@@ -201,6 +203,20 @@ public class PromotionRewardService {
             } catch (IllegalArgumentException exception) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage());
             }
+
+            if (promotion != null && rewardRedemptionRepository.existsByPromotion_Id(promotion.getId())) {
+                var ownedVouchers = lockForUpdate
+                        ? rewardRedemptionRepository.findAvailableByUserAndPromotionForUpdate(userId, promotion.getId())
+                        : rewardRedemptionRepository.findByUser_IdAndPromotion_IdAndStatusOrderByRedeemedAtAsc(
+                                userId, promotion.getId(), "AVAILABLE");
+                voucher = ownedVouchers.stream()
+                        .filter(item -> item.getExpiresAt() == null || now.isBefore(item.getExpiresAt()))
+                        .findFirst()
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.FORBIDDEN,
+                                "Voucher này không thuộc tài khoản của bạn, đã được sử dụng, đang giữ cho đơn khác hoặc đã hết hạn."
+                        ));
+            }
             pointsDiscount = BigDecimal.valueOf(pointsUsed);
         }
 
@@ -221,7 +237,8 @@ public class PromotionRewardService {
                 platformFee,
                 total,
                 pointsUsed,
-                balance
+                balance,
+                voucher
         );
     }
 
@@ -253,6 +270,21 @@ public class PromotionRewardService {
                     .createdAt(now)
                     .released(false)
                     .build());
+        }
+
+        if (pricing.voucher() != null) {
+            RewardRedemption voucher = pricing.voucher();
+            if (!"AVAILABLE".equalsIgnoreCase(voucher.getStatus())
+                    || (voucher.getExpiresAt() != null && !now.isBefore(voucher.getExpiresAt()))
+                    || (voucher.getExpiresAt() != null
+                    && booking.getHoldExpiresAt() != null
+                    && voucher.getExpiresAt().isBefore(booking.getHoldExpiresAt()))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Voucher vừa được sử dụng, hết hạn hoặc không còn đủ thời gian giữ đơn. Vui lòng báo giá lại.");
+            }
+            voucher.setStatus("HELD");
+            voucher.setBooking(booking);
+            rewardRedemptionRepository.save(voucher);
         }
 
         if (pricing.pointsUsed() > 0) {
@@ -301,6 +333,7 @@ public class PromotionRewardService {
             BigDecimal platformFee,
             BigDecimal total,
             int pointsUsed,
-            int rewardBalance
+            int rewardBalance,
+            RewardRedemption voucher
     ) {}
 }

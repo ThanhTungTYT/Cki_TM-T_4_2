@@ -16,7 +16,8 @@ class BookingRewardLifecycleServiceTest {
     private final RewardTransactionRepository transactions = mock(RewardTransactionRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final BookingRewardLifecycleService service = new BookingRewardLifecycleService(bookings, payments,
-            mock(RewardPolicyRepository.class), accounts, transactions, mock(BookingPromotionRepository.class), mock(PromotionRepository.class), users);
+            mock(RewardPolicyRepository.class), accounts, transactions, mock(BookingPromotionRepository.class),
+            mock(PromotionRepository.class), mock(RewardRedemptionRepository.class), users);
     private RewardAccount wallet;
     private Booking booking;
 

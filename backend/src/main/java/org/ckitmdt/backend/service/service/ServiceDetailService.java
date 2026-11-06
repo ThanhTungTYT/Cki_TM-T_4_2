@@ -5,12 +5,14 @@ import org.ckitmdt.backend.dto.service.QuoteResponseDto;
 import org.ckitmdt.backend.dto.service.ServiceDetailProviderDto;
 import org.ckitmdt.backend.dto.service.ServiceDetailResponseDto;
 import org.ckitmdt.backend.dto.service.ServicePackageListItemDto;
-import org.ckitmdt.backend.entity.Address;
+import org.ckitmdt.backend.dto.service.PublicProviderProfileDto;
+import org.ckitmdt.backend.dto.service.PublicProviderServiceDto;
+import org.ckitmdt.backend.dto.service.PublicProviderSummaryDto;
 import org.ckitmdt.backend.entity.PartnerService;
 import org.ckitmdt.backend.entity.Service;
 import org.ckitmdt.backend.entity.ServicePackage;
-import org.ckitmdt.backend.repository.AddressRepository;
 import org.ckitmdt.backend.repository.PartnerServiceRepository;
+import org.ckitmdt.backend.repository.PartnerRepository;
 import org.ckitmdt.backend.repository.ReviewRepository;
 import org.ckitmdt.backend.repository.ServicePackageRepository;
 import org.ckitmdt.backend.repository.ServiceRepository;
@@ -36,16 +38,18 @@ public class ServiceDetailService {
     private PartnerServiceRepository partnerServiceRepository;
 
     @Autowired
-    private AddressRepository addressRepository;
+    private ReviewRepository reviewRepository;
 
     @Autowired
-    private ReviewRepository reviewRepository;
+    private PartnerRepository partnerRepository;
 
     @Transactional(readOnly = true)
     public ServiceDetailResponseDto getServiceDetail(Long id) {
 
         Service service = serviceRepository.findByIdAndStatusNot(id, "DELETED")
                 .filter(item -> "ACTIVE".equalsIgnoreCase(item.getStatus()))
+                .filter(item -> item.getCategory() != null
+                        && "ACTIVE".equalsIgnoreCase(item.getCategory().getStatus()))
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Dịch vụ không tồn tại hoặc hiện không hoạt động."
@@ -60,11 +64,16 @@ public class ServiceDetailService {
                         .map(this::toPackageDto)
                         .toList();
 
-        List<ServiceDetailProviderDto> providers =
-                partnerServiceRepository.findByService_Id(service.getId())
-                        .stream()
-                        .filter(this::isActiveProviderOffer)
-                        .map(this::toProviderDto)
+        List<PartnerService> activeOffers = partnerServiceRepository.findByService_Id(service.getId())
+                .stream().filter(this::isActiveProviderOffer).toList();
+        List<Long> partnerIds = activeOffers.stream().map(offer -> offer.getPartner().getId()).distinct().toList();
+        var partnerStats = partnerIds.isEmpty() ? java.util.Map.<Long, ReviewRepository.PartnerReviewStats>of()
+                : reviewRepository.summarizeByPartnerIds(partnerIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                ReviewRepository.PartnerReviewStats::getPartnerId, stats -> stats));
+
+        List<ServiceDetailProviderDto> providers = activeOffers.stream()
+                        .map(offer -> toProviderDto(offer, partnerStats.get(offer.getPartner().getId())))
                         .sorted(Comparator.comparing(
                                 ServiceDetailProviderDto::getRatingAverage,
                                 Comparator.nullsLast(Comparator.reverseOrder())
@@ -92,6 +101,101 @@ public class ServiceDetailService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public PublicProviderProfileDto getProviderProfile(Long providerId) {
+        var partner = partnerRepository.findById(providerId)
+                .filter(item -> "ACTIVE".equalsIgnoreCase(item.getStatus())
+                        && item.getUser() != null
+                        && "ACTIVE".equalsIgnoreCase(item.getUser().getStatus()))
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Nhà cung cấp không tồn tại hoặc hiện không hoạt động."));
+
+        List<PartnerService> offers = partnerServiceRepository.findByPartner_Id(providerId).stream()
+                .filter(this::isActiveProviderOffer)
+                .filter(offer -> offer.getService() != null
+                        && "ACTIVE".equalsIgnoreCase(offer.getService().getStatus())
+                        && offer.getService().getCategory() != null
+                        && "ACTIVE".equalsIgnoreCase(offer.getService().getCategory().getStatus()))
+                .toList();
+        List<Long> serviceIds = offers.stream().map(offer -> offer.getService().getId()).distinct().toList();
+        var serviceStats = serviceIds.isEmpty() ? java.util.Map.<Long, ReviewRepository.ServiceReviewStats>of()
+                : reviewRepository.summarizeByServiceIds(serviceIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                ReviewRepository.ServiceReviewStats::getServiceId, stats -> stats));
+        var partnerStats = reviewRepository.summarizeByPartnerIds(List.of(providerId)).stream()
+                .findFirst().orElse(null);
+
+        List<PublicProviderServiceDto> services = offers.stream().map(offer -> {
+            var service = offer.getService();
+            var stats = serviceStats.get(service.getId());
+            BigDecimal price = offer.getPrice() != null ? offer.getPrice() : service.getBasePrice();
+            return PublicProviderServiceDto.builder()
+                    .id(service.getId())
+                    .name(service.getName())
+                    .description(service.getDescription())
+                    .thumbnailUrl(service.getThumbnailUrl())
+                    .pricingType(service.getPricingType())
+                    .basePrice(price)
+                    .rating(stats == null ? null : stats.getAverageRating())
+                    .reviews(stats == null ? 0L : stats.getReviewCount())
+                    .build();
+        }).toList();
+
+        return PublicProviderProfileDto.builder()
+                .providerId(partner.getId())
+                .businessName(partner.getBusinessName())
+                .description(partner.getDescription())
+                .avatarUrl(partner.getUser().getAvatarUrl())
+                .address(partner.getAddress())
+                .ratingAverage(partnerStats == null || partnerStats.getAverageRating() == null
+                        ? null : BigDecimal.valueOf(partnerStats.getAverageRating()))
+                .totalReviews(partnerStats == null ? 0L : partnerStats.getReviewCount())
+                .totalCompletedJobs(partner.getTotalCompletedJobs())
+                .services(services)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicProviderSummaryDto> getPublicProviders() {
+        List<PartnerService> offers = partnerServiceRepository.findAll(PublicServiceSpecifications.activeOffers())
+                .stream()
+                .filter(offer -> offer.getService() != null
+                        && offer.getService().getCategory() != null
+                        && "ACTIVE".equalsIgnoreCase(offer.getService().getCategory().getStatus()))
+                .toList();
+        List<Long> partnerIds = offers.stream().map(offer -> offer.getPartner().getId()).distinct().toList();
+        if (partnerIds.isEmpty()) return List.of();
+
+        var reviewStats = reviewRepository.summarizeByPartnerIds(partnerIds).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ReviewRepository.PartnerReviewStats::getPartnerId, stats -> stats));
+        var serviceCounts = offers.stream().collect(java.util.stream.Collectors.groupingBy(
+                offer -> offer.getPartner().getId(), java.util.stream.Collectors.mapping(
+                        offer -> offer.getService().getId(),
+                        java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toSet(),
+                                ids -> (long) ids.size()))));
+
+        return partnerRepository.findAllById(partnerIds).stream()
+                .filter(partner -> partner.getUser() != null
+                        && "ACTIVE".equalsIgnoreCase(partner.getUser().getStatus()))
+                .sorted(java.util.Comparator.comparing(partner -> partner.getBusinessName().toLowerCase()))
+                .map(partner -> {
+                    var stats = reviewStats.get(partner.getId());
+                    return PublicProviderSummaryDto.builder()
+                            .providerId(partner.getId())
+                            .businessName(partner.getBusinessName())
+                            .description(partner.getDescription())
+                            .avatarUrl(partner.getUser().getAvatarUrl())
+                            .address(partner.getAddress())
+                            .ratingAverage(stats == null || stats.getAverageRating() == null
+                                    ? null : BigDecimal.valueOf(stats.getAverageRating()))
+                            .totalReviews(stats == null ? 0L : stats.getReviewCount())
+                            .totalCompletedJobs(partner.getTotalCompletedJobs())
+                            .serviceCount(serviceCounts.getOrDefault(partner.getId(), 0L))
+                            .build();
+                }).toList();
+    }
+
     private boolean isActiveProviderOffer(PartnerService offer) {
         return offer != null
                 && offer.getPartner() != null
@@ -115,29 +219,10 @@ public class ServiceDetailService {
                 .build();
     }
 
-    private ServiceDetailProviderDto toProviderDto(PartnerService offer) {
+    private ServiceDetailProviderDto toProviderDto(
+            PartnerService offer, ReviewRepository.PartnerReviewStats reviewStats) {
 
         var partner = offer.getPartner();
-
-        List<Address> addresses = addressRepository.findProviderAddresses(
-                partner.getUser().getId()
-        );
-
-        String address = addresses.stream()
-                .findFirst()
-                .map(item -> {
-                    StringBuilder result = new StringBuilder();
-
-                    appendAddress(result, item.getStreetAddress());
-                    appendAddress(result, item.getWard());
-                    appendAddress(result, item.getDistrict());
-                    appendAddress(result, item.getProvince());
-
-                    return result.length() > 0
-                            ? result.toString()
-                            : "Chưa cập nhật địa chỉ";
-                })
-                .orElse("Chưa cập nhật địa chỉ");
 
         BigDecimal price = offer.getPrice();
 
@@ -150,21 +235,13 @@ public class ServiceDetailService {
                 .businessName(partner.getBusinessName())
                 .description(partner.getDescription())
                 .avatarUrl(partner.getUser().getAvatarUrl())
-                .address(address)
+                .address(partner.getAddress())
                 .price(price)
-                .ratingAverage(partner.getRatingAverage())
+                .ratingAverage(reviewStats == null || reviewStats.getAverageRating() == null
+                        ? null : BigDecimal.valueOf(reviewStats.getAverageRating()))
                 .totalCompletedJobs(partner.getTotalCompletedJobs())
-                .totalReviews(reviewRepository.countByPartner_Id(partner.getId()))
+                .totalReviews(reviewStats == null ? 0L : reviewStats.getReviewCount())
                 .build();
-    }
-
-    private void appendAddress(StringBuilder result, String value) {
-        if (value != null && !value.isBlank()) {
-            if (result.length() > 0) {
-                result.append(", ");
-            }
-            result.append(value.trim());
-        }
     }
 
     public QuoteResponseDto calculateQuote(QuoteRequestDto request) {

@@ -26,6 +26,7 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class AdminWebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private static final String NOTIFICATION_DESTINATION = "/user/queue/admin-notifications";
+    private static final String CUSTOMER_NOTIFICATION_DESTINATION = "/user/queue/customer-notifications";
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
@@ -107,10 +108,6 @@ public class AdminWebSocketConfig implements WebSocketMessageBrokerConfigurer {
             role = role.substring(5);
         }
 
-        if (!"ADMIN".equals(role) && !"STAFF".equals(role)) {
-            throw new AccessDeniedException("Tài khoản không có quyền nhận thông báo quản trị.");
-        }
-
         Principal principal = () -> user.getEmail();
         accessor.setUser(principal);
     }
@@ -123,8 +120,13 @@ public class AdminWebSocketConfig implements WebSocketMessageBrokerConfigurer {
             throw new AccessDeniedException("WebSocket chưa được xác thực.");
         }
 
-        if (!NOTIFICATION_DESTINATION.equals(destination)) {
-            throw new AccessDeniedException("Không được phép đăng ký kênh này.");
-        }
+        User user = userRepository.findByEmail(principal.getName()).orElse(null);
+        String role = user == null || user.getRole() == null
+                ? "" : user.getRole().replace("ROLE_", "");
+        if (NOTIFICATION_DESTINATION.equals(destination)
+                && ("ADMIN".equalsIgnoreCase(role) || "STAFF".equalsIgnoreCase(role))) return;
+        if (CUSTOMER_NOTIFICATION_DESTINATION.equals(destination)
+                && "CUSTOMER".equalsIgnoreCase(role)) return;
+        throw new AccessDeniedException("Không được phép đăng ký kênh thông báo này.");
     }
 }

@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBroom, faUser, faCartShopping, faStore } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
 import CartDrawer from './CartDrawer';
+import CustomerNotifications from './CustomerNotifications';
 import './Header.css';
 
 function Header() {
@@ -14,6 +15,7 @@ function Header() {
 
     const role = (user?.role || '').toUpperCase();
     const isProvider = ['PROVIDER', 'PARTNER', 'ROLE_PROVIDER', 'ROLE_PARTNER'].includes(role);
+    const isCustomer = ['CUSTOMER', 'ROLE_CUSTOMER'].includes(role);
     const profilePath = isProvider ? '/provider-portal/dashboard' : '/profile';
 
     return (
@@ -30,7 +32,7 @@ function Header() {
                     <nav className="nav">
                         <Link to="/">Trang chủ</Link>
                         <Link to="/services">Dịch vụ</Link>
-                        <Link to="/provider/1">Đối tác vệ sinh</Link>
+                        <Link to="/providers">Đối tác vệ sinh</Link>
                         <a href="#">Về chúng tôi</a>
                         <a href="#">Hỗ trợ</a>
                     </nav>
@@ -54,6 +56,7 @@ function Header() {
                         <Link to="/rewards" className="cart-btn" title="Cửa hàng đổi thưởng Ccoin" aria-label="Cửa hàng đổi thưởng Ccoin">
                             <FontAwesomeIcon icon={faStore} />
                         </Link>
+                        {isCustomer && <CustomerNotifications />}
                         <button className="cart-btn" onClick={() => setIsCartOpen(true)} title="Giỏ dịch vụ">
                             <FontAwesomeIcon icon={faCartShopping} />
                             {totalItems > 0 && <span className="cart-badge">{totalItems}</span>}

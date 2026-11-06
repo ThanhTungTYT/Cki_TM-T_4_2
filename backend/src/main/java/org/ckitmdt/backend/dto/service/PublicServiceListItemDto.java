@@ -22,6 +22,9 @@ public class PublicServiceListItemDto {
     Integer estimatedMinutes;
     Double rating;
     long reviews;
+    BigDecimal providerRating;
+    long providerReviews;
+    Integer providerCompletedJobs;
     String location;
     List<ServicePackageListItemDto> packages;
 }

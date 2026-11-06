@@ -6,6 +6,7 @@ import Register from './pages/register';
 import Services from './pages/services';
 import ServiceDetail from './pages/service-detail';
 import Provider from './pages/provider';
+import Providers from './pages/providers';
 import Profile from './pages/profile';
 import VerifyOtp from './pages/verify-otp';
 import Cart from './pages/cart';
@@ -26,6 +27,7 @@ import AdminProviderChangeRequests from './pages/admin/AdminProviderChangeReques
 import AdminPromotions from './pages/admin/AdminPromotions';
 import AdminStaffOperations from './pages/admin/AdminStaffOperations';
 import AdminOutboxManagement from './pages/admin/AdminOutboxManagement';
+import AdminRewardOrders from './pages/admin/AdminRewardOrders';
 import PaymentResult from './pages/PaymentResult';
 import ProviderLayout from './pages/provider-portal/ProviderLayout';
 import ProviderDashboard from './pages/provider-portal/ProviderDashboard';
@@ -77,6 +79,7 @@ function App() {
                 <Route path="/services" element={<Services />} />
                 <Route path="/service-detail/:id" element={<ServiceDetail />} />
                 <Route path="/provider/:id" element={<Provider />} />
+                <Route path="/providers" element={<Providers />} />
                 <Route path="/rewards" element={<Rewards />} />
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/checkout" element={<Checkout />} />
@@ -97,6 +100,7 @@ function App() {
                 <Route path="/admin/complaints" element={<AdminComplaintManagement />} />
                 <Route path="/admin/refunds" element={<AdminRefundManagement />} />
                 <Route path="/admin/promotions" element={<AdminPromotions />} />
+                <Route path="/admin/reward-orders" element={<AdminRewardOrders />} />
                 <Route path="/admin/staff-operations" element={<AdminStaffOperations />} />
                 <Route path="/admin/outbox" element={<AdminOutboxManagement />} />
                 <Route path="/cleaner" element={<CleanerLayout />}>

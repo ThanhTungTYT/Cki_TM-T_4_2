@@ -1,6 +1,11 @@
 const BASE_URL = 'http://localhost:8080/api';
 
 export const publicServicesApi = {
+    async getServiceDetail(serviceId, { signal } = {}) {
+        const res = await fetch(`${BASE_URL}/v1/services/${encodeURIComponent(serviceId)}`, { signal });
+        return handleResponse(res, 'Không thể tải thông tin dịch vụ.');
+    },
+
     async getFilters({ signal } = {}) {
         const res = await fetch(`${BASE_URL}/v1/services/filters`, { signal });
         return handleResponse(res, 'Không thể tải bộ lọc dịch vụ.');
@@ -15,6 +20,18 @@ export const publicServicesApi = {
         });
         const res = await fetch(`${BASE_URL}/v1/services?${query}`, { signal });
         return handleResponse(res, 'Không thể tải danh sách dịch vụ.');
+    },
+
+    async getProviderProfile(providerId, { signal } = {}) {
+        const res = await fetch(`${BASE_URL}/v1/services/providers/${encodeURIComponent(providerId)}`, { signal });
+        return handleResponse(res, 'Không thể tải hồ sơ nhà cung cấp.');
+    }
+};
+
+export const publicProvidersApi = {
+    async getAll({ signal } = {}) {
+        const res = await fetch(`${BASE_URL}/v1/providers`, { signal });
+        return handleResponse(res, 'Không thể tải danh sách nhà cung cấp.');
     }
 };
 
@@ -112,6 +129,16 @@ export const cartApi = {
 // =========================
 
 export const bookingApi = {
+    async getAvailability(payload, signal) {
+        const res = await fetch(`${BASE_URL}/bookings/availability`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+            signal
+        });
+        return handleResponse(res, 'Không thể tải lịch khả dụng.');
+    },
+
     async getQuote(payload) {
         const res = await fetch(`${BASE_URL}/bookings/quote`, {
             method: 'POST',

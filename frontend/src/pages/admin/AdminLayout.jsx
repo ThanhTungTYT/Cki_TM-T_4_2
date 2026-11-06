@@ -13,7 +13,8 @@ import {
     faClipboardCheck,
     faGift,
     faUserGear,
-    faBell
+    faBell,
+    faBoxOpen
 } from "@fortawesome/free-solid-svg-icons";
 import AdminNotificationRealtime from "../../components/AdminNotificationRealtime";
 import "./AdminDashboard.css";
@@ -30,7 +31,8 @@ const menuItems = [
     { label: "Quản lý khiếu nại", path: "/admin/complaints", icon: faTriangleExclamation },
     { label: "Ưu đãi & điểm thưởng", path: "/admin/promotions", icon: faGift },
     { label: "Nhân sự & vận hành", path: "/admin/staff-operations", icon: faUserGear },
-    { label: "Giám sát thông báo", path: "/admin/outbox", icon: faBell }
+    { label: "Giám sát thông báo", path: "/admin/outbox", icon: faBell },
+    { label: "Đơn hàng khuyến mãi", path: "/admin/reward-orders", icon: faBoxOpen }
 ];
 
 function AdminLayout({ children }) {
@@ -48,7 +50,7 @@ function AdminLayout({ children }) {
     const isAdmin = currentRole === "ADMIN";
 
     const visibleMenuItems = isStaff
-        ? menuItems.filter(item => ["/admin/orders", "/admin/complaints", "/admin/staff-operations"].includes(item.path))
+        ? menuItems.filter(item => ["/admin/orders", "/admin/reward-orders", "/admin/complaints", "/admin/staff-operations"].includes(item.path))
         : menuItems;
 
     const handleLogout = () => {

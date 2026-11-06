@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getVNPayStatus } from '../services/paymentService';
+import { refundApi } from '../services/api';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 
@@ -9,6 +10,7 @@ export default function PaymentResult() {
 
     const [status, setStatus] = useState('CHECKING');
     const [bookingId, setBookingId] = useState(null);
+    const [refundRequest, setRefundRequest] = useState(null);
     const [errorMessage, setErrorMessage] = useState('');
 
     const txnRef = searchParams.get('vnp_TxnRef');
@@ -31,6 +33,17 @@ export default function PaymentResult() {
 
                 setStatus(result.status);
                 setBookingId(result.bookingId);
+
+                if (result.status === 'REVIEW' && result.bookingId) {
+                    refundApi.getMyRefunds()
+                        .then(refunds => {
+                            if (cancelled) return;
+                            setRefundRequest(refunds.find(refund =>
+                                String(refund.bookingId) === String(result.bookingId)
+                            ) || null);
+                        })
+                        .catch(() => {});
+                }
 
                 if (result.status === 'PENDING' && attempts < 10) {
                     attempts++;
@@ -84,9 +97,28 @@ export default function PaymentResult() {
                     )}
 
                     {status === 'REVIEW' && (
-                        <p>
-                            Giao dịch cần được kiểm tra và đối soát.
-                        </p>
+                        <div>
+                            <p>
+                                Giao dịch đã được ghi nhận nhưng cần đối soát. Nếu thời hạn giữ chỗ đã hết,
+                                booking không được khôi phục và hệ thống sẽ tạo yêu cầu hoàn tiền.
+                            </p>
+                            {refundRequest && (
+                                <p role="status">
+                                    Yêu cầu hoàn tiền: {refundRequest.status === 'PENDING_REVIEW'
+                                        ? 'đang chờ xem xét'
+                                        : refundRequest.status === 'APPROVED'
+                                            ? refundRequest.refundTransferStatus === 'TRANSFERRED'
+                                                ? 'đã chuyển tiền'
+                                                : 'đã duyệt, đang chờ chuyển tiền'
+                                            : refundRequest.status === 'REJECTED'
+                                                ? 'bị từ chối'
+                                                : refundRequest.status}
+                                    {refundRequest.requestedAmount != null
+                                        ? ` · ${Number(refundRequest.requestedAmount).toLocaleString('vi-VN')} ₫`
+                                        : ''}
+                                </p>
+                            )}
+                        </div>
                     )}
 
                     {status === 'UNKNOWN' && (

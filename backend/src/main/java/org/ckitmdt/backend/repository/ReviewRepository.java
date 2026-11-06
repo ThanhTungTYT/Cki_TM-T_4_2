@@ -16,6 +16,16 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
         Long getReviewCount();
     }
 
+    interface PartnerReviewStats {
+        Long getPartnerId();
+        Double getAverageRating();
+        Long getReviewCount();
+    }
+
+    @Query("select r.partner.id as partnerId, avg(r.rating) as averageRating, count(r) as reviewCount from Review r " +
+            "where r.partner.id in :partnerIds group by r.partner.id")
+    List<PartnerReviewStats> summarizeByPartnerIds(@Param("partnerIds") Collection<Long> partnerIds);
+
     @Query("""
             select r.service.id as serviceId, avg(r.rating) as averageRating,
                    count(r) as reviewCount

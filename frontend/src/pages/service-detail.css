@@ -151,7 +151,8 @@
 }
 
 .detail-book-button,
-.detail-contact-button {
+.detail-contact-button,
+.detail-book-provider-button {
     width: 100%;
     margin-top: 16px;
     padding: 14px;
@@ -322,8 +323,22 @@
     margin: 12px 0 0;
 }
 
+.detail-book-provider-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 0;
+    color: #fff;
+    background: #2563eb;
+}
+
+.detail-book-provider-button:hover {
+    background: #1d4ed8;
+}
+
 .detail-page {
-    background: linear-gradient(180deg, #edf5ff 0, #f7faff 300px, #f4f7fb 100%);
+    background: linear-gradient(180deg, #eef8f3 0, #f7faf8 300px, #f4f7fb 100%);
     color: #193451;
     font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
@@ -379,7 +394,7 @@
 }
 
 .detail-image {
-    background: linear-gradient(135deg, #dcecff, #f1f7ff);
+    background: linear-gradient(135deg, #dce7f3, #f5f9ff);
 }
 
 .detail-information {
@@ -394,7 +409,7 @@
 }
 
 .detail-information h1 {
-    color: #173b65;
+    color: #193451;
     font-size: clamp(26px, 3vw, 34px);
     letter-spacing: -.025em;
 }
@@ -473,7 +488,7 @@
 
 .detail-specifications span svg {
     width: 14px;
-    color: #5280b0;
+    color: #2563eb;
 }
 
 .detail-specifications strong {
@@ -486,7 +501,7 @@
     border: 1px solid #dbeafe;
     border-radius: 10px;
     background: #f5f9ff;
-    color: #58718b;
+    color: #52677d;
 }
 
 .detail-booking {
@@ -597,4 +612,93 @@
     .detail-information .detail-section-title {
         font-size: 17px;
     }
+}
+
+.detail-page {
+    background: linear-gradient(180deg, #eef8f3 0, #f7faf8 300px, #f5f7fa 100%);
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.detail-breadcrumb span:hover { color: #2563eb; }
+.detail-breadcrumb strong { color: #31577f; }
+.detail-main, .detail-booking, .service-reviews {
+    border-color: #dce7f3;
+    box-shadow: 0 10px 28px rgba(25, 52, 81, .06);
+}
+.detail-category {
+    border-color: #dbeafe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+.detail-information h1 { color: #193451; }
+.detail-meta-item svg, .detail-section-title svg,
+.detail-specifications span svg, .detail-price-label svg { color: #2563eb; }
+.detail-disclaimer {
+    border-color: #dce7f3;
+    background: #f5f9ff;
+    color: #52677d;
+}
+.detail-booking { background: linear-gradient(180deg, #fff, #fbfdff); }
+.detail-price { color: #2563eb; }
+.detail-note { background: #f5f8fc; }
+.detail-book-button, .detail-not-found button, .detail-retry-button {
+    border-color: #2563eb;
+    background: #2563eb;
+    box-shadow: 0 6px 16px rgba(21, 150, 111, .16);
+}
+.detail-book-button:hover, .detail-not-found button:hover, .detail-retry-button:hover {
+    background: #1d4ed8;
+}
+.detail-back-button {
+    border-color: #d7e5f5;
+    color: #31577f;
+    background: #f5f9ff;
+}
+.detail-back-button:hover {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+.detail-book-button:focus-visible, .detail-book-provider-button:focus-visible,
+.detail-back-button:focus-visible, .detail-breadcrumb span:focus-visible {
+    outline: 3px solid rgba(21, 150, 111, .25);
+    outline-offset: 3px;
+}
+.detail-container > section:not(.detail-main) {
+    min-width: 0;
+    padding: clamp(18px, 2.5vw, 28px);
+    border: 1px solid #dce7f3;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(25, 52, 81, .045);
+}
+.detail-container > section:not(.detail-main) .detail-section-title { margin-top: 0; }
+.detail-container > section:not(.detail-main) > div[style] { margin-top: 18px !important; }
+.detail-container > section:not(.detail-main) article[style] {
+    min-width: 0;
+    border-color: #e2eaf3 !important;
+    border-radius: 14px !important;
+    background: #fbfdfc !important;
+    box-shadow: 0 5px 16px rgba(25, 52, 81, .045) !important;
+}
+.detail-container > section:not(.detail-main) article[style] h3 { color: #193451 !important; }
+.detail-container > section:not(.detail-main) article[style] div[style] h3 { color: #2563eb !important; }
+.detail-container > section:not(.detail-main) article[style] p { color: #52677d; line-height: 1.55; }
+.detail-container > section:not(.detail-main) article[style] p svg { color: #2563eb; }
+.detail-provider-profile-button {
+    width: 100%;
+    margin-top: 10px;
+    padding: 11px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #f5f9ff;
+    color: #1d4ed8;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+}
+.detail-provider-profile-button:hover { background: #eff6ff; }
+
+@media (max-width: 850px) {
+    .detail-container > section:not(.detail-main) { padding: 18px; }
 }

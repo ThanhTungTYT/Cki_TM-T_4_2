@@ -37,6 +37,7 @@ public class BookingStateEngine {
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
     private final org.ckitmdt.backend.service.BookingRewardLifecycleService rewardLifecycleService;
+    private final org.ckitmdt.backend.service.CustomerNotificationService customerNotificationService;
 
     @Transactional
     public BookingResponse executeAction(
@@ -185,6 +186,8 @@ public class BookingStateEngine {
                     .createdAt(LocalDateTime.now())
                     .build());
 
+            customerNotificationService.notifyBookingStatus(expiredBooking);
+
             return mapToBookingResponse(expiredBooking);
         }
 
@@ -234,6 +237,7 @@ public class BookingStateEngine {
                 currentUser != null ? currentUser.getEmail() : "SYSTEM"
         );
 
+        customerNotificationService.notifyBookingStatus(savedBooking);
         rewardLifecycleService.processBooking(savedBooking.getId());
         return mapToBookingResponse(savedBooking);
     }
@@ -264,6 +268,9 @@ public class BookingStateEngine {
                 .note("Hết thời gian giữ chỗ mà chưa nhận được thanh toán.")
                 .createdAt(now)
                 .build());
+
+        customerNotificationService.notifyBookingStatus(saved);
+        rewardLifecycleService.processBooking(saved.getId());
     }
 
     private BookingStatusEnum determineNextStatus(
