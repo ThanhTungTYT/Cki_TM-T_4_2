@@ -180,8 +180,14 @@ export const adminProviderChangeRequestApi = {
 
 // ---------- Bookings ----------
 export const providerBookingApi = {
-    async list() {
-        const res = await fetch(`${BASE_URL}/provider/bookings`, {
+    async list(params = {}) {
+        const q = new URLSearchParams();
+        if (params.status) q.set('status', params.status);
+        if (params.search) q.set('search', params.search);
+        if (params.page != null) q.set('page', params.page);
+        if (params.size != null) q.set('size', params.size);
+        const queryStr = q.toString() ? `?${q.toString()}` : '';
+        const res = await fetch(`${BASE_URL}/provider/bookings${queryStr}`, {
             headers: getAuthHeaders(),
         });
         return handleResponse(res, 'Không thể tải danh sách đơn hàng.');
@@ -284,6 +290,24 @@ export const providerEmployeeApi = {
             body: JSON.stringify({ status }),
         });
         return handleResponse(res, 'Không thể cập nhật trạng thái nhân viên.');
+    },
+
+    async update(id, payload) {
+        const res = await fetch(`${BASE_URL}/provider/employees/${id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+        });
+        return handleResponse(res, 'Không thể cập nhật thông tin nhân viên.');
+    },
+
+    async resetPassword(id, newPassword = '') {
+        const res = await fetch(`${BASE_URL}/provider/employees/${id}/reset-password`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ newPassword }),
+        });
+        return handleResponse(res, 'Không thể đặt lại mật khẩu.');
     },
 };
 

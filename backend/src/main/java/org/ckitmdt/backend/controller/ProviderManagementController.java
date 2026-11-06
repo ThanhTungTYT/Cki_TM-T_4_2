@@ -10,6 +10,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.ckitmdt.backend.entity.BookingItem;
@@ -243,8 +246,30 @@ public class ProviderManagementController {
 
     @GetMapping("/bookings")
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> getBookings(Authentication auth) {
+    public Object getBookings(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(defaultValue = "10") int size,
+            Authentication auth) {
         Partner partner = currentPartner(auth);
+
+        if (page != null) {
+            Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+            Page<Booking> bookingPage = bookingRepository.searchBookingsByPartner(
+                    partner.getId(),
+                    (status == null || status.isBlank()) ? null : status.trim(),
+                    (search == null || search.isBlank()) ? null : search.trim(),
+                    pageable
+            );
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("content", bookingPage.getContent().stream().map(this::bookingRow).toList());
+            res.put("totalElements", bookingPage.getTotalElements());
+            res.put("totalPages", bookingPage.getTotalPages());
+            res.put("currentPage", bookingPage.getNumber());
+            res.put("pageSize", bookingPage.getSize());
+            return res;
+        }
 
         return bookingRepository
                 .findByPartner_IdOrderByCreatedAtDesc(partner.getId())
@@ -324,35 +349,22 @@ public class ProviderManagementController {
         LocalDateTime start = fromDate.atStartOfDay();
         LocalDateTime endExclusive = toDate.plusDays(1).atStartOfDay();
 
-        List<Booking> completedBookings =
-                bookingRepository.findByPartner_IdOrderByCreatedAtDesc(
-                                partner.getId()
-                        ).stream()
-                        .filter(b -> "COMPLETED".equalsIgnoreCase(b.getStatus()))
-                        .filter(b -> b.getCompletedAt() != null)
-                        .filter(b -> !b.getCompletedAt().isBefore(start)
-                                && b.getCompletedAt().isBefore(endExclusive))
-                        .toList();
+        List<Booking> completedBookings = bookingRepository.findCompletedBookingsByPartnerAndCompletedDateRange(
+                partner.getId(), start, endExclusive
+        );
 
-        BigDecimal completedOrderValue = completedBookings.stream()
-                .map(Booking::getTotalAmount)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal completedOrderValue = bookingRepository.sumCompletedOrderValueByPartnerAndCompletedDateRange(
+                partner.getId(), start, endExclusive
+        );
 
-        Set<Long> completedBookingIds = new HashSet<>();
-        completedBookings.forEach(b -> completedBookingIds.add(b.getId()));
+        Set<Long> completedBookingIds = completedBookings.stream()
+                .map(Booking::getId)
+                .collect(Collectors.toSet());
 
-        BigDecimal approvedRefundAmount = refundRepository.findAll()
-                .stream()
-                .filter(r -> r.getBooking() != null)
-                .filter(r -> r.getBooking().getPartner() != null)
-                .filter(r -> r.getBooking().getPartner().getId()
-                        .equals(partner.getId()))
-                .filter(r -> completedBookingIds.contains(r.getBooking().getId()))
-                .filter(r -> "APPROVED".equalsIgnoreCase(r.getStatus()))
-                .map(CancellationRefund::getApprovedAmount)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal approvedRefundAmount = BigDecimal.ZERO;
+        if (!completedBookingIds.isEmpty()) {
+            approvedRefundAmount = refundRepository.sumApprovedRefundAmountByBookingIds(completedBookingIds);
+        }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("fromDate", fromDate);
@@ -584,6 +596,68 @@ public class ProviderManagementController {
         return employeeRow(employeeRepository.save(employee));
     }
 
+    @PutMapping("/employees/{id}")
+    @Transactional
+    public Map<String, Object> updateEmployee(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
+
+        Partner partner = currentPartner(auth);
+        Employee employee = ownedEmployee(id, partner);
+        User user = employee.getUser();
+
+        String fullName = text(body.get("fullName"));
+        if (!fullName.isBlank()) {
+            user.setFullName(fullName);
+        }
+
+        String phone = text(body.get("phone"));
+        if (!phone.isBlank()) {
+            if (!PHONE_PATTERN.matcher(phone).matches()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Số điện thoại không đúng định dạng (cần 10 số, bắt đầu bằng 0 hoặc +84).");
+            }
+            user.setPhone(phone);
+        }
+
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        employee.setUpdatedAt(LocalDateTime.now());
+        return employeeRow(employeeRepository.save(employee));
+    }
+
+    @PostMapping("/employees/{id}/reset-password")
+    @Transactional
+    public Map<String, Object> resetEmployeePassword(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Object> body,
+            Authentication auth) {
+
+        Partner partner = currentPartner(auth);
+        Employee employee = ownedEmployee(id, partner);
+        User user = employee.getUser();
+
+        String newPassword = body != null ? text(body.get("newPassword")) : "";
+        if (newPassword.isBlank()) {
+            newPassword = "Cleanmate@" + (1000 + new Random().nextInt(9000));
+        } else if (newPassword.length() < 6) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu mới phải có ít nhất 6 ký tự.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("success", true);
+        res.put("message", "Đặt lại mật khẩu thành công.");
+        res.put("employeeCode", employee.getEmployeeCode());
+        res.put("temporaryPassword", newPassword);
+        return res;
+    }
+
     @PatchMapping("/employees/{id}/status")
     @Transactional
     public Map<String, Object> updateEmployeeStatus(
@@ -598,6 +672,20 @@ public class ProviderManagementController {
         if (!Set.of("ACTIVE", "INACTIVE", "ON_LEAVE").contains(status)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Trạng thái không hợp lệ. Cho phép: ACTIVE, INACTIVE, ON_LEAVE.");
+        }
+
+        // BUG-03: Kiểm tra an toàn khi chuyển sang INACTIVE hoặc ON_LEAVE
+        if (!"ACTIVE".equals(status)) {
+            List<BookingAssignment> activeAssignments = assignmentRepository.findActiveAssignmentsByEmployeeId(employee.getId());
+            if (!activeAssignments.isEmpty()) {
+                String bookingCodes = activeAssignments.stream()
+                        .map(a -> a.getBooking() != null ? a.getBooking().getBookingCode() : "#" + a.getId())
+                        .filter(Objects::nonNull)
+                        .limit(3)
+                        .collect(Collectors.joining(", "));
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Không thể chuyển nhân viên sang trạng thái " + status + " do nhân viên đang phụ trách công việc chưa hoàn thành (Đơn hàng: " + bookingCodes + "). Vui lòng hoàn thành công việc hoặc đổi nhân viên khác trước.");
+            }
         }
 
         employee.setStatus(status);
