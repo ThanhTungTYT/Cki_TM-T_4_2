@@ -34,7 +34,7 @@ public interface BookingItemRepository extends JpaRepository<BookingItem, Long> 
               AND UPPER(TRIM(b.status)) NOT IN ('CANCELLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'COMPLETED')
               AND b.scheduledStart < :end AND b.scheduledEnd > :start
               AND (UPPER(TRIM(b.status)) <> 'PENDING_PAYMENT'
-                   OR b.holdExpiresAt IS NULL OR b.holdExpiresAt > :now)
+                   OR (b.holdExpiresAt IS NOT NULL AND b.holdExpiresAt > :now))
             """)
     long countReservedEmployees(
             @Param("partnerId") Long partnerId,
@@ -51,7 +51,7 @@ public interface BookingItemRepository extends JpaRepository<BookingItem, Long> 
               AND UPPER(TRIM(b.status)) NOT IN ('CANCELLED', 'CANCELED', 'EXPIRED', 'REJECTED', 'COMPLETED')
               AND b.scheduledStart < :end AND b.scheduledEnd > :start
               AND (UPPER(TRIM(b.status)) <> 'PENDING_PAYMENT'
-                   OR b.holdExpiresAt IS NULL OR b.holdExpiresAt > :now)
+                   OR (b.holdExpiresAt IS NOT NULL AND b.holdExpiresAt > :now))
             """)
     long countReservedEmployeesExcludingBooking(
             @Param("partnerId") Long partnerId,

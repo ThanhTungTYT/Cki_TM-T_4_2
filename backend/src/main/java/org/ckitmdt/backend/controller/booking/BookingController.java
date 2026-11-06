@@ -28,6 +28,15 @@ public class BookingController {
                 request, authentication.getName()));
     }
 
+    @PostMapping("/availability/calendar")
+    public ResponseEntity<java.util.Map<java.time.LocalDate, Boolean>> getCalendarAvailability(
+            Authentication authentication,
+            @Valid @RequestBody BookingCalendarAvailabilityRequest request
+    ) {
+        return ResponseEntity.ok(bookingService.getCalendarAvailability(
+                request, authentication.getName()));
+    }
+
     @PutMapping("/{id}/schedule")
     public ResponseEntity<BookingResponse> reschedulePendingBooking(
             Authentication authentication,

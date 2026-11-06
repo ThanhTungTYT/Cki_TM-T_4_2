@@ -182,6 +182,30 @@ public class BookingService {
         }).toList();
     }
 
+    @Transactional(readOnly = true)
+    public Map<LocalDate, Boolean> getCalendarAvailability(
+            BookingCalendarAvailabilityRequest request, String userEmail) {
+        if (request.getDates().size() > 42) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Chá»‰ cÃ³ thá»ƒ kiá»ƒm tra tá»‘i Ä‘a 42 ngÃ y má»—i láº§n.");
+        }
+
+        Map<LocalDate, Boolean> result = new LinkedHashMap<>();
+        for (LocalDate date : request.getDates()) {
+            if (date.isBefore(LocalDate.now())) {
+                result.put(date, false);
+                continue;
+            }
+            BookingAvailabilityRequest dailyRequest = new BookingAvailabilityRequest();
+            dailyRequest.setPartnerId(request.getPartnerId());
+            dailyRequest.setDate(date);
+            dailyRequest.setItems(request.getItems());
+            result.put(date, getAvailability(dailyRequest, userEmail).stream()
+                    .anyMatch(BookingAvailabilitySlotResponse::isAvailable));
+        }
+        return result;
+    }
+
     private QuoteCalculation calculateQuoteInternal(
             BookingQuoteRequest request,
             User customer,

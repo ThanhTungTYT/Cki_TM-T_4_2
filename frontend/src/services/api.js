@@ -139,6 +139,16 @@ export const bookingApi = {
         return handleResponse(res, 'Không thể tải lịch khả dụng.');
     },
 
+    async getCalendarAvailability(payload, signal) {
+        const res = await fetch(`${BASE_URL}/bookings/availability/calendar`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload),
+            signal
+        });
+        return handleResponse(res, 'Không thể tải trạng thái ngày khả dụng.');
+    },
+
     async getQuote(payload) {
         const res = await fetch(`${BASE_URL}/bookings/quote`, {
             method: 'POST',
