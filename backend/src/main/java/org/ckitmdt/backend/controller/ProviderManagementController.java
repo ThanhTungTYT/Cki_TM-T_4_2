@@ -12,7 +12,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.ckitmdt.backend.entity.BookingItem;
+import org.ckitmdt.backend.entity.BookingStatusHistory;
 import org.ckitmdt.backend.repository.AdminNotificationRepository;
+import org.ckitmdt.backend.repository.BookingStatusHistoryRepository;
+import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.ckitmdt.backend.entity.AdminNotification;
 
 import java.math.BigDecimal;
@@ -41,6 +45,8 @@ public class ProviderManagementController {
     private final ReportTicketRepository reportTicketRepository;
     private final ComplaintResponseRepository complaintResponseRepository;
     private final AdminNotificationRepository notificationRepository;
+    private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
+    private final CustomerNotificationService customerNotificationService;
 
     private User currentUser(Authentication auth) {
         if (auth == null || auth.getName() == null) {
@@ -633,11 +639,13 @@ public class ProviderManagementController {
                     "Nhân viên không ở trạng thái hoạt động.");
         }
 
-        // Kiểm tra đã phân công nhân viên này cho đơn này chưa
+        // Kiểm tra đã phân công nhân viên này cho đơn này chưa (bỏ qua những bản ghi đã bị hủy hoặc từ chối)
         boolean alreadyAssigned = assignmentRepository.findByBooking_IdOrderByIdAsc(id)
                 .stream()
                 .anyMatch(a -> a.getEmployee() != null
-                        && a.getEmployee().getId().equals(employeeId));
+                        && a.getEmployee().getId().equals(employeeId)
+                        && !"CANCELLED".equalsIgnoreCase(a.getStatus())
+                        && !"DECLINED".equalsIgnoreCase(a.getStatus()));
         if (alreadyAssigned) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Nhân viên này đã được phân công cho đơn hàng.");
@@ -653,6 +661,7 @@ public class ProviderManagementController {
                 .note(text(body.get("note")))
                 .build();
         assignment = assignmentRepository.save(assignment);
+
         // Tạo thông báo cho Cleaner vừa được giao việc
         User cleanerUser = employee.getUser();
 
@@ -672,10 +681,36 @@ public class ProviderManagementController {
                     .build());
         }
 
-        // Cập nhật trạng thái đơn sang ASSIGNED nếu chưa
-        if ("CONFIRMED".equalsIgnoreCase(booking.getStatus())) {
+        // Tính số lượng nhân sự yêu cầu cho đơn hàng
+        List<BookingItem> items = bookingItemRepository.findByBookingId(id);
+        int requiredEmployees = (items == null || items.isEmpty()) ? 1 :
+                items.stream()
+                        .mapToInt(it -> (it.getEmployeeCount() != null && it.getEmployeeCount() > 0 ? it.getEmployeeCount() : 1)
+                                * (it.getQuantity() != null && it.getQuantity() > 0 ? it.getQuantity() : 1))
+                        .sum();
+        if (requiredEmployees <= 0) requiredEmployees = 1;
+
+        long activeCount = assignmentRepository.findByBooking_IdOrderByIdAsc(id).stream()
+                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus()))
+                .count();
+
+        // Cập nhật trạng thái đơn sang ASSIGNED nếu đã phân công đủ nhân viên
+        if (activeCount >= requiredEmployees && "CONFIRMED".equalsIgnoreCase(booking.getStatus())) {
+            String oldStatus = booking.getStatus();
             booking.setStatus("ASSIGNED");
-            bookingRepository.save(booking);
+            booking.setUpdatedAt(now);
+            Booking savedBooking = bookingRepository.save(booking);
+
+            bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                    .booking(savedBooking)
+                    .oldStatus(oldStatus)
+                    .newStatus("ASSIGNED")
+                    .changedBy(partner.getUser())
+                    .note("Đã phân công đủ nhân viên cho đơn hàng (" + activeCount + "/" + requiredEmployees + ").")
+                    .createdAt(now)
+                    .build());
+
+            customerNotificationService.notifyBookingStatus(savedBooking);
         }
 
         return assignmentRow(assignment);
@@ -696,6 +731,12 @@ public class ProviderManagementController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không có quyền xử lý đơn này.");
         }
 
+        String bookingStatus = normalize(booking.getStatus());
+        if (Set.of("IN_PROGRESS", "PENDING_COMPLETION", "COMPLETED").contains(bookingStatus)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Không thể xóa phân công khi công việc đang hoặc đã thực hiện.");
+        }
+
         BookingAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phân công."));
 
@@ -703,14 +744,42 @@ public class ProviderManagementController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phân công không thuộc đơn hàng này.");
         }
 
+        String assignmentStatus = normalize(assignment.getStatus());
+        if (Set.of("IN_PROGRESS", "WORK_SUBMITTED", "COMPLETED").contains(assignmentStatus)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Không thể xóa phân công của nhân viên đang hoặc đã thực hiện công việc.");
+        }
+
         assignmentRepository.delete(assignment);
 
-        // Nếu không còn phân công nào, đưa đơn về CONFIRMED
-        boolean hasOtherAssignments = assignmentRepository
-                .findByBooking_IdOrderByIdAsc(bookingId).isEmpty();
-        if (hasOtherAssignments && "ASSIGNED".equalsIgnoreCase(booking.getStatus())) {
+        // Tính lại số nhân sự còn lại
+        List<BookingItem> items = bookingItemRepository.findByBookingId(bookingId);
+        int requiredEmployees = (items == null || items.isEmpty()) ? 1 :
+                items.stream()
+                        .mapToInt(it -> (it.getEmployeeCount() != null && it.getEmployeeCount() > 0 ? it.getEmployeeCount() : 1)
+                                * (it.getQuantity() != null && it.getQuantity() > 0 ? it.getQuantity() : 1))
+                        .sum();
+        if (requiredEmployees <= 0) requiredEmployees = 1;
+
+        long remainingActive = assignmentRepository.findByBooking_IdOrderByIdAsc(bookingId).stream()
+                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus()))
+                .count();
+
+        // Nếu số nhân viên còn lại ít hơn yêu cầu và đơn đang ở ASSIGNED hoặc EN_ROUTE, lùi về CONFIRMED
+        if (remainingActive < requiredEmployees && Set.of("ASSIGNED", "EN_ROUTE").contains(bookingStatus)) {
+            LocalDateTime now = LocalDateTime.now();
             booking.setStatus("CONFIRMED");
-            bookingRepository.save(booking);
+            booking.setUpdatedAt(now);
+            Booking savedBooking = bookingRepository.save(booking);
+
+            bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                    .booking(savedBooking)
+                    .oldStatus(bookingStatus)
+                    .newStatus("CONFIRMED")
+                    .changedBy(partner.getUser())
+                    .note("Hủy phân công nhân viên, thiếu nhân sự (" + remainingActive + "/" + requiredEmployees + ") nên chuyển về CONFIRMED.")
+                    .createdAt(now)
+                    .build());
         }
 
         return Map.of("message", "Đã xóa phân công thành công.", "assignmentId", assignmentId);
@@ -1161,6 +1230,8 @@ public class ProviderManagementController {
             row.put("employeeCode", a.getEmployee().getEmployeeCode());
             row.put("employeeName", a.getEmployee().getUser() != null
                     ? a.getEmployee().getUser().getFullName() : "");
+            row.put("employeePhone", a.getEmployee().getUser() != null
+                    ? a.getEmployee().getUser().getPhone() : "");
         }
         return row;
     }

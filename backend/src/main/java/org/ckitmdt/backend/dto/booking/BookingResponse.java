@@ -43,4 +43,10 @@ public class BookingResponse {
     private LocalDateTime cancelledAt;
     private List<BookingItemResponse> items;
     private List<BookingStatusHistoryResponse> statusHistory;
+    private String cleanerName;
+    private String cleanerPhone;
+    private String cleanerAvatar;
+    private BigDecimal cleanerRating;
+    private Integer cleanerCompletedJobs;
+    private List<CleanerAssignmentResponse> assignments;
 }

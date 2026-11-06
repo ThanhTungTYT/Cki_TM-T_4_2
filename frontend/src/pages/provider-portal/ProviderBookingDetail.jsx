@@ -4,12 +4,28 @@ import { providerBookingApi, providerEmployeeApi } from '../../services/provider
 
 const VND = (v) => (v != null ? `${Number(v).toLocaleString('vi-VN')}đ` : '—');
 
+const ASSIGNMENT_STATUS_MAP = {
+    ASSIGNED:       { cls: 'pp-badge-assigned',   label: 'Đã giao' },
+    ACCEPTED:       { cls: 'pp-badge-confirmed',  label: 'Đã nhận' },
+    EN_ROUTE:       { cls: 'pp-badge-progress',   label: 'Đang di chuyển' },
+    IN_PROGRESS:    { cls: 'pp-badge-progress',   label: 'Đang làm' },
+    WORK_SUBMITTED: { cls: 'pp-badge-waiting',    label: 'Đã báo xong' },
+    COMPLETED:      { cls: 'pp-badge-completed',  label: 'Hoàn thành' },
+    DECLINED:       { cls: 'pp-badge-cancelled',  label: 'Từ chối' },
+    CANCELLED:      { cls: 'pp-badge-cancelled',  label: 'Đã hủy' },
+};
+
 function statusBadge(status) {
     const map = {
-        PENDING_PROVIDER: { cls: 'pp-badge-pending',   label: 'Chờ duyệt' },
-        CONFIRMED:        { cls: 'pp-badge-confirmed',  label: 'Đã xác nhận' },
-        ASSIGNED:         { cls: 'pp-badge-assigned',   label: 'Đã phân công' },
-        COMPLETED:        { cls: 'pp-badge-completed',  label: 'Hoàn thành' },
+        PENDING_PROVIDER:   { cls: 'pp-badge-pending',   label: 'Chờ duyệt' },
+        CONFIRMED:          { cls: 'pp-badge-confirmed', label: 'Đã xác nhận' },
+        ASSIGNED:           { cls: 'pp-badge-assigned',  label: 'Đã phân công' },
+        EN_ROUTE:           { cls: 'pp-badge-progress',  label: 'Đang di chuyển' },
+        IN_PROGRESS:        { cls: 'pp-badge-progress',  label: 'Đang thực hiện' },
+        PENDING_COMPLETION: { cls: 'pp-badge-waiting',   label: 'Chờ nghiệm thu' },
+        COMPLETED:          { cls: 'pp-badge-completed', label: 'Hoàn thành' },
+        CANCELLED:          { cls: 'pp-badge-cancelled', label: 'Đã hủy' },
+        REJECTED:           { cls: 'pp-badge-cancelled', label: 'Bị từ chối' },
     };
     const s = (status || '').toUpperCase();
     const found = Object.entries(map).find(([k]) => s === k || s.includes(k));
@@ -237,9 +253,10 @@ function ProviderBookingDetail() {
                                                 <td>{a.employeeCode || '—'}</td>
                                                 <td>{a.employeeName || '—'}</td>
                                                 <td>
-                                                    <span className="pp-badge pp-badge-confirmed">
-                                                        {a.status}
-                                                    </span>
+                                                    {(() => {
+                                                        const asg = ASSIGNMENT_STATUS_MAP[(a.status || '').toUpperCase()] || { cls: 'pp-badge-confirmed', label: a.status || 'ASSIGNED' };
+                                                        return <span className={`pp-badge ${asg.cls}`}>{asg.label}</span>;
+                                                    })()}
                                                 </td>
                                                 <td>{a.note || '—'}</td>
                                                 {canAssign && (
