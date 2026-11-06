@@ -424,7 +424,8 @@
 /* Schedule section */
 .schedule-pills-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 20px;
 }
@@ -453,29 +454,133 @@
     box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
 
-.custom-date-picker-inline {
+.checkout-calendar {
+    width: min(100%, 330px);
+    padding: 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 5px 18px rgba(15, 23, 42, .06);
+}
+
+.pill-btn:disabled,
+.pill-btn.unavailable {
+    border-color: #e2e8f0;
+    background: #f1f5f9;
+    color: #94a3b8;
+    box-shadow: none;
+    cursor: not-allowed;
+    text-decoration: line-through;
+}
+
+.checkout-calendar-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    color: #1e293b;
+    text-transform: capitalize;
+}
+
+.checkout-calendar-heading button {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #e2e8f0;
+    border-radius: 9px;
+    background: #fff;
+    color: #334155;
+    font-size: 21px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.checkout-calendar-heading button:disabled {
+    color: #cbd5e1;
+    cursor: not-allowed;
+}
+
+.checkout-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.calendar-weekdays {
+    margin-bottom: 5px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.checkout-calendar-day {
+    position: relative;
+    aspect-ratio: 1;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.checkout-calendar-day:not(:disabled):hover {
+    border-color: #2563eb;
+    background: #dbeafe;
+}
+
+.checkout-calendar-day.selected {
+    background: #2563eb;
+    color: #fff;
+}
+
+.checkout-calendar-day.unavailable,
+.checkout-calendar-day:disabled:not(.outside-month) {
+    border-color: #e2e8f0;
+    background: #f1f5f9;
+    color: #94a3b8;
+    cursor: not-allowed;
+    text-decoration: line-through;
+}
+
+.checkout-calendar-day.outside-month {
+    visibility: hidden;
+}
+
+.checkout-calendar-day.checking {
+    color: #94a3b8;
+}
+
+.checkout-calendar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    color: #64748b;
+    font-size: 11px;
+}
+
+.checkout-calendar-legend span {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    border: 1px solid #cbd5e1;
-    background: #ffffff;
-    padding: 4px 14px;
-    border-radius: 24px;
+    gap: 5px;
 }
 
-.custom-date-picker-inline .cal-icon {
-    color: #64748b;
-    font-size: 14px;
+.checkout-calendar-legend i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
 }
 
-.custom-date-picker-inline input[type="date"] {
-    border: none;
-    outline: none;
-    font-size: 13px;
-    color: #1e293b;
-    background: transparent;
-    cursor: pointer;
-    font-family: inherit;
+.available-dot {
+    background: #2563eb;
+}
+
+.unavailable-dot {
+    background: #94a3b8;
 }
 
 /* Time slots grid */
