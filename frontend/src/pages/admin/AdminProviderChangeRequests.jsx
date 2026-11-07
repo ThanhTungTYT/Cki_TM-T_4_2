@@ -6,7 +6,7 @@ import "./AdminProviderChangeRequests.css";
 const STATUS_OPTIONS = [
     { value: "", label: "Tất cả trạng thái" },
     { value: "PENDING_REVIEW", label: "Chờ duyệt" },
-    { value: "REJECTED", label: "Cần bổ sung thông tin" },
+    { value: "NEEDS_INFORMATION", label: "Cần bổ sung thông tin" },
     { value: "APPROVED", label: "Đã phê duyệt" },
     { value: "REJECTED", label: "Đã từ chối" },
     { value: "WITHDRAWN", label: "Đã rút yêu cầu" },
@@ -17,7 +17,7 @@ const STATUS_CONFIG = {
         label: "Chờ duyệt",
         className: "badge-warning",
     },
-    REJECTED: {
+    NEEDS_INFORMATION: {
         label: "Cần bổ sung thông tin",
         className: "badge-info",
     },
@@ -68,7 +68,9 @@ function formatDate(value) {
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) return "—";
+    if (Number.isNaN(date.getTime())) {
+        return "—";
+    }
 
     return date.toLocaleString("vi-VN");
 }
@@ -76,7 +78,10 @@ function formatDate(value) {
 function parseSnapshot(snapshot) {
     if (!snapshot) return {};
 
-    if (typeof snapshot === "object" && !Array.isArray(snapshot)) {
+    if (
+        typeof snapshot === "object" &&
+        !Array.isArray(snapshot)
+    ) {
         return snapshot;
     }
 
@@ -87,7 +92,11 @@ function parseSnapshot(snapshot) {
     try {
         const parsed = JSON.parse(text);
 
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        if (
+            parsed &&
+            typeof parsed === "object" &&
+            !Array.isArray(parsed)
+        ) {
             return parsed;
         }
     } catch {
@@ -96,22 +105,30 @@ function parseSnapshot(snapshot) {
 
     const result = {};
 
-    text.replace(/^\{|\}$/g, "").split(";").forEach((item) => {
-        const separator = item.indexOf("=");
+    text.replace(/^\{|\}$/g, "")
+        .split(";")
+        .forEach((item) => {
+            const separator = item.indexOf("=");
 
-        if (separator < 1) return;
+            if (separator < 1) return;
 
-        const key = item.substring(0, separator).trim();
-        const value = item.substring(separator + 1).trim();
+            const key = item.substring(0, separator).trim();
+            const value = item.substring(separator + 1).trim();
 
-        if (key) result[key] = value;
-    });
+            if (key) {
+                result[key] = value;
+            }
+        });
 
     return result;
 }
 
 function displayValue(value) {
-    if (value === null || value === undefined || value === "") {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
         return "—";
     }
 
@@ -157,10 +174,15 @@ function AdminProviderChangeRequests() {
         setError("");
 
         try {
-            const data = await adminProviderChangeRequestApi.list(statusFilter);
+            const data =
+                await adminProviderChangeRequestApi.list(statusFilter);
+
             setRequests(Array.isArray(data) ? data : []);
         } catch (err) {
-            setError(err.message || "Không thể tải danh sách yêu cầu.");
+            setError(
+                err.message || "Không thể tải danh sách yêu cầu."
+            );
+
             setRequests([]);
         } finally {
             setLoading(false);
@@ -179,10 +201,14 @@ function AdminProviderChangeRequests() {
         setDetailLoading(true);
 
         try {
-            const detail = await adminProviderChangeRequestApi.get(request.id);
+            const detail =
+                await adminProviderChangeRequestApi.get(request.id);
+
             setSelectedRequest(detail);
         } catch (err) {
-            setModalError(err.message || "Không thể tải chi tiết yêu cầu.");
+            setModalError(
+                err.message || "Không thể tải chi tiết yêu cầu."
+            );
         } finally {
             setDetailLoading(false);
         }
@@ -205,13 +231,26 @@ function AdminProviderChangeRequests() {
     };
 
     const submitRequestInfo = async () => {
-        if (!actionReason.trim()) {
-            setModalError("Vui lòng ghi rõ thông tin hoặc tài liệu cần Provider bổ sung.");
+        const note = actionReason.trim();
+
+        if (!note) {
+            setModalError(
+                "Vui lòng ghi rõ thông tin hoặc tài liệu cần Provider bổ sung."
+            );
             return;
         }
 
-        if (actionReason.trim().length < 5) {
-            setModalError("Nội dung yêu cầu bổ sung quá ngắn.");
+        if (note.length < 5) {
+            setModalError(
+                "Nội dung yêu cầu bổ sung phải có ít nhất 5 ký tự."
+            );
+            return;
+        }
+
+        if (note.length > 2000) {
+            setModalError(
+                "Nội dung yêu cầu bổ sung không được vượt quá 2000 ký tự."
+            );
             return;
         }
 
@@ -223,7 +262,7 @@ function AdminProviderChangeRequests() {
 
             await adminProviderChangeRequestApi.requestInfo(
                 requestId,
-                actionReason.trim()
+                note
             );
 
             setMessage(
@@ -233,20 +272,26 @@ function AdminProviderChangeRequests() {
             closeModalAfterSuccess();
             await loadRequests();
         } catch (err) {
-            setModalError(err.message || "Không thể yêu cầu bổ sung thông tin.");
+            setModalError(
+                err.message || "Không thể yêu cầu bổ sung thông tin."
+            );
         } finally {
             setSubmitting(false);
         }
     };
 
     const submitReject = async () => {
-        if (!actionReason.trim()) {
+        const reason = actionReason.trim();
+
+        if (!reason) {
             setModalError("Vui lòng nhập lý do từ chối.");
             return;
         }
 
-        if (actionReason.trim().length < 5) {
-            setModalError("Lý do từ chối phải có ít nhất 5 ký tự.");
+        if (reason.length < 5) {
+            setModalError(
+                "Lý do từ chối phải có ít nhất 5 ký tự."
+            );
             return;
         }
 
@@ -258,15 +303,19 @@ function AdminProviderChangeRequests() {
 
             await adminProviderChangeRequestApi.reject(
                 requestId,
-                actionReason.trim()
+                reason
             );
 
-            setMessage(`Đã từ chối yêu cầu #${requestId}.`);
+            setMessage(
+                `Đã từ chối yêu cầu #${requestId}.`
+            );
 
             closeModalAfterSuccess();
             await loadRequests();
         } catch (err) {
-            setModalError(err.message || "Không thể từ chối yêu cầu.");
+            setModalError(
+                err.message || "Không thể từ chối yêu cầu."
+            );
         } finally {
             setSubmitting(false);
         }
@@ -287,18 +336,25 @@ function AdminProviderChangeRequests() {
 
             await adminProviderChangeRequestApi.approve(requestId);
 
-            setMessage(`Đã phê duyệt yêu cầu #${requestId} thành công.`);
+            setMessage(
+                `Đã phê duyệt yêu cầu #${requestId} thành công.`
+            );
 
             closeModalAfterSuccess();
             await loadRequests();
         } catch (err) {
-            setModalError(err.message || "Không thể phê duyệt yêu cầu.");
+            setModalError(
+                err.message || "Không thể phê duyệt yêu cầu."
+            );
         } finally {
             setSubmitting(false);
         }
     };
 
-    const renderSnapshotTable = (oldSnapshot, proposedSnapshot) => {
+    const renderSnapshotTable = (
+        oldSnapshot,
+        proposedSnapshot
+    ) => {
         const oldValues = parseSnapshot(oldSnapshot);
         const newValues = parseSnapshot(proposedSnapshot);
 
@@ -327,15 +383,20 @@ function AdminProviderChangeRequests() {
                         <th>Dữ liệu đề xuất</th>
                     </tr>
                     </thead>
+
                     <tbody>
                     {keys.map((key) => (
                         <tr key={key}>
                             <td>
-                                <strong>{FIELD_LABELS[key] || key}</strong>
+                                <strong>
+                                    {FIELD_LABELS[key] || key}
+                                </strong>
                             </td>
+
                             <td className="provider-old-value">
                                 {displayValue(oldValues[key])}
                             </td>
+
                             <td className="provider-new-value">
                                 {displayValue(newValues[key])}
                             </td>
@@ -352,7 +413,7 @@ function AdminProviderChangeRequests() {
     ).length;
 
     const needInfoCount = requests.filter(
-        (item) => item.status === "REJECTED"
+        (item) => item.status === "NEEDS_INFORMATION"
     ).length;
 
     const approvedCount = requests.filter(
@@ -365,6 +426,7 @@ function AdminProviderChangeRequests() {
                 <header className="admin-header">
                     <div>
                         <h1>Xét duyệt yêu cầu từ Provider</h1>
+
                         <p>
                             Kiểm tra và xử lý các đề xuất thay đổi hồ sơ,
                             vị trí và dịch vụ của doanh nghiệp.
@@ -398,6 +460,7 @@ function AdminProviderChangeRequests() {
                         <span className="provider-summary-label">
                             Tổng yêu cầu
                         </span>
+
                         <strong>{requests.length}</strong>
                     </div>
 
@@ -405,6 +468,7 @@ function AdminProviderChangeRequests() {
                         <span className="provider-summary-label warning">
                             Đang chờ duyệt
                         </span>
+
                         <strong>{pendingCount}</strong>
                     </div>
 
@@ -412,6 +476,7 @@ function AdminProviderChangeRequests() {
                         <span className="provider-summary-label info">
                             Cần bổ sung thông tin
                         </span>
+
                         <strong>{needInfoCount}</strong>
                     </div>
 
@@ -419,6 +484,7 @@ function AdminProviderChangeRequests() {
                         <span className="provider-summary-label success">
                             Đã phê duyệt
                         </span>
+
                         <strong>{approvedCount}</strong>
                     </div>
                 </section>
@@ -432,10 +498,15 @@ function AdminProviderChangeRequests() {
                         id="provider-request-status"
                         className="admin-select"
                         value={statusFilter}
-                        onChange={(event) => setStatusFilter(event.target.value)}
+                        onChange={(event) =>
+                            setStatusFilter(event.target.value)
+                        }
                     >
                         {STATUS_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
+                            <option
+                                key={option.value}
+                                value={option.value}
+                            >
                                 {option.label}
                             </option>
                         ))}
@@ -466,45 +537,66 @@ function AdminProviderChangeRequests() {
                                     <th>Thao tác</th>
                                 </tr>
                                 </thead>
+
                                 <tbody>
                                 {requests.map((request) => (
                                     <tr key={request.id}>
                                         <td>
-                                            <strong>#{request.id}</strong>
+                                            <strong>
+                                                #{request.id}
+                                            </strong>
                                         </td>
+
                                         <td>
                                             <strong>
                                                 {request.businessName || "—"}
                                             </strong>
+
                                             <small className="provider-table-subtext">
-                                                Provider #{request.partnerId ?? "—"}
+                                                Provider #
+                                                {request.partnerId ?? "—"}
                                             </small>
                                         </td>
+
                                         <td>
                                             {TYPE_LABELS[request.requestType] ||
                                                 request.requestType ||
                                                 "—"}
                                         </td>
+
                                         <td className="provider-reason-cell">
                                             {request.reason || "—"}
                                         </td>
-                                        <td>{formatDate(request.createdAt)}</td>
+
                                         <td>
-                                            <StatusBadge status={request.status} />
+                                            {formatDate(request.createdAt)}
                                         </td>
+
+                                        <td>
+                                            <StatusBadge
+                                                status={request.status}
+                                            />
+                                        </td>
+
                                         <td>
                                             {request.reviewedBy || "—"}
+
                                             {request.reviewedAt && (
                                                 <small className="provider-table-subtext">
-                                                    {formatDate(request.reviewedAt)}
+                                                    {formatDate(
+                                                        request.reviewedAt
+                                                    )}
                                                 </small>
                                             )}
                                         </td>
+
                                         <td>
                                             <button
                                                 type="button"
                                                 className="admin-btn admin-btn-sm"
-                                                onClick={() => openDetail(request)}
+                                                onClick={() =>
+                                                    openDetail(request)
+                                                }
                                             >
                                                 Xem chi tiết
                                             </button>
@@ -521,7 +613,9 @@ function AdminProviderChangeRequests() {
                     <div
                         className="provider-modal-backdrop"
                         onClick={(event) => {
-                            if (event.target === event.currentTarget) {
+                            if (
+                                event.target === event.currentTarget
+                            ) {
                                 closeModal();
                             }
                         }}
@@ -530,13 +624,19 @@ function AdminProviderChangeRequests() {
                             <div className="provider-modal-header">
                                 <div>
                                     <h2>
-                                        Chi tiết yêu cầu #{selectedRequest.id}
+                                        Chi tiết yêu cầu #
+                                        {selectedRequest.id}
                                     </h2>
+
                                     <p>
-                                        {selectedRequest.businessName || "Doanh nghiệp"}
+                                        {selectedRequest.businessName ||
+                                            "Doanh nghiệp"}
+
                                         {" · "}
-                                        {TYPE_LABELS[selectedRequest.requestType] ||
-                                            selectedRequest.requestType}
+
+                                        {TYPE_LABELS[
+                                            selectedRequest.requestType
+                                            ] || selectedRequest.requestType}
                                     </p>
                                 </div>
 
@@ -564,21 +664,34 @@ function AdminProviderChangeRequests() {
                                     )}
 
                                     <div className="provider-detail-meta">
-                                        <StatusBadge status={selectedRequest.status} />
+                                        <StatusBadge
+                                            status={selectedRequest.status}
+                                        />
+
                                         <span>
-                                            Ngày gửi: {formatDate(selectedRequest.createdAt)}
+                                            Ngày gửi:{" "}
+                                            {formatDate(
+                                                selectedRequest.createdAt
+                                            )}
                                         </span>
                                     </div>
 
                                     <section className="provider-detail-section">
-                                        <h3>Lý do Provider gửi yêu cầu</h3>
+                                        <h3>
+                                            Lý do Provider gửi yêu cầu
+                                        </h3>
+
                                         <div className="provider-detail-content">
-                                            {selectedRequest.reason || "Không có nội dung."}
+                                            {selectedRequest.reason ||
+                                                "Không có nội dung."}
                                         </div>
                                     </section>
 
                                     <section className="provider-detail-section">
-                                        <h3>So sánh thông tin trước và sau</h3>
+                                        <h3>
+                                            So sánh thông tin trước và sau
+                                        </h3>
+
                                         {renderSnapshotTable(
                                             selectedRequest.oldSnapshot,
                                             selectedRequest.proposedSnapshot
@@ -587,7 +700,10 @@ function AdminProviderChangeRequests() {
 
                                     {selectedRequest.evidenceUrl && (
                                         <section className="provider-detail-section">
-                                            <h3>Bằng chứng đính kèm</h3>
+                                            <h3>
+                                                Bằng chứng đính kèm
+                                            </h3>
+
                                             <a
                                                 href={selectedRequest.evidenceUrl}
                                                 target="_blank"
@@ -600,20 +716,31 @@ function AdminProviderChangeRequests() {
 
                                     {selectedRequest.rejectReason && (
                                         <section className="provider-previous-note">
-                                            <strong>Ghi chú xử lý trước đó</strong>
-                                            <p>{selectedRequest.rejectReason}</p>
+                                            <strong>
+                                                Ghi chú xử lý trước đó
+                                            </strong>
+
+                                            <p>
+                                                {selectedRequest.rejectReason}
+                                            </p>
                                         </section>
                                     )}
 
                                     {selectedRequest.reviewedBy && (
                                         <div className="provider-reviewed-info">
-                                            Người xử lý: {selectedRequest.reviewedBy}
+                                            Người xử lý:{" "}
+                                            {selectedRequest.reviewedBy}
+
                                             {" · "}
-                                            {formatDate(selectedRequest.reviewedAt)}
+
+                                            {formatDate(
+                                                selectedRequest.reviewedAt
+                                            )}
                                         </div>
                                     )}
 
-                                    {selectedRequest.status === "PENDING_REVIEW" ? (
+                                    {selectedRequest.status ===
+                                    "PENDING_REVIEW" ? (
                                         <>
                                             {actionType && (
                                                 <div className="provider-action-reason">
@@ -626,7 +753,9 @@ function AdminProviderChangeRequests() {
                                                     <textarea
                                                         value={actionReason}
                                                         onChange={(event) =>
-                                                            setActionReason(event.target.value)
+                                                            setActionReason(
+                                                                event.target.value
+                                                            )
                                                         }
                                                         rows={4}
                                                         maxLength={2000}
@@ -676,7 +805,8 @@ function AdminProviderChangeRequests() {
                                                     }}
                                                     disabled={submitting}
                                                 >
-                                                    {submitting && actionType === "REJECT"
+                                                    {submitting &&
+                                                    actionType === "REJECT"
                                                         ? "Đang xử lý..."
                                                         : actionType === "REJECT"
                                                             ? "Xác nhận từ chối"

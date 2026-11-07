@@ -3,24 +3,32 @@
 // Base URL: /api/provider
 // =========================================================
 
-const BASE_URL = 'http://localhost:8080/api';
+const BASE_URL = "http://localhost:8080/api";
 
 function getAuthHeaders(extra = {}) {
     const token =
-        sessionStorage.getItem('accessToken') ||
-        localStorage.getItem('accessToken');
+        sessionStorage.getItem("accessToken") ||
+        localStorage.getItem("accessToken");
+
     return {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...extra,
     };
 }
 
-async function handleResponse(res, defaultMsg = 'Có lỗi xảy ra.') {
+async function handleResponse(res, defaultMsg = "Có lỗi xảy ra.") {
     const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-        throw new Error(data.message || data.detail || data.error || defaultMsg);
+        throw new Error(
+            data.message ||
+            data.detail ||
+            data.error ||
+            defaultMsg
+        );
     }
+
     return data;
 }
 
@@ -28,153 +36,293 @@ async function handleResponse(res, defaultMsg = 'Có lỗi xảy ra.') {
 export const providerDashboardApi = {
     async get(fromDate, toDate) {
         const params = new URLSearchParams();
-        if (fromDate) params.set('fromDate', fromDate);
-        if (toDate) params.set('toDate', toDate);
-        const query = params.toString() ? `?${params.toString()}` : '';
-        const res = await fetch(`${BASE_URL}/provider/dashboard${query}`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải tổng quan.');
+
+        if (fromDate) params.set("fromDate", fromDate);
+        if (toDate) params.set("toDate", toDate);
+
+        const query = params.toString()
+            ? `?${params.toString()}`
+            : "";
+
+        const res = await fetch(
+            `${BASE_URL}/provider/dashboard${query}`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(res, "Không thể tải tổng quan.");
     },
 };
 
 // ---------- Profile ----------
 export const providerProfileApi = {
     async get() {
-        const res = await fetch(`${BASE_URL}/provider/profile`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải hồ sơ doanh nghiệp.');
+        const res = await fetch(
+            `${BASE_URL}/provider/profile`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải hồ sơ doanh nghiệp."
+        );
     },
 };
 
-// ---------- Change Requests (Yêu cầu thay đổi thông tin/vị trí) ----------
+// ---------- Change Requests ----------
 export const providerChangeRequestApi = {
     async list() {
-        const res = await fetch(`${BASE_URL}/provider/change-requests`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải danh sách yêu cầu thay đổi.');
+        const res = await fetch(
+            `${BASE_URL}/provider/change-requests`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải danh sách yêu cầu thay đổi."
+        );
     },
 
     async create(payload) {
-        const res = await fetch(`${BASE_URL}/provider/change-requests`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(payload),
-        });
-        return handleResponse(res, 'Không thể gửi yêu cầu thay đổi.');
+        const res = await fetch(
+            `${BASE_URL}/provider/change-requests`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể gửi yêu cầu thay đổi."
+        );
     },
 
     async withdraw(id) {
-        const res = await fetch(`${BASE_URL}/provider/change-requests/${id}/withdraw`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể rút yêu cầu thay đổi.');
+        const res = await fetch(
+            `${BASE_URL}/provider/change-requests/${id}/withdraw`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể rút yêu cầu thay đổi."
+        );
     },
 };
 
 // ---------- Services Management & Catalog ----------
 export const providerServicesApi = {
     async list() {
-        const res = await fetch(`${BASE_URL}/provider/services`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải danh sách dịch vụ đang cung cấp.');
+        const res = await fetch(
+            `${BASE_URL}/provider/services`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải danh sách dịch vụ đang cung cấp."
+        );
     },
 
     async getCatalog() {
-        const res = await fetch(`${BASE_URL}/provider/services/catalog`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải danh mục dịch vụ sàn.');
+        const res = await fetch(
+            `${BASE_URL}/provider/services/catalog`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải danh mục dịch vụ sàn."
+        );
     },
 
     async requestService(payload) {
-        const res = await fetch(`${BASE_URL}/provider/service-requests`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(payload),
-        });
-        return handleResponse(res, 'Không thể gửi đề nghị dịch vụ.');
+        const res = await fetch(
+            `${BASE_URL}/provider/service-requests`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể gửi đề nghị dịch vụ."
+        );
     },
 
     async pause(id) {
-        const res = await fetch(`${BASE_URL}/provider/services/${id}/pause`, {
-            method: 'PATCH',
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tạm dừng dịch vụ.');
+        const res = await fetch(
+            `${BASE_URL}/provider/services/${id}/pause`,
+            {
+                method: "PATCH",
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tạm dừng dịch vụ."
+        );
     },
 
     async resume(id) {
-        const res = await fetch(`${BASE_URL}/provider/services/${id}/resume`, {
-            method: 'PATCH',
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể kích hoạt lại dịch vụ.');
+        const res = await fetch(
+            `${BASE_URL}/provider/services/${id}/resume`,
+            {
+                method: "PATCH",
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể kích hoạt lại dịch vụ."
+        );
     },
 };
 
-// ---------- Complaints (Khiếu nại) ----------
+// ---------- Complaints ----------
 export const providerComplaintsApi = {
     async list() {
-        const res = await fetch(`${BASE_URL}/provider/complaints`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải danh sách khiếu nại.');
+        const res = await fetch(
+            `${BASE_URL}/provider/complaints`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải danh sách khiếu nại."
+        );
     },
 
     async get(id) {
-        const res = await fetch(`${BASE_URL}/provider/complaints/${id}`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải chi tiết khiếu nại.');
+        const res = await fetch(
+            `${BASE_URL}/provider/complaints/${id}`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải chi tiết khiếu nại."
+        );
     },
 
     async respond(id, payload) {
-        const res = await fetch(`${BASE_URL}/provider/complaints/${id}/responses`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(payload),
-        });
-        return handleResponse(res, 'Không thể gửi phản hồi giải trình.');
+        const res = await fetch(
+            `${BASE_URL}/provider/complaints/${id}/responses`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể gửi phản hồi giải trình."
+        );
     },
 };
 
 // ---------- Admin Provider Change Requests Review ----------
 export const adminProviderChangeRequestApi = {
     async list(status) {
-        const query = status ? `?status=${encodeURIComponent(status)}` : '';
-        const res = await fetch(`${BASE_URL}/admin/provider-change-requests${query}`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải danh sách yêu cầu chờ duyệt.');
+        const query = status
+            ? `?status=${encodeURIComponent(status)}`
+            : "";
+
+        const res = await fetch(
+            `${BASE_URL}/admin/provider-change-requests${query}`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải danh sách yêu cầu chờ duyệt."
+        );
     },
 
     async get(id) {
-        const res = await fetch(`${BASE_URL}/admin/provider-change-requests/${id}`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải chi tiết yêu cầu.');
+        const res = await fetch(
+            `${BASE_URL}/admin/provider-change-requests/${id}`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải chi tiết yêu cầu."
+        );
     },
 
     async approve(id) {
-        const res = await fetch(`${BASE_URL}/admin/provider-change-requests/${id}/approve`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể phê duyệt yêu cầu.');
+        const res = await fetch(
+            `${BASE_URL}/admin/provider-change-requests/${id}/approve`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể phê duyệt yêu cầu."
+        );
     },
 
     async reject(id, rejectReason) {
-        const res = await fetch(`${BASE_URL}/admin/provider-change-requests/${id}/reject`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ rejectReason }),
-        });
-        return handleResponse(res, 'Không thể từ chối yêu cầu.');
+        const res = await fetch(
+            `${BASE_URL}/admin/provider-change-requests/${id}/reject`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ rejectReason }),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể từ chối yêu cầu."
+        );
+    },
+
+    async requestInfo(id, requestInfo) {
+        const res = await fetch(
+            `${BASE_URL}/admin/provider-change-requests/${id}/request-info`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ requestInfo }),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể yêu cầu Provider bổ sung thông tin."
+        );
     },
 };
 
@@ -182,144 +330,240 @@ export const adminProviderChangeRequestApi = {
 export const providerBookingApi = {
     async list(params = {}) {
         const q = new URLSearchParams();
-        if (params.status) q.set('status', params.status);
-        if (params.search) q.set('search', params.search);
-        if (params.page != null) q.set('page', params.page);
-        if (params.size != null) q.set('size', params.size);
-        const queryStr = q.toString() ? `?${q.toString()}` : '';
-        const res = await fetch(`${BASE_URL}/provider/bookings${queryStr}`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải danh sách đơn hàng.');
+
+        if (params.status) q.set("status", params.status);
+        if (params.search) q.set("search", params.search);
+        if (params.page != null) q.set("page", params.page);
+        if (params.size != null) q.set("size", params.size);
+
+        const queryStr = q.toString()
+            ? `?${q.toString()}`
+            : "";
+
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings${queryStr}`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải danh sách đơn hàng."
+        );
     },
 
     async get(id) {
-        const res = await fetch(`${BASE_URL}/provider/bookings/${id}`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải chi tiết đơn hàng.');
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings/${id}`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải chi tiết đơn hàng."
+        );
     },
 
     async accept(id) {
         const res = await fetch(
             `${BASE_URL}/provider/bookings/${id}/actions/accept`,
             {
-                method: 'POST',
+                method: "POST",
                 headers: getAuthHeaders(),
-                body: JSON.stringify({ action: 'ACCEPT' }),
+                body: JSON.stringify({
+                    action: "ACCEPT",
+                }),
             }
         );
-        return handleResponse(res, 'Không thể chấp nhận đơn hàng.');
+
+        return handleResponse(
+            res,
+            "Không thể chấp nhận đơn hàng."
+        );
     },
 
     async reject(id, reason) {
         const res = await fetch(
             `${BASE_URL}/provider/bookings/${id}/actions/reject`,
             {
-                method: 'POST',
+                method: "POST",
                 headers: getAuthHeaders(),
-                body: JSON.stringify({ action: 'REJECT', reason }),
+                body: JSON.stringify({
+                    action: "REJECT",
+                    reason,
+                }),
             }
         );
-        return handleResponse(res, 'Không thể từ chối đơn hàng.');
+
+        return handleResponse(
+            res,
+            "Không thể từ chối đơn hàng."
+        );
     },
 
     async cancel(id, reason) {
         const res = await fetch(
             `${BASE_URL}/provider/bookings/${id}/actions/cancel`,
             {
-                method: 'POST',
+                method: "POST",
                 headers: getAuthHeaders(),
-                body: JSON.stringify({ action: 'CANCEL', note: reason }),
+                body: JSON.stringify({
+                    action: "CANCEL",
+                    note: reason,
+                }),
             }
         );
-        return handleResponse(res, 'Không thể hủy đơn hàng.');
+
+        return handleResponse(
+            res,
+            "Không thể hủy đơn hàng."
+        );
     },
 
-    // Phân công nhân viên
     async getAssignments(bookingId) {
         const res = await fetch(
             `${BASE_URL}/provider/bookings/${bookingId}/assignments`,
-            { headers: getAuthHeaders() }
+            {
+                headers: getAuthHeaders(),
+            }
         );
-        return handleResponse(res, 'Không thể tải phân công.');
+
+        return handleResponse(
+            res,
+            "Không thể tải phân công."
+        );
     },
 
     async getAvailableEmployees(bookingId) {
         const res = await fetch(
             `${BASE_URL}/provider/bookings/${bookingId}/available-employees`,
-            { headers: getAuthHeaders() }
+            {
+                headers: getAuthHeaders(),
+            }
         );
-        return handleResponse(res, 'Không thể tải danh sách nhân viên khả dụng.');
+
+        return handleResponse(
+            res,
+            "Không thể tải danh sách nhân viên khả dụng."
+        );
     },
 
-    async assign(bookingId, employeeId, note = '') {
+    async assign(bookingId, employeeId, note = "") {
         const res = await fetch(
             `${BASE_URL}/provider/bookings/${bookingId}/assignments`,
             {
-                method: 'POST',
+                method: "POST",
                 headers: getAuthHeaders(),
-                body: JSON.stringify({ employeeId, note }),
+                body: JSON.stringify({
+                    employeeId,
+                    note,
+                }),
             }
         );
-        return handleResponse(res, 'Không thể phân công nhân viên.');
+
+        return handleResponse(
+            res,
+            "Không thể phân công nhân viên."
+        );
     },
 
     async removeAssignment(bookingId, assignmentId) {
         const res = await fetch(
             `${BASE_URL}/provider/bookings/${bookingId}/assignments/${assignmentId}`,
             {
-                method: 'DELETE',
+                method: "DELETE",
                 headers: getAuthHeaders(),
             }
         );
-        return handleResponse(res, 'Không thể xóa phân công.');
+
+        return handleResponse(
+            res,
+            "Không thể xóa phân công."
+        );
     },
 };
 
 // ---------- Employees ----------
 export const providerEmployeeApi = {
     async list() {
-        const res = await fetch(`${BASE_URL}/provider/employees`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải danh sách nhân viên.');
+        const res = await fetch(
+            `${BASE_URL}/provider/employees`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải danh sách nhân viên."
+        );
     },
 
     async create(payload) {
-        const res = await fetch(`${BASE_URL}/provider/employees`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(payload),
-        });
-        return handleResponse(res, 'Không thể tạo nhân viên.');
+        const res = await fetch(
+            `${BASE_URL}/provider/employees`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tạo nhân viên."
+        );
     },
 
     async updateStatus(id, status) {
-        const res = await fetch(`${BASE_URL}/provider/employees/${id}/status`, {
-            method: 'PATCH',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ status }),
-        });
-        return handleResponse(res, 'Không thể cập nhật trạng thái nhân viên.');
+        const res = await fetch(
+            `${BASE_URL}/provider/employees/${id}/status`,
+            {
+                method: "PATCH",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ status }),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể cập nhật trạng thái nhân viên."
+        );
     },
 
     async update(id, payload) {
-        const res = await fetch(`${BASE_URL}/provider/employees/${id}`, {
-            method: 'PUT',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(payload),
-        });
-        return handleResponse(res, 'Không thể cập nhật thông tin nhân viên.');
+        const res = await fetch(
+            `${BASE_URL}/provider/employees/${id}`,
+            {
+                method: "PUT",
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể cập nhật thông tin nhân viên."
+        );
     },
 
-    async resetPassword(id, newPassword = '') {
-        const res = await fetch(`${BASE_URL}/provider/employees/${id}/reset-password`, {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ newPassword }),
-        });
-        return handleResponse(res, 'Không thể đặt lại mật khẩu.');
+    async resetPassword(id, newPassword = "") {
+        const res = await fetch(
+            `${BASE_URL}/provider/employees/${id}/reset-password`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ newPassword }),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể đặt lại mật khẩu."
+        );
     },
 };
 
@@ -327,12 +571,21 @@ export const providerEmployeeApi = {
 export const providerScheduleApi = {
     async get(fromDate, toDate) {
         const params = new URLSearchParams();
-        if (fromDate) params.set('fromDate', fromDate);
-        if (toDate) params.set('toDate', toDate);
-        const res = await fetch(`${BASE_URL}/provider/schedule?${params}`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải lịch làm việc.');
+
+        if (fromDate) params.set("fromDate", fromDate);
+        if (toDate) params.set("toDate", toDate);
+
+        const res = await fetch(
+            `${BASE_URL}/provider/schedule?${params}`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải lịch làm việc."
+        );
     },
 };
 
@@ -340,47 +593,84 @@ export const providerScheduleApi = {
 export const providerRevenueApi = {
     async get(fromDate, toDate) {
         const params = new URLSearchParams();
-        if (fromDate) params.set('fromDate', fromDate);
-        if (toDate) params.set('toDate', toDate);
-        const res = await fetch(`${BASE_URL}/provider/earnings?${params}`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải doanh thu.');
+
+        if (fromDate) params.set("fromDate", fromDate);
+        if (toDate) params.set("toDate", toDate);
+
+        const res = await fetch(
+            `${BASE_URL}/provider/earnings?${params}`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải doanh thu."
+        );
     },
 };
-
 
 // ---------- Notifications ----------
 export const providerNotificationApi = {
     async list() {
-        const res = await fetch(`${BASE_URL}/provider/notifications`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải thông báo.');
+        const res = await fetch(
+            `${BASE_URL}/provider/notifications`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải thông báo."
+        );
     },
 
     async markRead(id) {
-        const res = await fetch(`${BASE_URL}/provider/notifications/${id}/read`, {
-            method: 'PATCH',
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể đánh dấu đã đọc.');
+        const res = await fetch(
+            `${BASE_URL}/provider/notifications/${id}/read`,
+            {
+                method: "PATCH",
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể đánh dấu đã đọc."
+        );
     },
 
     async markAllRead() {
-        const res = await fetch(`${BASE_URL}/provider/notifications/read-all`, {
-            method: 'PATCH',
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể đánh dấu đã đọc tất cả.');
+        const res = await fetch(
+            `${BASE_URL}/provider/notifications/read-all`,
+            {
+                method: "PATCH",
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể đánh dấu đã đọc tất cả."
+        );
     },
 };
+
 // ---------- Reviews & Feedback ----------
 export const providerReviewApi = {
     async list() {
-        const res = await fetch(`${BASE_URL}/provider/reviews`, {
-            headers: getAuthHeaders(),
-        });
-        return handleResponse(res, 'Không thể tải đánh giá của khách hàng.');
+        const res = await fetch(
+            `${BASE_URL}/provider/reviews`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải đánh giá của khách hàng."
+        );
     },
 };

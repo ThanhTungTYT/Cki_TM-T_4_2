@@ -7,11 +7,11 @@ import org.ckitmdt.backend.entity.BusinessChangeRequest;
 import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.entity.PartnerService;
 import org.ckitmdt.backend.entity.Service;
+import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.repository.BusinessChangeRequestRepository;
 import org.ckitmdt.backend.repository.PartnerRepository;
 import org.ckitmdt.backend.repository.PartnerServiceRepository;
 import org.ckitmdt.backend.repository.ServiceRepository;
-import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -62,7 +62,9 @@ public class AdminProviderChangeRequestController {
                 );
             }
 
-            requests = requestRepository.findByStatusOrderByCreatedAtDesc(normalizedStatus);
+            requests = requestRepository.findByStatusOrderByCreatedAtDesc(
+                    normalizedStatus
+            );
         }
 
         return requests.stream().map(this::toResponse).toList();
@@ -89,48 +91,77 @@ public class AdminProviderChangeRequestController {
         BusinessChangeRequest request = getRequestForUpdate(id);
         ensurePending(request);
 
-        Partner partner = partnerRepository.findByIdForUpdate(request.getPartner().getId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy hồ sơ doanh nghiệp."
-                ));
+        Partner partner = partnerRepository.findByIdForUpdate(
+                request.getPartner().getId()
+        ).orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                "Không tìm thấy hồ sơ doanh nghiệp."
+        ));
 
         String type = normalize(request.getRequestType());
-        Map<String, String> oldValues = parseSnapshot(request.getOldSnapshot());
-        Map<String, String> newValues = parseSnapshot(request.getProposedSnapshot());
+
+        if (Set.of("LOCATION_UPDATE", "PROFILE_UPDATE").contains(type)
+                && request.getBaseVersion() != null
+                && !Objects.equals(
+                request.getBaseVersion(),
+                partner.getVersion() == null ? 1 : partner.getVersion()
+        )) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Hồ sơ Provider đã thay đổi sau khi gửi yêu cầu. Yêu cầu này đã cũ, vui lòng yêu cầu Provider gửi lại."
+            );
+        }
+
+        Map<String, String> oldValues =
+                parseSnapshot(request.getOldSnapshot());
+
+        Map<String, String> newValues =
+                parseSnapshot(request.getProposedSnapshot());
 
         switch (type) {
-            case "LOCATION_UPDATE" -> applyLocationUpdate(partner, oldValues, newValues);
-            case "PROFILE_UPDATE" -> applyProfileUpdate(partner, oldValues, newValues);
-            case "SERVICE_REGISTER" -> applyServiceRegister(request, partner, newValues);
-            case "SERVICE_UPDATE" -> applyServiceUpdate(partner, oldValues, newValues);
-            case "SERVICE_PAUSE" -> applyServiceStatus(partner, newValues, "PAUSED");
-            case "SERVICE_RETIRE" -> applyServiceStatus(partner, newValues, "INACTIVE");
+            case "LOCATION_UPDATE" ->
+                    applyLocationUpdate(partner, oldValues, newValues);
+
+            case "PROFILE_UPDATE" ->
+                    applyProfileUpdate(partner, oldValues, newValues);
+
+            case "SERVICE_REGISTER" ->
+                    applyServiceRegister(request, partner, newValues);
+
+            case "SERVICE_UPDATE" ->
+                    applyServiceUpdate(partner, oldValues, newValues);
+
+            case "SERVICE_PAUSE" ->
+                    applyServiceStatus(partner, newValues, "PAUSED");
+
+            case "SERVICE_RETIRE" ->
+                    applyServiceStatus(partner, newValues, "INACTIVE");
+
             default -> throw new ResponseStatusException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "Loại yêu cầu chưa được hỗ trợ: " + type
             );
         }
 
+        LocalDateTime now = LocalDateTime.now();
+
         request.setStatus("APPROVED");
         request.setRejectReason(null);
         request.setReviewedBy(getActor(authentication));
-        request.setReviewedAt(LocalDateTime.now());
-        request.setUpdatedAt(LocalDateTime.now());
+        request.setReviewedAt(now);
+        request.setUpdatedAt(now);
 
         requestRepository.save(request);
 
-        if (request.getPartner() != null && request.getPartner().getUser() != null) {
-            notificationRepository.save(AdminNotification.builder()
-                    .recipient(request.getPartner().getUser())
-                    .type("CHANGE_REQUEST_APPROVED")
-                    .title("Yêu cầu cập nhật hồ sơ đã được phê duyệt")
-                    .message("Yêu cầu #" + request.getId() + " (" + request.getRequestType() + ") đã được phê duyệt thành công.")
-                    .referenceType("CHANGE_REQUEST")
-                    .referenceId(request.getId())
-                    .createdAt(LocalDateTime.now())
-                    .build());
-        }
+        sendNotification(
+                request,
+                "CHANGE_REQUEST_APPROVED",
+                "Yêu cầu cập nhật hồ sơ đã được phê duyệt",
+                "Yêu cầu #" + request.getId()
+                        + " (" + request.getRequestType()
+                        + ") đã được phê duyệt thành công.",
+                now
+        );
 
         return toResponse(request);
     }
@@ -156,25 +187,26 @@ public class AdminProviderChangeRequestController {
             );
         }
 
+        LocalDateTime now = LocalDateTime.now();
+
         request.setStatus("REJECTED");
         request.setRejectReason(reason);
         request.setReviewedBy(getActor(authentication));
-        request.setReviewedAt(LocalDateTime.now());
-        request.setUpdatedAt(LocalDateTime.now());
+        request.setReviewedAt(now);
+        request.setUpdatedAt(now);
 
         requestRepository.save(request);
 
-        if (request.getPartner() != null && request.getPartner().getUser() != null) {
-            notificationRepository.save(AdminNotification.builder()
-                    .recipient(request.getPartner().getUser())
-                    .type("CHANGE_REQUEST_REJECTED")
-                    .title("Yêu cầu cập nhật hồ sơ bị từ chối")
-                    .message("Yêu cầu #" + request.getId() + " (" + request.getRequestType() + ") đã bị từ chối: " + reason + ". Vui lòng tạo yêu cầu mới kèm thông tin đầy đủ.")
-                    .referenceType("CHANGE_REQUEST")
-                    .referenceId(request.getId())
-                    .createdAt(LocalDateTime.now())
-                    .build());
-        }
+        sendNotification(
+                request,
+                "CHANGE_REQUEST_REJECTED",
+                "Yêu cầu cập nhật hồ sơ bị từ chối",
+                "Yêu cầu #" + request.getId()
+                        + " (" + request.getRequestType()
+                        + ") đã bị từ chối: " + reason
+                        + ". Vui lòng tạo yêu cầu mới kèm thông tin đầy đủ.",
+                now
+        );
 
         return toResponse(request);
     }
@@ -183,7 +215,7 @@ public class AdminProviderChangeRequestController {
     @Transactional
     public Map<String, Object> requestMoreInformation(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> body,
+            @RequestBody(required = false) Map<String, Object> body,
             Authentication authentication) {
 
         BusinessChangeRequest request = getRequestForUpdate(id);
@@ -200,15 +232,67 @@ public class AdminProviderChangeRequestController {
             );
         }
 
-        request.setStatus("REJECTED");
-        request.setRejectReason("Cần bổ sung thông tin: " + note + ". Vui lòng tạo yêu cầu mới kèm đầy đủ thông tin/tài liệu được yêu cầu.");
+        if (note.length() < 5) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Nội dung yêu cầu bổ sung phải có ít nhất 5 ký tự."
+            );
+        }
+
+        if (note.length() > 2000) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Nội dung yêu cầu bổ sung không được vượt quá 2000 ký tự."
+            );
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        request.setStatus("NEEDS_INFORMATION");
+        request.setRejectReason(note);
         request.setReviewedBy(getActor(authentication));
-        request.setReviewedAt(LocalDateTime.now());
-        request.setUpdatedAt(LocalDateTime.now());
+        request.setReviewedAt(now);
+        request.setUpdatedAt(now);
 
         requestRepository.save(request);
 
+        sendNotification(
+                request,
+                "CHANGE_REQUEST_NEEDS_INFORMATION",
+                "Yêu cầu cập nhật hồ sơ cần bổ sung thông tin",
+                "Yêu cầu #" + request.getId()
+                        + " (" + request.getRequestType()
+                        + ") cần bổ sung: " + note
+                        + ". Vui lòng gửi một yêu cầu mới kèm thông tin/tài liệu đầy đủ.",
+                now
+        );
+
         return toResponse(request);
+    }
+
+    private void sendNotification(
+            BusinessChangeRequest request,
+            String type,
+            String title,
+            String message,
+            LocalDateTime now) {
+
+        if (request.getPartner() == null
+                || request.getPartner().getUser() == null) {
+            return;
+        }
+
+        notificationRepository.save(
+                AdminNotification.builder()
+                        .recipient(request.getPartner().getUser())
+                        .type(type)
+                        .title(title)
+                        .message(message)
+                        .referenceType("CHANGE_REQUEST")
+                        .referenceId(request.getId())
+                        .createdAt(now)
+                        .build()
+        );
     }
 
     private BusinessChangeRequest getRequestForUpdate(Long id) {
@@ -278,6 +362,7 @@ public class AdminProviderChangeRequestController {
         partner.setAddress(address.trim());
         partner.setLatitude(lat);
         partner.setLongitude(lon);
+
         updatePartnerVersion(partner);
     }
 
@@ -338,14 +423,18 @@ public class AdminProviderChangeRequestController {
 
         validatePrice(price);
 
-        Optional<PartnerService> existing = findPartnerService(partner.getId(), serviceId);
+        Optional<PartnerService> existing =
+                findPartnerService(partner.getId(), serviceId);
+
         LocalDateTime now = LocalDateTime.now();
 
         if (existing.isPresent()) {
             PartnerService partnerService = existing.get();
+
             partnerService.setPrice(price);
             partnerService.setStatus("ACTIVE");
             partnerService.setUpdatedAt(now);
+
             partnerServiceRepository.save(partnerService);
             return;
         }
@@ -369,14 +458,16 @@ public class AdminProviderChangeRequestController {
 
         Long serviceId = getServiceId(oldValues, newValues);
 
-        PartnerService partnerService = findPartnerService(partner.getId(), serviceId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Provider không có dịch vụ tương ứng với yêu cầu này."
-                ));
+        PartnerService partnerService =
+                findPartnerService(partner.getId(), serviceId)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Provider không có dịch vụ tương ứng với yêu cầu này."
+                        ));
 
         if (oldValues.containsKey("price")) {
-            BigDecimal oldPrice = parseDecimal(oldValues.get("price"), "Giá cũ");
+            BigDecimal oldPrice =
+                    parseDecimal(oldValues.get("price"), "Giá cũ");
 
             if (partnerService.getPrice() == null
                     || partnerService.getPrice().compareTo(oldPrice) != 0) {
@@ -388,7 +479,9 @@ public class AdminProviderChangeRequestController {
         }
 
         if (newValues.containsKey("price")) {
-            BigDecimal newPrice = parseDecimal(newValues.get("price"), "Giá đề xuất");
+            BigDecimal newPrice =
+                    parseDecimal(newValues.get("price"), "Giá đề xuất");
+
             validatePrice(newPrice);
             partnerService.setPrice(newPrice);
         }
@@ -417,11 +510,12 @@ public class AdminProviderChangeRequestController {
 
         Long serviceId = getServiceId(values, values);
 
-        PartnerService partnerService = findPartnerService(partner.getId(), serviceId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy dịch vụ Provider cần cập nhật."
-                ));
+        PartnerService partnerService =
+                findPartnerService(partner.getId(), serviceId)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Không tìm thấy dịch vụ Provider cần cập nhật."
+                        ));
 
         partnerService.setStatus(targetStatus);
         partnerService.setUpdatedAt(LocalDateTime.now());
@@ -429,7 +523,10 @@ public class AdminProviderChangeRequestController {
         partnerServiceRepository.save(partnerService);
     }
 
-    private Optional<PartnerService> findPartnerService(Long partnerId, Long serviceId) {
+    private Optional<PartnerService> findPartnerService(
+            Long partnerId,
+            Long serviceId) {
+
         return partnerServiceRepository.findByPartner_Id(partnerId)
                 .stream()
                 .filter(item -> item.getService() != null
@@ -446,7 +543,10 @@ public class AdminProviderChangeRequestController {
         }
 
         if (request.getTargetId() != null
-                && !Objects.equals(request.getTargetId(), request.getPartner().getId())) {
+                && !Objects.equals(
+                request.getTargetId(),
+                request.getPartner().getId()
+        )) {
             return request.getTargetId();
         }
 
@@ -486,7 +586,9 @@ public class AdminProviderChangeRequestController {
         }
 
         String expected = oldValues.get(key);
-        String current = currentValue == null ? "" : String.valueOf(currentValue);
+        String current = currentValue == null
+                ? ""
+                : String.valueOf(currentValue);
 
         if ("latitude".equals(key) || "longitude".equals(key)) {
             if (expected.isBlank() && current.isBlank()) {
@@ -494,7 +596,8 @@ public class AdminProviderChangeRequestController {
             }
 
             try {
-                if (new BigDecimal(expected).compareTo(new BigDecimal(current)) == 0) {
+                if (new BigDecimal(expected)
+                        .compareTo(new BigDecimal(current)) == 0) {
                     return;
                 }
             } catch (Exception ignored) {
@@ -511,13 +614,19 @@ public class AdminProviderChangeRequestController {
 
     private void updatePartnerVersion(Partner partner) {
         partner.setVersion(
-                partner.getVersion() == null ? 2 : partner.getVersion() + 1
+                partner.getVersion() == null
+                        ? 2
+                        : partner.getVersion() + 1
         );
+
         partner.setUpdatedAt(LocalDateTime.now());
         partnerRepository.save(partner);
     }
 
-    private BigDecimal parseDecimal(String value, String fieldName) {
+    private BigDecimal parseDecimal(
+            String value,
+            String fieldName) {
+
         if (value == null || value.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -535,7 +644,10 @@ public class AdminProviderChangeRequestController {
         }
     }
 
-    private Long parseLong(String value, String fieldName) {
+    private Long parseLong(
+            String value,
+            String fieldName) {
+
         try {
             return Long.parseLong(value.trim());
         } catch (Exception e) {
@@ -547,7 +659,8 @@ public class AdminProviderChangeRequestController {
     }
 
     private void validatePrice(BigDecimal price) {
-        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+        if (price == null
+                || price.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "Giá dịch vụ phải lớn hơn 0."
@@ -609,14 +722,20 @@ public class AdminProviderChangeRequestController {
     }
 
     private String normalize(String value) {
-        return value == null ? "" : value.trim().toUpperCase();
+        return value == null
+                ? ""
+                : value.trim().toUpperCase();
     }
 
     private String getActor(Authentication authentication) {
-        return authentication == null ? "admin" : authentication.getName();
+        return authentication == null
+                ? "admin"
+                : authentication.getName();
     }
 
-    private Map<String, Object> toResponse(BusinessChangeRequest request) {
+    private Map<String, Object> toResponse(
+            BusinessChangeRequest request) {
+
         Map<String, Object> result = new LinkedHashMap<>();
 
         result.put("id", request.getId());
@@ -625,6 +744,7 @@ public class AdminProviderChangeRequestController {
         result.put("requestType", request.getRequestType());
         result.put("status", request.getStatus());
         result.put("targetId", request.getTargetId());
+        result.put("baseVersion", request.getBaseVersion());
         result.put("targetName", request.getTargetName());
         result.put("oldSnapshot", request.getOldSnapshot());
         result.put("proposedSnapshot", request.getProposedSnapshot());

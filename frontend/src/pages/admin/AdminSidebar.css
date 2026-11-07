@@ -1,0 +1,260 @@
+.admin-layout .admin-sidebar {
+    width: 240px;
+    min-width: 240px;
+    max-width: 240px;
+    height: 100vh;
+    min-height: 100vh;
+    flex: 0 0 240px;
+    align-self: flex-start;
+    position: sticky;
+    top: 0;
+    padding: 24px 14px 16px;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: #fff;
+    border-right: 1px solid var(--admin-border, #e8edf5);
+    scrollbar-width: thin;
+    scrollbar-color: #d7dfeb transparent;
+}
+
+.admin-layout .admin-sidebar::-webkit-scrollbar {
+    width: 5px;
+}
+
+.admin-layout .admin-sidebar::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    background: #d7dfeb;
+}
+
+.admin-layout .admin-brand {
+    min-height: 58px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 0 8px 22px;
+}
+
+.admin-layout .admin-brand-icon {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    flex: 0 0 42px;
+    display: grid;
+    place-items: center;
+}
+
+.admin-layout .admin-brand > div:last-child {
+    min-width: 0;
+}
+
+.admin-layout .admin-menu-title {
+    flex: 0 0 auto;
+    padding: 0 12px;
+    margin: 0 0 12px;
+    line-height: 18px;
+    white-space: nowrap;
+}
+
+.admin-layout .admin-menu {
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+    overflow: visible;
+}
+
+.admin-layout .admin-menu-item {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    flex: 0 0 44px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 0 12px;
+    margin: 0;
+    border: 0;
+    border-radius: 9px;
+    box-sizing: border-box;
+    color: #63738a;
+    background: transparent;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    text-align: left;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.admin-layout .admin-menu-item > svg {
+    width: 18px;
+    min-width: 18px;
+    max-width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    margin: 0;
+    font-size: 16px;
+    text-align: center;
+}
+
+.admin-layout .admin-menu-item > span {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.admin-layout .admin-menu-item:hover,
+.admin-layout .admin-menu-item:not(.active):hover {
+    color: #2563eb;
+    background: #eef4ff;
+}
+
+.admin-layout .admin-menu-item.active,
+.admin-layout .admin-menu-item.active:hover {
+    color: #fff;
+    background: #2563eb;
+    font-weight: 700;
+}
+
+.admin-layout .admin-sidebar-bottom {
+    width: 100%;
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--admin-border, #e8edf5);
+}
+
+.admin-layout .admin-user {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 5px 15px;
+}
+
+.admin-layout .admin-avatar {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    flex: 0 0 38px;
+    display: grid;
+    place-items: center;
+}
+
+.admin-layout .admin-user-info {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.admin-layout .admin-user-info strong,
+.admin-layout .admin-user-info span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-layout .admin-menu-item.logout {
+    color: #dc5151;
+}
+
+.admin-layout .admin-menu-item.logout:hover {
+    color: #b91c1c;
+    background: #fff1f1;
+}
+
+@media (max-height: 760px) and (min-width: 761px) {
+    .admin-layout .admin-sidebar {
+        position: sticky;
+        height: 100vh;
+        min-height: 0;
+    }
+
+    .admin-layout .admin-sidebar-bottom {
+        margin-top: 24px;
+    }
+}
+
+@media (max-width: 760px) {
+    .admin-layout .admin-sidebar {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        flex: none;
+        position: relative;
+        top: auto;
+        padding: 14px 12px 10px;
+        overflow: visible;
+        border-right: 0;
+        border-bottom: 1px solid var(--admin-border, #e8edf5);
+    }
+
+    .admin-layout .admin-brand {
+        min-height: 48px;
+        padding: 0 5px 12px;
+    }
+
+    .admin-layout .admin-menu-title,
+    .admin-layout .admin-sidebar-bottom {
+        display: none;
+    }
+
+    .admin-layout .admin-menu {
+        width: 100%;
+        flex-direction: row;
+        align-items: center;
+        gap: 7px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 2px 1px 7px;
+        scrollbar-width: thin;
+    }
+
+    .admin-layout .admin-menu-item {
+        width: auto;
+        min-width: max-content;
+        height: 40px;
+        min-height: 40px;
+        max-height: 40px;
+        flex: 0 0 auto;
+        gap: 8px;
+        padding: 0 12px;
+        font-size: 12px;
+    }
+
+    .admin-layout .admin-menu-item > svg {
+        width: 16px;
+        min-width: 16px;
+        max-width: 16px;
+        height: 16px;
+        flex-basis: 16px;
+        font-size: 14px;
+    }
+
+    .admin-layout .admin-menu-item > span {
+        flex: 0 0 auto;
+        overflow: visible;
+        text-overflow: clip;
+    }
+}

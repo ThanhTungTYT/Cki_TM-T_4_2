@@ -4,10 +4,13 @@ import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.entity.PartnerService;
 import org.ckitmdt.backend.entity.PartnerStatusHistory;
+import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.PartnerRepository;
 import org.ckitmdt.backend.repository.PartnerServiceRepository;
 import org.ckitmdt.backend.repository.PartnerStatusHistoryRepository;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
+import org.ckitmdt.backend.service.admin.AdminAuditLogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +33,8 @@ public class AdminProviderController {
     private final PartnerRepository partnerRepository;
     private final PartnerServiceRepository partnerServiceRepository;
     private final PartnerStatusHistoryRepository historyRepository;
+    private final AdminNotificationRepository notificationRepository;
+    private final AdminAuditLogService auditLogService;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
@@ -76,6 +81,7 @@ public class AdminProviderController {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getProviderHistory(@PathVariable Long id) {
         findPartner(id);
+
         return historyRepository.findByPartnerIdOrderByChangedAtDesc(id).stream().map(item -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", item.getId());
@@ -111,13 +117,34 @@ public class AdminProviderController {
         validateApprovedCoordinates(partner);
 
         String oldStatus = normalizePartnerStatus(partner);
+
         partner.setStatus("ACTIVE");
         partner.setVersion(partner.getVersion() == null ? 1 : partner.getVersion() + 1);
+
         partnerRepository.save(partner);
+
         saveHistory(partner, oldStatus, "ACTIVE", reason, "APPROVE", authentication);
+
+        auditLogService.record(
+                authentication,
+                "PROVIDER_APPROVED",
+                "PARTNER",
+                partner.getId(),
+                reason,
+                "status=" + oldStatus,
+                "status=ACTIVE;version=" + partner.getVersion()
+        );
+
+        sendProviderNotification(
+                partner,
+                "PROVIDER_APPROVED",
+                "Hồ sơ doanh nghiệp đã được duyệt",
+                "Hồ sơ doanh nghiệp của bạn đã được Admin phê duyệt. Bạn có thể tiếp tục thiết lập dịch vụ theo quy trình."
+        );
 
         Map<String, Object> result = toResponse(partner);
         result.put("message", "Duyệt nhà cung cấp thành công.");
+
         return result;
     }
 
@@ -129,7 +156,9 @@ public class AdminProviderController {
             Authentication authentication) {
 
         Partner partner = findPartnerForUpdate(id);
+
         requireLinkedUser(partner);
+
         String reason = requireReason(request == null ? null : request.get("reason"), "lý do từ chối");
         String oldStatus = normalizePartnerStatus(partner);
 
@@ -139,11 +168,31 @@ public class AdminProviderController {
 
         partner.setStatus("REJECTED");
         partner.setVersion(partner.getVersion() == null ? 1 : partner.getVersion() + 1);
+
         partnerRepository.save(partner);
+
         saveHistory(partner, oldStatus, "REJECTED", reason, "REJECT", authentication);
+
+        auditLogService.record(
+                authentication,
+                "PROVIDER_REJECTED",
+                "PARTNER",
+                partner.getId(),
+                reason,
+                "status=" + oldStatus,
+                "status=REJECTED;version=" + partner.getVersion()
+        );
+
+        sendProviderNotification(
+                partner,
+                "PROVIDER_REJECTED",
+                "Hồ sơ doanh nghiệp chưa được duyệt",
+                "Hồ sơ doanh nghiệp của bạn đã bị từ chối. Lý do: " + reason
+        );
 
         Map<String, Object> result = toResponse(partner);
         result.put("message", "Đã từ chối hồ sơ nhà cung cấp.");
+
         return result;
     }
 
@@ -156,6 +205,7 @@ public class AdminProviderController {
 
         Partner partner = findPartnerForUpdate(id);
         User user = requireLinkedUser(partner);
+
         String requestedStatus = normalize(request == null ? null : request.get("status"));
         String reason = requireReason(request == null ? null : request.get("reason"), "lý do thay đổi trạng thái");
 
@@ -179,12 +229,55 @@ public class AdminProviderController {
 
         partner.setStatus(requestedStatus);
         partner.setVersion(partner.getVersion() == null ? 1 : partner.getVersion() + 1);
+
         partnerRepository.save(partner);
+
         saveHistory(partner, oldStatus, requestedStatus, reason, "STATUS_CHANGE", authentication);
+
+        auditLogService.record(
+                authentication,
+                "PROVIDER_STATUS_CHANGED",
+                "PARTNER",
+                partner.getId(),
+                reason,
+                "status=" + oldStatus,
+                "status=" + requestedStatus + ";version=" + partner.getVersion()
+        );
+
+        sendProviderNotification(
+                partner,
+                "LOCKED".equals(requestedStatus) ? "PROVIDER_SUSPENDED" : "PROVIDER_REACTIVATED",
+                "LOCKED".equals(requestedStatus) ? "Doanh nghiệp tạm ngừng hoạt động" : "Doanh nghiệp được kích hoạt lại",
+                "LOCKED".equals(requestedStatus)
+                        ? "Tài khoản doanh nghiệp đã bị đình chỉ nhận đơn mới. Lý do: " + reason
+                        : "Tài khoản doanh nghiệp đã được kích hoạt lại."
+        );
 
         Map<String, Object> result = toResponse(partner);
         result.put("message", "LOCKED".equals(requestedStatus) ? "Đã đình chỉ nhà cung cấp." : "Đã kích hoạt lại nhà cung cấp.");
+
         return result;
+    }
+
+    private void sendProviderNotification(Partner partner, String type, String title, String message) {
+        if (partner.getUser() == null) {
+            return;
+        }
+
+        String safeMessage = message == null ? "" : message;
+
+        if (safeMessage.length() > 1000) {
+            safeMessage = safeMessage.substring(0, 997) + "...";
+        }
+
+        notificationRepository.save(AdminNotification.builder()
+                .recipient(partner.getUser())
+                .type(type)
+                .title(title)
+                .message(safeMessage)
+                .referenceType("PARTNER")
+                .referenceId(partner.getId())
+                .build());
     }
 
     private Partner findPartner(Long id) {
@@ -201,6 +294,7 @@ public class AdminProviderController {
         if (partner.getUser() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Nhà cung cấp chưa được liên kết với tài khoản người dùng.");
         }
+
         return partner.getUser();
     }
 
@@ -212,7 +306,8 @@ public class AdminProviderController {
         double latitude = partner.getLatitude().doubleValue();
         double longitude = partner.getLongitude().doubleValue();
 
-        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180
+        if (latitude < -90 || latitude > 90
+                || longitude < -180 || longitude > 180
                 || latitude == 0.0 && longitude == 0.0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tọa độ không hợp lệ hoặc đang là vị trí mặc định (0,0).");
         }
@@ -257,10 +352,12 @@ public class AdminProviderController {
     private Map<String, Object> toResponse(Partner partner) {
         User user = partner.getUser();
         List<PartnerService> services = partnerServiceRepository.findByPartner_Id(partner.getId());
+
         String partnerStatus = normalizePartnerStatus(partner);
         String accountStatus = user == null ? "UNKNOWN" : normalize(user.getStatus());
 
         Map<String, Object> result = new LinkedHashMap<>();
+
         result.put("id", partner.getId());
         result.put("userId", user == null ? null : user.getId());
         result.put("name", partner.getBusinessName() == null ? "" : partner.getBusinessName());

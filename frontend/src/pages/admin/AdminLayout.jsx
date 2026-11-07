@@ -17,7 +17,9 @@ import {
     faBoxOpen
 } from "@fortawesome/free-solid-svg-icons";
 import AdminNotificationRealtime from "../../components/AdminNotificationRealtime";
+import AdminOverviewCards from "./AdminOverviewCards";
 import "./AdminDashboard.css";
+import "./AdminSidebar.css";
 
 const menuItems = [
     { label: "Tổng quan", path: "/admin", icon: faHouse },
@@ -39,11 +41,13 @@ function AdminLayout({ children }) {
     const location = useLocation();
     const navigate = useNavigate();
 
-    let currentUser = {};
-
-    try {
-        currentUser = JSON.parse(sessionStorage.getItem("user") || localStorage.getItem("user") || "{}");
-    } catch {}
+    const currentUser = (() => {
+        try {
+            return JSON.parse(sessionStorage.getItem("user") || localStorage.getItem("user") || "{}");
+        } catch {
+            return {};
+        }
+    })();
 
     const currentRole = String(currentUser.role || "").replace(/^ROLE_/i, "").toUpperCase();
     const isStaff = currentRole === "STAFF";
@@ -68,7 +72,9 @@ function AdminLayout({ children }) {
             {(isAdmin || isStaff) && <AdminNotificationRealtime />}
             <aside className="admin-sidebar">
                 <Link to="/admin" className="admin-brand" style={{ textDecoration: "none", color: "inherit" }}>
-                    <div className="admin-brand-icon"><FontAwesomeIcon icon={faHouse} /></div>
+                    <div className="admin-brand-icon">
+                        <FontAwesomeIcon icon={faHouse} />
+                    </div>
                     <div>
                         <strong>CleanMate</strong>
                         <span>ADMIN PANEL</span>
@@ -80,6 +86,7 @@ function AdminLayout({ children }) {
                         const isActive = item.path === "/admin"
                             ? location.pathname === "/admin"
                             : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+
                         return (
                             <Link key={item.path} to={item.path} className={`admin-menu-item ${isActive ? "active" : ""}`}>
                                 <FontAwesomeIcon icon={item.icon} />
@@ -96,13 +103,28 @@ function AdminLayout({ children }) {
                             <span>{isStaff ? "Staff" : "Administrator"}</span>
                         </div>
                     </div>
-                    <button type="button" className="admin-menu-item logout" onClick={handleLogout} style={{ border: 0, background: "transparent", width: "100%", cursor: "pointer", textAlign: "left", font: "inherit" }}>
+                    <button
+                        type="button"
+                        className="admin-menu-item logout"
+                        onClick={handleLogout}
+                        style={{
+                            border: 0,
+                            background: "transparent",
+                            width: "100%",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            font: "inherit"
+                        }}
+                    >
                         <FontAwesomeIcon icon={faArrowRightFromBracket} />
                         <span>Đăng xuất</span>
                     </button>
                 </div>
             </aside>
-            <main className="admin-main">{children}</main>
+            <main className="admin-main">
+                {isAdmin && location.pathname === "/admin" && <AdminOverviewCards />}
+                {children}
+            </main>
         </div>
     );
 }

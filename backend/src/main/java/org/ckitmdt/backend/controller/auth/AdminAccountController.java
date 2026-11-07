@@ -5,6 +5,7 @@ import org.ckitmdt.backend.entity.AccountStatusHistory;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.AccountStatusHistoryRepository;
 import org.ckitmdt.backend.repository.UserRepository;
+import org.ckitmdt.backend.service.admin.AdminAuditLogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -29,12 +30,15 @@ public class AdminAccountController {
     private final UserRepository userRepository;
     private final AccountStatusHistoryRepository historyRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AdminAuditLogService auditLogService;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
     private static final List<String> ALLOWED_ROLES = List.of("CUSTOMER", "PROVIDER", "CLEANER", "STAFF", "ADMIN");
+    private static final List<String> CREATABLE_ROLES = List.of("CUSTOMER", "PROVIDER", "CLEANER", "STAFF");
 
     @GetMapping
+    @Transactional(readOnly = true)
     public ResponseEntity<List<Map<String, Object>>> getAccounts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String role,
@@ -67,7 +71,13 @@ public class AdminAccountController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> createAccount(@RequestBody Map<String, String> request) {
+    @Transactional
+    public ResponseEntity<Map<String, Object>> createAccount(
+            @RequestBody Map<String, String> request,
+            Authentication authentication
+    ) {
+        requireActor(authentication);
+
         String name = trim(request.get("name"));
         String email = trim(request.get("email"));
         String phone = trim(request.get("phone"));
@@ -91,6 +101,10 @@ public class AdminAccountController {
 
         validateRole(role);
 
+        if (!CREATABLE_ROLES.contains(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không được tạo tài khoản ADMIN từ chức năng quản lý tài khoản thông thường.");
+        }
+
         if (status.isEmpty()) {
             status = "ACTIVE";
         }
@@ -110,6 +124,16 @@ public class AdminAccountController {
 
         User savedUser = userRepository.save(user);
 
+        auditLogService.record(
+                authentication,
+                "ACCOUNT_CREATED",
+                "USER",
+                savedUser.getId(),
+                "Tạo tài khoản " + role + ".",
+                null,
+                accountAuditValue(savedUser)
+        );
+
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("message", "Tạo tài khoản thành công.");
         response.put("account", toAccountResponse(savedUser));
@@ -118,11 +142,16 @@ public class AdminAccountController {
     }
 
     @PutMapping("/{id}")
+    @Transactional
     public ResponseEntity<Map<String, Object>> updateAccount(
             @PathVariable Long id,
-            @RequestBody Map<String, String> request
+            @RequestBody Map<String, String> request,
+            Authentication authentication
     ) {
+        requireActor(authentication);
+
         User user = findUser(id);
+        String beforeValue = accountAuditValue(user);
 
         String name = trim(request.get("name"));
         String email = trim(request.get("email"));
@@ -140,11 +169,15 @@ public class AdminAccountController {
 
         String role = normalize(request.get("role"));
 
-        if (!role.isEmpty()) {
+        if (!role.isEmpty() && !role.equals(normalize(user.getRole()))) {
             validateRole(role);
 
-            if ("ADMIN".equals(normalize(user.getRole())) && !"ADMIN".equals(role)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể đổi vai trò của tài khoản Admin tại đây.");
+            if ("ADMIN".equals(role)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể nâng tài khoản thành ADMIN từ chức năng quản lý tài khoản thông thường.");
+            }
+
+            if ("ADMIN".equals(normalize(user.getRole()))) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể thay đổi vai trò tài khoản Admin tại đây.");
             }
 
             user.setRole(role);
@@ -169,6 +202,19 @@ public class AdminAccountController {
         user.setPhone(phone.isEmpty() ? null : phone);
 
         User savedUser = userRepository.save(user);
+        String afterValue = accountAuditValue(savedUser);
+
+        if (!beforeValue.equals(afterValue) || (password != null && !password.isBlank())) {
+            auditLogService.record(
+                    authentication,
+                    "ACCOUNT_UPDATED",
+                    "USER",
+                    savedUser.getId(),
+                    "Cập nhật thông tin tài khoản.",
+                    beforeValue,
+                    afterValue + (password != null && !password.isBlank() ? ";passwordChanged=true" : "")
+            );
+        }
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("message", "Cập nhật tài khoản thành công.");
@@ -184,6 +230,8 @@ public class AdminAccountController {
             @RequestBody Map<String, String> request,
             Authentication authentication
     ) {
+        requireActor(authentication);
+
         User user = findUser(id);
 
         String requestedStatus = normalize(request.get("status"));
@@ -202,17 +250,13 @@ public class AdminAccountController {
         }
 
         if ("ADMIN".equals(normalize(user.getRole()))) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể thay đổi trạng thái tài khoản Admin.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể thay đổi trạng thái tài khoản Admin.");
         }
 
         String oldStatus = normalize(user.getStatus());
 
         if (oldStatus.equals(requestedStatus)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Tài khoản đã ở trạng thái được chọn.");
-        }
-
-        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Không xác định được người thực hiện.");
         }
 
         user.setStatus(requestedStatus);
@@ -225,6 +269,16 @@ public class AdminAccountController {
                 .reason(reason)
                 .changedByEmail(authentication.getName())
                 .build());
+
+        auditLogService.record(
+                authentication,
+                "ACCOUNT_STATUS_CHANGED",
+                "USER",
+                savedUser.getId(),
+                reason,
+                "status=" + oldStatus,
+                "status=" + requestedStatus
+        );
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("message", "Cập nhật trạng thái tài khoản thành công.");
@@ -265,6 +319,24 @@ public class AdminAccountController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy tài khoản."));
     }
 
+    private void requireActor(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Không xác định được người thực hiện.");
+        }
+    }
+
+    private String accountAuditValue(User user) {
+        return "name=" + safe(user.getFullName())
+                + ";email=" + safe(user.getEmail())
+                + ";phone=" + safe(user.getPhone())
+                + ";role=" + normalize(user.getRole())
+                + ";status=" + normalize(user.getStatus());
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.replace(";", ",");
+    }
+
     private void validateEmail(String email) {
         if (email.isEmpty() || !email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email không hợp lệ.");
@@ -298,7 +370,6 @@ public class AdminAccountController {
         response.put("role", normalizeRole(user.getRole()));
         response.put("status", normalizeStatus(user.getStatus()));
         response.put("joinedAt", user.getCreatedAt() == null ? "" : user.getCreatedAt().format(DATE_FORMAT));
-
         return response;
     }
 
