@@ -71,7 +71,6 @@ async function handleResponse(res, defaultMessage = 'Có lỗi xảy ra.') {
 // =========================
 // CART API
 // =========================
-
 export const cartApi = {
     async getCart() {
         const res = await fetch(`${BASE_URL}/cart`, {
@@ -124,10 +123,10 @@ export const cartApi = {
         return handleResponse(res, 'Không thể xóa giỏ hàng.');
     }
 };
+
 // =========================
 // BOOKING API
 // =========================
-
 export const bookingApi = {
     async getAvailability(payload, signal) {
         const res = await fetch(`${BASE_URL}/bookings/availability`, {
@@ -181,6 +180,7 @@ export const bookingApi = {
 
         return handleResponse(res, 'Không thể tải danh sách đơn hàng.');
     },
+
     async getCleanerBookings() {
         const res = await fetch(`${BASE_URL}/bookings/cleaner/me`, {
             method: 'GET',
@@ -205,7 +205,6 @@ export const bookingApi = {
         );
     },
 
-
     async getBooking(id) {
         const res = await fetch(`${BASE_URL}/bookings/${id}`, {
             method: 'GET',
@@ -217,7 +216,8 @@ export const bookingApi = {
 
     async reschedulePendingBooking(id, scheduledStart) {
         const res = await fetch(`${BASE_URL}/bookings/${id}/schedule`, {
-            method: 'PUT', headers: getAuthHeaders(),
+            method: 'PUT',
+            headers: getAuthHeaders(),
             body: JSON.stringify({ scheduledStart })
         });
         return handleResponse(res, 'Unable to reschedule booking.');
@@ -251,6 +251,27 @@ export const bookingApi = {
 };
 
 // =========================
+// CLEANER NOTIFICATION API
+// =========================
+export const cleanerNotificationApi = {
+    async getAll() {
+        const res = await fetch(`${BASE_URL}/cleaner/notifications`, {
+            method: 'GET',
+            headers: getAuthHeaders()
+        });
+        return handleResponse(res, 'Không thể tải thông báo của nhân viên.');
+    },
+
+    async markRead(id) {
+        const res = await fetch(`${BASE_URL}/cleaner/notifications/${encodeURIComponent(id)}/read`, {
+            method: 'PATCH',
+            headers: getAuthHeaders()
+        });
+        return handleResponse(res, 'Không thể đánh dấu thông báo đã đọc.');
+    }
+};
+
+// =========================
 // REFUND API - CN18
 // =========================
 export const refundApi = {
@@ -271,7 +292,8 @@ export const refundApi = {
     // Admin/Staff lấy danh sách yêu cầu hoàn tiền
     async getMyRefunds() {
         const res = await fetch(`${BASE_URL}/refunds/mine`, {
-            method: 'GET', headers: getAuthHeaders()
+            method: 'GET',
+            headers: getAuthHeaders()
         });
         const data = await handleResponse(res, 'Unable to load refund requests.');
         return Array.isArray(data) ? data : [];
@@ -294,7 +316,9 @@ export const refundApi = {
     // Admin/Staff duyệt hoặc từ chối yêu cầu hoàn tiền
     async recordTransfer(id, payload) {
         const res = await fetch(`${BASE_URL}/refunds/${id}/transfer`, {
-            method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(payload)
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
         });
         return handleResponse(res, 'Unable to record refund transfer.');
     },
