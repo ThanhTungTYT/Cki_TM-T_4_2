@@ -29,6 +29,7 @@ public class AdminDashboardOverviewController {
     @Transactional(readOnly = true)
     public Map<String, Object> getOverview() {
         Map<String, Object> result = new LinkedHashMap<>();
+
         result.put("totalUsers", userRepository.count());
         result.put("totalCustomers", userRepository.countByRoleIgnoreCase("CUSTOMER"));
         result.put("totalCleaners", userRepository.countByRoleIgnoreCase("CLEANER"));
@@ -41,7 +42,9 @@ public class AdminDashboardOverviewController {
 
         for (Partner partner : partnerRepository.findAll()) {
             String partnerStatus = normalize(partner.getStatus());
-            String accountStatus = partner.getUser() == null ? "UNKNOWN" : normalize(partner.getUser().getStatus());
+            String accountStatus = partner.getUser() == null
+                    ? "UNKNOWN"
+                    : normalize(partner.getUser().getStatus());
 
             if ("PENDING".equals(partnerStatus)) {
                 pendingProviders++;
@@ -80,10 +83,12 @@ public class AdminDashboardOverviewController {
                 + reportTicketRepository.countByStatusIgnoreCase("WAITING_PROVIDER");
 
         long processingComplaints = reportTicketRepository.countByStatusIgnoreCase("IN_PROGRESS")
-                + reportTicketRepository.countByStatusIgnoreCase("PROVIDER_RESPONDED");
+                + reportTicketRepository.countByStatusIgnoreCase("PROVIDER_RESPONDED")
+                + reportTicketRepository.countByStatusIgnoreCase("UNDER_REVIEW");
 
         long resolvedComplaints = reportTicketRepository.countByStatusIgnoreCase("RESOLVED")
-                + reportTicketRepository.countByStatusIgnoreCase("REJECTED");
+                + reportTicketRepository.countByStatusIgnoreCase("REJECTED")
+                + reportTicketRepository.countByStatusIgnoreCase("CLOSED");
 
         result.put("openComplaints", openComplaints);
         result.put("processingComplaints", processingComplaints);

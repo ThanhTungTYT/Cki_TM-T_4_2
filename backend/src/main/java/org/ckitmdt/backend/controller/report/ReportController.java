@@ -9,6 +9,8 @@ import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.ComplaintResponseRepository;
 import org.ckitmdt.backend.repository.ReportTicketRepository;
 import org.ckitmdt.backend.repository.UserRepository;
+import org.ckitmdt.backend.repository.AdminStaffAssignmentRepository;
+import org.ckitmdt.backend.service.admin.AdminAuditLogService;
 import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.repository.AdminNotificationRepository;
@@ -32,6 +34,8 @@ public class ReportController {
     private final BookingRepository bookingRepository;
     private final CustomerNotificationService customerNotificationService;
     private final AdminNotificationRepository notificationRepository;
+    private final AdminStaffAssignmentRepository assignmentRepository;
+    private final AdminAuditLogService auditLogService;
 
     @PostMapping
     @Transactional
@@ -113,10 +117,22 @@ public class ReportController {
     @GetMapping("/admin")
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getAllReports(Authentication auth) {
-        requireStaff(auth);
+        User operator = requireStaff(auth);
+        List<ReportTicket> tickets = reportRepository.findTop200ByOrderByCreatedAtDesc();
 
-        return reportRepository.findTop200ByOrderByCreatedAtDesc()
-                .stream()
+        if (!isAdmin(operator)) {
+            Set<Long> assignedTicketIds = assignmentRepository
+                    .findByStaff_IdAndActiveTrueOrderByAssignedAtDesc(operator.getId())
+                    .stream()
+                    .map(assignment -> assignment.getTicket().getId())
+                    .collect(java.util.stream.Collectors.toSet());
+
+            tickets = tickets.stream()
+                    .filter(ticket -> assignedTicketIds.contains(ticket.getId()))
+                    .toList();
+        }
+
+        return tickets.stream()
                 .map(this::row)
                 .toList();
     }
@@ -147,6 +163,7 @@ public class ReportController {
             Authentication auth) {
 
         User user = currentUser(auth);
+
         ReportTicket report = reportRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -215,9 +232,14 @@ public class ReportController {
         reportRepository.save(report);
 
         if ("CUSTOMER".equals(upper(report.getReporter().getRole()))) {
-            customerNotificationService.notifyCustomer(report.getReporter(), "COMPLAINT_RESPONSE",
-                    "Khiếu nại có phản hồi mới", "Khiếu nại '" + report.getSubject() + "' đã có phản hồi mới.",
-                    "COMPLAINT", report.getId());
+            customerNotificationService.notifyCustomer(
+                    report.getReporter(),
+                    "COMPLAINT_RESPONSE",
+                    "Khiếu nại có phản hồi mới",
+                    "Khiếu nại '" + report.getSubject() + "' đã có phản hồi mới.",
+                    "COMPLAINT",
+                    report.getId()
+            );
         }
 
         return responseRow(saved);
@@ -238,6 +260,7 @@ public class ReportController {
                         "Không tìm thấy khiếu nại."
                 ));
 
+        requireReportAccess(operator, report);
         ensureNotTerminal(report);
 
         String status = upper(text(body.get("status")));
@@ -266,6 +289,7 @@ public class ReportController {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        String oldStatus = upper(report.getStatus());
         String oldResolution = text(report.getResolution());
 
         if (!resolution.isBlank() && !resolution.equals(oldResolution)) {
@@ -293,22 +317,53 @@ public class ReportController {
         report.setUpdatedAt(now);
 
         ReportTicket saved = reportRepository.save(report);
+
+        auditLogService.record(
+                auth,
+                "COMPLAINT_STATUS_CHANGED",
+                "REPORT_TICKET",
+                saved.getId(),
+                resolution.isBlank() ? "Cập nhật trạng thái khiếu nại." : resolution,
+                "status=" + oldStatus,
+                "status=" + status
+        );
+
         if ("CUSTOMER".equals(upper(saved.getReporter().getRole()))) {
-            customerNotificationService.notifyCustomer(saved.getReporter(), "COMPLAINT_" + status,
-                    "Cập nhật khiếu nại", "Khiếu nại '" + saved.getSubject() + "' đã chuyển sang trạng thái " + status + ".",
-                    "COMPLAINT", saved.getId());
+            customerNotificationService.notifyCustomer(
+                    saved.getReporter(),
+                    "COMPLAINT_" + status,
+                    "Cập nhật khiếu nại",
+                    "Khiếu nại '" + saved.getSubject() + "' đã chuyển sang trạng thái " + status + ".",
+                    "COMPLAINT",
+                    saved.getId()
+            );
         }
-        if (saved.getBooking() != null && saved.getBooking().getPartner() != null && saved.getBooking().getPartner().getUser() != null) {
+
+        if (saved.getBooking() != null
+                && saved.getBooking().getPartner() != null
+                && saved.getBooking().getPartner().getUser() != null) {
+
+            String providerMessage = "Khiếu nại liên quan đến đơn hàng #"
+                    + saved.getBooking().getBookingCode()
+                    + " đã được cập nhật trạng thái "
+                    + status
+                    + (resolution.isBlank() ? "." : ": " + resolution);
+
+            if (providerMessage.length() > 1000) {
+                providerMessage = providerMessage.substring(0, 997) + "...";
+            }
+
             notificationRepository.save(AdminNotification.builder()
                     .recipient(saved.getBooking().getPartner().getUser())
                     .type("COMPLAINT_" + status)
                     .title("Khiếu nại #" + saved.getId() + " đã được xử lý (" + status + ")")
-                    .message("Khiếu nại liên quan đến đơn hàng #" + saved.getBooking().getBookingCode() + " đã được cập nhật trạng thái " + status + (resolution.isBlank() ? "." : ": " + resolution))
+                    .message(providerMessage)
                     .referenceType("REPORT_TICKET")
                     .referenceId(saved.getId())
                     .createdAt(now)
                     .build());
         }
+
         return row(saved);
     }
 
@@ -395,7 +450,26 @@ public class ReportController {
     }
 
     private void requireReportAccess(User user, ReportTicket report) {
+        if (isAdmin(user)) {
+            return;
+        }
+
         if (isStaff(user)) {
+            boolean assigned = assignmentRepository
+                    .findByTicket_IdAndActiveTrue(report.getId())
+                    .map(assignment -> Objects.equals(
+                            assignment.getStaff().getId(),
+                            user.getId()
+                    ))
+                    .orElse(false);
+
+            if (!assigned) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Khiếu nại này chưa được phân công cho bạn. Vui lòng liên hệ Admin để được phân công."
+                );
+            }
+
             return;
         }
 
@@ -414,6 +488,10 @@ public class ReportController {
         );
     }
 
+    private boolean isAdmin(User user) {
+        return Set.of("ADMIN", "ROLE_ADMIN").contains(upper(user.getRole()));
+    }
+
     private boolean isProviderForReport(User user, ReportTicket report) {
         Booking booking = report.getBooking();
 
@@ -429,6 +507,7 @@ public class ReportController {
     private String providerName(ReportTicket report, String fallback) {
         if (report.getBooking() != null
                 && report.getBooking().getPartner() != null) {
+
             String businessName = text(
                     report.getBooking().getPartner().getBusinessName()
             );

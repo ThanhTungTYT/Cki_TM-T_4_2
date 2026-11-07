@@ -23,14 +23,17 @@ public class BusinessChangeRequest {
     private Partner partner;
 
     @Column(name = "request_type", nullable = false, length = 50)
-    private String requestType; // LOCATION_UPDATE, PROFILE_UPDATE, SERVICE_UPDATE, SERVICE_REGISTER, SERVICE_PAUSE, SERVICE_RETIRE
+    private String requestType;
 
     @Builder.Default
     @Column(nullable = false, length = 30)
-    private String status = "PENDING_REVIEW"; // PENDING_REVIEW, APPROVED, REJECTED, WITHDRAWN, NEEDS_INFORMATION
+    private String status = "PENDING_REVIEW";
 
     @Column(name = "target_id")
     private Long targetId;
+
+    @Column(name = "base_version")
+    private Integer baseVersion;
 
     @Column(name = "target_name")
     private String targetName;

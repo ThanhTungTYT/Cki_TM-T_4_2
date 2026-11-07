@@ -61,40 +61,52 @@ public class ProviderProfileController {
     public Map<String, Object> createChangeRequest(
             @RequestBody Map<String, Object> body,
             Authentication auth) {
+
         Partner partner = helper.currentPartner(auth);
 
-        String rawType = text(body.get("type")).toUpperCase();
-        final String type = rawType.isBlank() ? "PROFILE_UPDATE" : rawType;
-        String reason = text(body.get("reason"));
+        String requestedType = text(body.get("type")).trim().toUpperCase();
+        final String type = requestedType.isBlank() ? "PROFILE_UPDATE" : requestedType;
+
+        if (!List.of(
+                "LOCATION_UPDATE",
+                "PROFILE_UPDATE",
+                "SERVICE_REGISTER",
+                "SERVICE_UPDATE",
+                "SERVICE_PAUSE",
+                "SERVICE_RETIRE"
+        ).contains(type)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Loại yêu cầu thay đổi không hợp lệ."
+            );
+        }
+
+        String reason = text(body.get("reason")).trim();
+
         if (reason.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do yêu cầu thay đổi.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vui lòng nhập lý do yêu cầu thay đổi."
+            );
         }
 
-        // Validate coordinates if LOCATION_UPDATE
-        if ("LOCATION_UPDATE".equals(type)) {
-            Object latObj = body.get("latitude");
-            Object lonObj = body.get("longitude");
-            if (latObj != null && lonObj != null) {
-                try {
-                    double lat = Double.parseDouble(String.valueOf(latObj));
-                    double lon = Double.parseDouble(String.valueOf(lonObj));
-                    if (lat < -90 || lat > 90 || lon < -180 || lon > 180 || (lat == 0 && lon == 0)) {
-                        throw new IllegalArgumentException();
-                    }
-                } catch (Exception e) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tọa độ không hợp lệ.");
-                }
-            }
-        }
+        boolean hasPending = changeRequestRepository
+                .findByPartner_IdOrderByCreatedAtDesc(partner.getId())
+                .stream()
+                .anyMatch(request ->
+                        type.equalsIgnoreCase(request.getRequestType())
+                                && "PENDING_REVIEW".equalsIgnoreCase(request.getStatus())
+                );
 
-        // Check if there is already a PENDING_REVIEW request of this type
-        boolean hasPending = changeRequestRepository.findByPartner_IdAndStatusOrderByCreatedAtDesc(partner.getId(), "PENDING_REVIEW")
-                .stream().anyMatch(r -> type.equalsIgnoreCase(r.getRequestType()));
         if (hasPending) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Bạn đang có một yêu cầu loại này đang chờ Admin duyệt.");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Bạn đang có yêu cầu cùng loại chưa được xử lý."
+            );
         }
 
-        String proposedSnapshot = text(body.get("proposedSnapshot"));
+        String proposedSnapshot = text(body.get("proposedSnapshot")).trim();
+
         if (proposedSnapshot.isBlank()) {
             if ("LOCATION_UPDATE".equals(type)) {
                 proposedSnapshot = "address=" + text(body.get("address"))
@@ -109,36 +121,113 @@ public class ProviderProfileController {
             }
         }
 
-        String oldSnapshot = text(body.get("oldSnapshot"));
-        if (oldSnapshot.isBlank()) {
-            if ("LOCATION_UPDATE".equals(type)) {
-                oldSnapshot = "address=" + (partner.getAddress() != null ? partner.getAddress() : "")
-                        + ";latitude=" + (partner.getLatitude() != null ? partner.getLatitude() : "")
-                        + ";longitude=" + (partner.getLongitude() != null ? partner.getLongitude() : "");
-            } else if ("PROFILE_UPDATE".equals(type)) {
-                oldSnapshot = "businessName=" + partner.getBusinessName()
-                        + ";description=" + (partner.getDescription() != null ? partner.getDescription() : "")
-                        + ";taxCode=" + (partner.getTaxCode() != null ? partner.getTaxCode() : "");
-            }
+        String oldSnapshot = "";
+        Integer baseVersion = null;
+
+        if ("LOCATION_UPDATE".equals(type)) {
+            oldSnapshot = "address=" + (partner.getAddress() == null ? "" : partner.getAddress())
+                    + ";latitude=" + (partner.getLatitude() == null ? "" : partner.getLatitude())
+                    + ";longitude=" + (partner.getLongitude() == null ? "" : partner.getLongitude());
+
+            baseVersion = partner.getVersion() == null ? 1 : partner.getVersion();
+        } else if ("PROFILE_UPDATE".equals(type)) {
+            oldSnapshot = "businessName=" + partner.getBusinessName()
+                    + ";description=" + (partner.getDescription() == null ? "" : partner.getDescription())
+                    + ";taxCode=" + (partner.getTaxCode() == null ? "" : partner.getTaxCode());
+
+            baseVersion = partner.getVersion() == null ? 1 : partner.getVersion();
+        }
+
+        if ("LOCATION_UPDATE".equals(type)) {
+            Map<String, String> proposed = parseSnapshot(proposedSnapshot);
+            validateCoordinates(
+                    proposed.get("latitude"),
+                    proposed.get("longitude")
+            );
         }
 
         LocalDateTime now = LocalDateTime.now();
-        BusinessChangeRequest req = BusinessChangeRequest.builder()
+
+        BusinessChangeRequest request = BusinessChangeRequest.builder()
                 .partner(partner)
                 .requestType(type)
                 .status("PENDING_REVIEW")
-                .targetId(partner.getId())
-                .targetName(partner.getBusinessName())
+                .targetId(body.get("targetId") == null
+                        ? partner.getId()
+                        : parseLong(body.get("targetId"), "Mã đối tượng"))
+                .targetName(text(body.get("targetName")).isBlank()
+                        ? partner.getBusinessName()
+                        : text(body.get("targetName")))
+                .baseVersion(baseVersion)
                 .oldSnapshot(oldSnapshot)
                 .proposedSnapshot(proposedSnapshot)
                 .reason(reason)
                 .evidenceUrl(text(body.get("evidenceUrl")))
-                .submittedBy(auth.getName())
+                .submittedBy(auth == null ? "provider" : auth.getName())
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
 
-        return changeRequestRow(changeRequestRepository.save(req));
+        return changeRequestRow(changeRequestRepository.save(request));
+    }
+
+    private void validateCoordinates(String latitude, String longitude) {
+        try {
+            if (latitude == null || longitude == null
+                    || latitude.isBlank() || longitude.isBlank()) {
+                throw new IllegalArgumentException();
+            }
+
+            double lat = Double.parseDouble(latitude);
+            double lon = Double.parseDouble(longitude);
+
+            if (!Double.isFinite(lat)
+                    || !Double.isFinite(lon)
+                    || lat < -90
+                    || lat > 90
+                    || lon < -180
+                    || lon > 180
+                    || (lat == 0 && lon == 0)) {
+                throw new IllegalArgumentException();
+            }
+        } catch (Exception exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Tọa độ không hợp lệ."
+            );
+        }
+    }
+
+    private Map<String, String> parseSnapshot(String snapshot) {
+        Map<String, String> values = new LinkedHashMap<>();
+
+        if (snapshot == null || snapshot.isBlank()) {
+            return values;
+        }
+
+        for (String pair : snapshot.split(";")) {
+            int separator = pair.indexOf('=');
+
+            if (separator > 0) {
+                values.put(
+                        pair.substring(0, separator).trim(),
+                        pair.substring(separator + 1).trim()
+                );
+            }
+        }
+
+        return values;
+    }
+
+    private Long parseLong(Object value, String field) {
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    field + " không hợp lệ."
+            );
+        }
     }
 
     @PostMapping("/change-requests/{id}/withdraw")
@@ -146,41 +235,56 @@ public class ProviderProfileController {
     public Map<String, Object> withdrawChangeRequest(
             @PathVariable Long id,
             Authentication auth) {
+
         Partner partner = helper.currentPartner(auth);
-        BusinessChangeRequest req = changeRequestRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu."));
 
-        if (!req.getPartner().getId().equals(partner.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không có quyền thao tác yêu cầu này.");
+        BusinessChangeRequest request = changeRequestRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy yêu cầu."
+                ));
+
+        if (!request.getPartner().getId().equals(partner.getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Không có quyền thao tác yêu cầu này."
+            );
         }
 
-        if (!"PENDING_REVIEW".equalsIgnoreCase(req.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể rút yêu cầu đang chờ duyệt.");
+        if (!"PENDING_REVIEW".equalsIgnoreCase(request.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Chỉ có thể rút yêu cầu đang chờ duyệt."
+            );
         }
 
-        req.setStatus("WITHDRAWN");
-        req.setUpdatedAt(LocalDateTime.now());
-        return changeRequestRow(changeRequestRepository.save(req));
+        request.setStatus("WITHDRAWN");
+        request.setUpdatedAt(LocalDateTime.now());
+
+        return changeRequestRow(changeRequestRepository.save(request));
     }
 
-    public Map<String, Object> changeRequestRow(BusinessChangeRequest r) {
+    public Map<String, Object> changeRequestRow(BusinessChangeRequest request) {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("id", r.getId());
-        map.put("partnerId", r.getPartner().getId());
-        map.put("businessName", r.getPartner().getBusinessName());
-        map.put("requestType", r.getRequestType());
-        map.put("status", r.getStatus());
-        map.put("targetId", r.getTargetId());
-        map.put("targetName", r.getTargetName());
-        map.put("oldSnapshot", r.getOldSnapshot());
-        map.put("proposedSnapshot", r.getProposedSnapshot());
-        map.put("reason", r.getReason());
-        map.put("evidenceUrl", r.getEvidenceUrl());
-        map.put("rejectReason", r.getRejectReason());
-        map.put("submittedBy", r.getSubmittedBy());
-        map.put("reviewedBy", r.getReviewedBy());
-        map.put("createdAt", r.getCreatedAt());
-        map.put("reviewedAt", r.getReviewedAt());
+
+        map.put("id", request.getId());
+        map.put("partnerId", request.getPartner().getId());
+        map.put("businessName", request.getPartner().getBusinessName());
+        map.put("requestType", request.getRequestType());
+        map.put("status", request.getStatus());
+        map.put("targetId", request.getTargetId());
+        map.put("baseVersion", request.getBaseVersion());
+        map.put("targetName", request.getTargetName());
+        map.put("oldSnapshot", request.getOldSnapshot());
+        map.put("proposedSnapshot", request.getProposedSnapshot());
+        map.put("reason", request.getReason());
+        map.put("evidenceUrl", request.getEvidenceUrl());
+        map.put("rejectReason", request.getRejectReason());
+        map.put("submittedBy", request.getSubmittedBy());
+        map.put("reviewedBy", request.getReviewedBy());
+        map.put("createdAt", request.getCreatedAt());
+        map.put("reviewedAt", request.getReviewedAt());
+
         return map;
     }
 }

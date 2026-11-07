@@ -1,4 +1,3 @@
-
 package org.ckitmdt.backend.service.booking;
 
 import lombok.RequiredArgsConstructor;
@@ -11,6 +10,7 @@ import org.ckitmdt.backend.repository.CancellationRefundRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.ckitmdt.backend.service.CustomerNotificationService;
+import org.ckitmdt.backend.service.admin.AdminAuditLogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -33,10 +33,11 @@ public class CancellationRefundService {
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
     private final CustomerNotificationService customerNotificationService;
+    private final AdminAuditLogService auditLogService;
 
     @Transactional
     public void createLatePaymentRefund(Long bookingId, BigDecimal receivedAmount,
-            String transactionNo) {
+                                        String transactionNo) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
         if (booking == null || booking.getCustomer() == null
                 || receivedAmount == null || receivedAmount.signum() <= 0
@@ -166,38 +167,78 @@ public class CancellationRefundService {
     @Transactional
     public Map<String, Object> recordTransfer(
             Long id, Map<String, Object> body, Authentication auth) {
+
         User operator = requireAdmin(auth);
+
         if (body == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu thông tin chuyển tiền.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Thiếu thông tin chuyển tiền."
+            );
         }
+
         CancellationRefund refund = refundRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Không tìm thấy yêu cầu hoàn tiền."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy yêu cầu hoàn tiền."
+                ));
+
         if (!"APPROVED".equalsIgnoreCase(refund.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Chỉ yêu cầu đã duyệt mới được ghi nhận chuyển tiền.");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Chỉ yêu cầu đã duyệt mới được ghi nhận chuyển tiền."
+            );
         }
+
         if (refund.getTransferredAt() != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Yêu cầu này đã được ghi nhận chuyển tiền.");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Yêu cầu này đã được ghi nhận chuyển tiền."
+            );
         }
+
         String reference = text(body.get("transferReference"));
         String evidenceUrl = text(body.get("evidenceUrl"));
+
         if (reference.isBlank() || reference.length() > 150 || evidenceUrl.length() > 1000) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Mã giao dịch là bắt buộc (tối đa 150 ký tự); liên kết chứng từ tối đa 1000 ký tự.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Mã giao dịch là bắt buộc (tối đa 150 ký tự); liên kết chứng từ tối đa 1000 ký tự."
+            );
         }
+
+        LocalDateTime now = LocalDateTime.now();
+
         refund.setTransferReference(reference);
         refund.setTransferEvidenceUrl(evidenceUrl.isBlank() ? null : evidenceUrl);
         refund.setTransferredBy(operator.getEmail());
-        refund.setTransferredAt(LocalDateTime.now());
+        refund.setTransferredAt(now);
+
         CancellationRefund saved = refundRepository.save(refund);
+
+        auditLogService.record(
+                auth,
+                "REFUND_TRANSFER_RECORDED",
+                "CANCELLATION_REFUND",
+                saved.getId(),
+                "Ghi nhận chứng từ chuyển tiền hoàn cho đơn " + saved.getBooking().getBookingCode(),
+                "status=APPROVED;transferredAt=null",
+                "status=APPROVED;transferReference=" + reference + ";transferredAt=" + now
+        );
+
         if (saved.getRequestedBy() != null) {
-            customerNotificationService.notifyCustomer(saved.getRequestedBy(), "REFUND_TRANSFERRED",
-                    "Đã chuyển khoản hoàn tiền", "Khoản hoàn tiền cho đơn "
-                            + saved.getBooking().getBookingCode() + " đã được ghi nhận chuyển khoản.",
-                    "REFUND", saved.getId());
+            customerNotificationService.notifyCustomer(
+                    saved.getRequestedBy(),
+                    "REFUND_TRANSFERRED",
+                    "Đã chuyển khoản hoàn tiền",
+                    "Khoản hoàn tiền cho đơn "
+                            + saved.getBooking().getBookingCode()
+                            + " đã được ghi nhận chuyển khoản.",
+                    "REFUND",
+                    saved.getId()
+            );
         }
+
         return row(saved);
     }
 
@@ -250,6 +291,8 @@ public class CancellationRefundService {
         );
 
         LocalDateTime now = LocalDateTime.now();
+        String oldStatus = upper(refund.getStatus());
+        BigDecimal oldApprovedAmount = refund.getApprovedAmount();
 
         refund.setStatus(status);
 
@@ -264,12 +307,31 @@ public class CancellationRefundService {
         refund.setReviewedAt(now);
 
         CancellationRefund saved = refundRepository.save(refund);
+
+        auditLogService.record(
+                auth,
+                "REFUND_REVIEWED",
+                "CANCELLATION_REFUND",
+                saved.getId(),
+                decisionNote,
+                "status=" + oldStatus + ";approvedAmount=" + oldApprovedAmount,
+                "status=" + status + ";approvedAmount=" + saved.getApprovedAmount()
+        );
+
         if (saved.getRequestedBy() != null) {
             String message = "Yêu cầu hoàn tiền cho đơn " + saved.getBooking().getBookingCode()
                     + ("APPROVED".equals(status) ? " đã được duyệt." : " đã bị từ chối.");
-            customerNotificationService.notifyCustomer(saved.getRequestedBy(), "REFUND_" + status,
-                    "Cập nhật yêu cầu hoàn tiền", message, "REFUND", saved.getId());
+
+            customerNotificationService.notifyCustomer(
+                    saved.getRequestedBy(),
+                    "REFUND_" + status,
+                    "Cập nhật yêu cầu hoàn tiền",
+                    message,
+                    "REFUND",
+                    saved.getId()
+            );
         }
+
         return row(saved);
     }
 
@@ -390,31 +452,13 @@ public class CancellationRefundService {
         User requester = refund.getRequestedBy();
 
         result.put("id", refund.getId());
-        result.put(
-                "bookingId",
-                booking == null ? null : booking.getId()
-        );
-        result.put(
-                "bookingCode",
-                booking == null ? null : booking.getBookingCode()
-        );
-        result.put(
-                "bookingStatus",
-                booking == null ? null : booking.getStatus()
-        );
+        result.put("bookingId", booking == null ? null : booking.getId());
+        result.put("bookingCode", booking == null ? null : booking.getBookingCode());
+        result.put("bookingStatus", booking == null ? null : booking.getStatus());
 
-        result.put(
-                "requestedById",
-                requester == null ? null : requester.getId()
-        );
-        result.put(
-                "requestedByName",
-                requester == null ? null : requester.getFullName()
-        );
-        result.put(
-                "requestedByEmail",
-                requester == null ? null : requester.getEmail()
-        );
+        result.put("requestedById", requester == null ? null : requester.getId());
+        result.put("requestedByName", requester == null ? null : requester.getFullName());
+        result.put("requestedByEmail", requester == null ? null : requester.getEmail());
 
         result.put("requestedAmount", refund.getRequestedAmount());
         result.put("approvedAmount", refund.getApprovedAmount());
@@ -429,6 +473,7 @@ public class CancellationRefundService {
                 ? "TRANSFERRED"
                 : "APPROVED".equalsIgnoreCase(refund.getStatus())
                 ? "WAITING_FOR_TRANSFER_EVIDENCE" : null);
+
         result.put("transferReference", refund.getTransferReference());
         result.put("transferEvidenceUrl", refund.getTransferEvidenceUrl());
         result.put("transferredBy", refund.getTransferredBy());
