@@ -40,7 +40,11 @@ import ProviderComplaints from './pages/provider-portal/ProviderComplaints';
 import CleanerLayout from './pages/cleaner-portal/CleanerLayout';
 import CleanerDashboard from './pages/cleaner-portal/CleanerDashboard';
 import CleanerPlaceholder from './pages/cleaner-portal/CleanerPlaceholder';
+import CleanerCalendar from './pages/cleaner-portal/CleanerCalendar';
+import CleanerHistory from './pages/cleaner-portal/CleanerHistory';
+import CleanerNotifications from './pages/cleaner-portal/CleanerNotifications';
 import CleanerJobs from './pages/cleaner-portal/CleanerJobs';
+import CleanerProfile from './pages/cleaner-portal/CleanerProfile';
 
 function HomeRoute() {
     let user = {};
@@ -56,11 +60,15 @@ function HomeRoute() {
     }
 
     const role = String(user.role || '').toUpperCase();
-    if (role === 'CLEANER' || role === 'EMPLOYEE' ||
-        role === 'ROLE_CLEANER' || role === 'ROLE_EMPLOYEE') {
+
+    if (
+        role === 'CLEANER' ||
+        role === 'EMPLOYEE' ||
+        role === 'ROLE_CLEANER' ||
+        role === 'ROLE_EMPLOYEE'
+    ) {
         return <Navigate to="/cleaner/dashboard" replace />;
     }
-
 
     if (role === 'STAFF' || role === 'ROLE_STAFF') {
         return <Navigate to="/admin/staff-operations" replace />;
@@ -103,16 +111,18 @@ function App() {
                 <Route path="/admin/reward-orders" element={<AdminRewardOrders />} />
                 <Route path="/admin/staff-operations" element={<AdminStaffOperations />} />
                 <Route path="/admin/outbox" element={<AdminOutboxManagement />} />
+
                 <Route path="/cleaner" element={<CleanerLayout />}>
                     <Route index element={<Navigate to="dashboard" replace />} />
                     <Route path="dashboard" element={<CleanerDashboard />} />
                     <Route path="jobs" element={<CleanerJobs />} />
-                    <Route path="calendar" element={<CleanerPlaceholder />} />
-                    <Route path="history" element={<CleanerPlaceholder />} />
-                    <Route path="notifications" element={<CleanerPlaceholder />} />
-                    <Route path="profile" element={<CleanerPlaceholder />} />
+                    <Route path="calendar" element={<CleanerCalendar />} />
+                    <Route path="history" element={<CleanerHistory />} />
+                    <Route path="notifications" element={<CleanerNotifications />} />
+                    <Route path="profile" element={<CleanerProfile />} />
                     <Route path="*" element={<CleanerPlaceholder />} />
                 </Route>
+
                 <Route path="/provider-portal" element={<ProviderLayout />}>
                     <Route index element={<Navigate to="dashboard" replace />} />
                     <Route path="dashboard" element={<ProviderDashboard />} />
