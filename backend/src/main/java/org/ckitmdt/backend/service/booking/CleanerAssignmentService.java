@@ -7,18 +7,16 @@ import org.ckitmdt.backend.dto.booking.CleanerAssignmentResponse;
 import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.BookingAssignment;
-import org.ckitmdt.backend.entity.BookingStatusHistory;
+import org.ckitmdt.backend.entity.BookingItem;
 import org.ckitmdt.backend.entity.Employee;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.AdminNotificationRepository;
-import org.ckitmdt.backend.entity.BookingItem;
 import org.ckitmdt.backend.repository.BookingAssignmentRepository;
 import org.ckitmdt.backend.repository.BookingItemRepository;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.BookingStatusHistoryRepository;
 import org.ckitmdt.backend.repository.EmployeeRepository;
 import org.ckitmdt.backend.repository.UserRepository;
-import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,19 +38,24 @@ public class CleanerAssignmentService {
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final BookingStateEngine bookingStateEngine;
-    private final CustomerNotificationService customerNotificationService;
     private final AdminNotificationRepository adminNotificationRepository;
     private final BookingItemRepository bookingItemRepository;
 
     /**
      * Cleaner thực hiện hành động trên một Assignment cụ thể.
      *
-     * Các action:
+     * Các action được hỗ trợ:
      * ACCEPT
      * DECLINE
-     * START_TRAVEL
      * START_JOB
      * SUBMIT_COMPLETION
+     *
+     * Luồng thực hiện:
+     * ASSIGNED -> ACCEPTED -> IN_PROGRESS -> WORK_SUBMITTED
+     *
+     * Cleaner có thể từ chối:
+     * ASSIGNED -> DECLINED
+     * ACCEPTED -> DECLINED
      */
     @Transactional
     public CleanerAssignmentResponse executeAction(
@@ -79,7 +82,7 @@ public class CleanerAssignmentService {
             );
         }
 
-        // 2. Tìm hồ sơ Employee
+        // 2. Tìm hồ sơ Employee tương ứng với tài khoản Cleaner
         Employee employee = employeeRepository.findByUser_Id(cleanerUser.getId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -93,13 +96,13 @@ public class CleanerAssignmentService {
             );
         }
 
-        // 3. Đọc Assignment ban đầu để lấy bookingId.
-        // Sau đó khóa Booking trước, rồi khóa Assignment.
-        BookingAssignment initialAssignment = assignmentRepository.findById(assignmentId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy phân công công việc."
-                ));
+        // 3. Tìm Assignment ban đầu để lấy bookingId
+        BookingAssignment initialAssignment =
+                assignmentRepository.findById(assignmentId)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Không tìm thấy phân công công việc."
+                        ));
 
         if (initialAssignment.getBooking() == null) {
             throw new ResponseStatusException(
@@ -110,31 +113,36 @@ public class CleanerAssignmentService {
 
         Long bookingId = initialAssignment.getBooking().getId();
 
+        // Khóa Booking trước để hạn chế cập nhật đồng thời.
         Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy đơn hàng."
                 ));
 
-        BookingAssignment assignment = assignmentRepository.findByIdForUpdate(assignmentId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Phân công không còn tồn tại."
-                ));
+        // Sau đó khóa Assignment.
+        BookingAssignment assignment =
+                assignmentRepository.findByIdForUpdate(assignmentId)
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Phân công không còn tồn tại."
+                        ));
 
-        // 4. Kiểm tra Assignment có đúng thuộc về Cleaner đăng nhập không
+        // 4. Kiểm tra Assignment có thuộc về Cleaner đăng nhập không
         if (assignment.getEmployee() == null
                 || !Objects.equals(
                 assignment.getEmployee().getId(),
                 employee.getId()
         )) {
+
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Bạn không được phân công thực hiện công việc này."
             );
         }
 
-        // Kiểm tra tính nhất quán giữa Employee, Assignment và Booking
+        // 5. Kiểm tra tính nhất quán giữa Employee, Assignment và Booking.
+        // Cleaner chỉ được thực hiện công việc thuộc đúng Provider của mình.
         if (assignment.getPartner() == null
                 || employee.getPartner() == null
                 || booking.getPartner() == null
@@ -146,13 +154,14 @@ public class CleanerAssignmentService {
                 assignment.getPartner().getId(),
                 booking.getPartner().getId()
         )) {
+
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "Thông tin nhà cung cấp của phân công không đồng nhất."
             );
         }
 
-        // 5. Chuẩn hóa action
+        // 6. Chuẩn hóa action
         if (action == null || action.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -165,14 +174,21 @@ public class CleanerAssignmentService {
                 .replace("-", "_")
                 .toUpperCase(Locale.ROOT);
 
-        String currentAssignmentStatus = normalizeStatus(assignment.getStatus());
-        String currentBookingStatus = normalizeStatus(booking.getStatus());
+        String currentAssignmentStatus =
+                normalizeStatus(assignment.getStatus());
 
-        validateBookingStatus(currentBookingStatus, normalizedAction);
+        String currentBookingStatus =
+                normalizeStatus(booking.getStatus());
+
+        // Kiểm tra trạng thái Booking có cho phép thao tác không.
+        validateBookingStatus(
+                currentBookingStatus,
+                normalizedAction
+        );
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 6. Xác định trạng thái Assignment tiếp theo
+        // 7. Xác định trạng thái Assignment tiếp theo
         String nextAssignmentStatus = determineNextAssignmentStatus(
                 currentAssignmentStatus,
                 normalizedAction
@@ -182,20 +198,14 @@ public class CleanerAssignmentService {
 
         assignment.setStatus(nextAssignmentStatus);
 
+        // 8. Cập nhật thời gian và ghi chú theo hành động
         switch (normalizedAction) {
 
-            case "ACCEPT" -> assignment.setAcceptedAt(now);
-
-            case "START_TRAVEL" -> {
-                if (assignment.getAcceptedAt() == null) {
-                    assignment.setAcceptedAt(now);
-                }
+            case "ACCEPT" -> {
+                assignment.setAcceptedAt(now);
             }
 
             case "START_JOB" -> {
-                if (assignment.getAcceptedAt() == null) {
-                    assignment.setAcceptedAt(now);
-                }
                 if (assignment.getStartedAt() == null) {
                     assignment.setStartedAt(now);
                 }
@@ -211,9 +221,10 @@ public class CleanerAssignmentService {
                 if (note == null || note.trim().isBlank()) {
                     throw new ResponseStatusException(
                             HttpStatus.BAD_REQUEST,
-                            "Vui lòng ghi rõ lý do/giải trình từ chối công việc."
+                            "Vui lòng ghi rõ lý do từ chối công việc."
                     );
                 }
+
                 assignment.setNote("Từ chối: " + note.trim());
             }
 
@@ -225,14 +236,13 @@ public class CleanerAssignmentService {
 
         assignmentRepository.saveAndFlush(assignment);
 
-        // 7. Tổng hợp tiến độ Assignment để cập nhật Booking
+        // 9. Đồng bộ trạng thái Booking từ tiến độ các Assignment
         synchronizeBookingStatus(
                 booking,
                 normalizedAction,
                 cleanerUser,
                 note,
-                now,
-                assignmentId
+                now
         );
 
         log.info(
@@ -244,7 +254,7 @@ public class CleanerAssignmentService {
                 nextAssignmentStatus
         );
 
-        // 8. Trả về Assignment kèm Booking mới nhất
+        // 10. Trả về Assignment kèm Booking mới nhất
         return mapToResponse(assignment);
     }
 
@@ -258,40 +268,54 @@ public class CleanerAssignmentService {
 
         return switch (action) {
 
+            // Cleaner nhận công việc
             case "ACCEPT" -> {
                 if (!"ASSIGNED".equals(currentStatus)) {
-                    throw invalidAssignmentTransition(currentStatus, action);
+                    throw invalidAssignmentTransition(
+                            currentStatus,
+                            action
+                    );
                 }
+
                 yield "ACCEPTED";
             }
 
+            // Cleaner từ chối công việc
             case "DECLINE" -> {
-                if (!"ASSIGNED".equals(currentStatus) && !"ACCEPTED".equals(currentStatus)) {
-                    throw invalidAssignmentTransition(currentStatus, action);
+                if (!"ASSIGNED".equals(currentStatus)
+                        && !"ACCEPTED".equals(currentStatus)) {
+
+                    throw invalidAssignmentTransition(
+                            currentStatus,
+                            action
+                    );
                 }
+
                 yield "DECLINED";
             }
 
-            case "START_TRAVEL" -> {
-                if (!"ACCEPTED".equals(currentStatus) && !"ASSIGNED".equals(currentStatus)) {
-                    throw invalidAssignmentTransition(currentStatus, action);
-                }
-                yield "EN_ROUTE";
-            }
-
+            // Cleaner bắt đầu thực hiện công việc.
+            // Bắt buộc phải nhận việc trước.
             case "START_JOB" -> {
-                if (!"ACCEPTED".equals(currentStatus)
-                        && !"ASSIGNED".equals(currentStatus)
-                        && !"EN_ROUTE".equals(currentStatus)) {
-                    throw invalidAssignmentTransition(currentStatus, action);
+                if (!"ACCEPTED".equals(currentStatus)) {
+                    throw invalidAssignmentTransition(
+                            currentStatus,
+                            action
+                    );
                 }
+
                 yield "IN_PROGRESS";
             }
 
+            // Cleaner gửi yêu cầu xác nhận hoàn thành
             case "SUBMIT_COMPLETION" -> {
                 if (!"IN_PROGRESS".equals(currentStatus)) {
-                    throw invalidAssignmentTransition(currentStatus, action);
+                    throw invalidAssignmentTransition(
+                            currentStatus,
+                            action
+                    );
                 }
+
                 yield "WORK_SUBMITTED";
             }
 
@@ -320,7 +344,7 @@ public class CleanerAssignmentService {
                             "IN_PROGRESS"
                     ).contains(bookingStatus);
 
-            case "START_TRAVEL", "START_JOB" ->
+            case "START_JOB" ->
                     List.of(
                             "ASSIGNED",
                             "EN_ROUTE",
@@ -347,34 +371,39 @@ public class CleanerAssignmentService {
 
     /**
      * Đồng bộ trạng thái Booking từ tiến độ của các Assignment.
+     *
+     * Lưu ý:
+     * - Không còn xử lý START_TRAVEL.
+     * - Không tự động chuyển Booking sang EN_ROUTE.
+     * - Booking chỉ chuyển IN_PROGRESS khi Cleaner bắt đầu làm.
+     * - Booking chuyển PENDING_COMPLETION khi tất cả Assignment
+     *   đang hoạt động đã báo hoàn thành.
      */
     private void synchronizeBookingStatus(
             Booking booking,
             String action,
             User cleanerUser,
             String note,
-            LocalDateTime now,
-            Long currentAssignmentId
+            LocalDateTime now
     ) {
 
-        String oldBookingStatus = normalizeStatus(booking.getStatus());
+        String oldBookingStatus =
+                normalizeStatus(booking.getStatus());
+
         String nextBookingStatus = oldBookingStatus;
 
         switch (action) {
 
-            case "START_TRAVEL" -> {
-                if ("ASSIGNED".equals(oldBookingStatus)) {
-                    nextBookingStatus = "EN_ROUTE";
-                }
-            }
-
+            // Cleaner bắt đầu làm việc
             case "START_JOB" -> {
                 if ("ASSIGNED".equals(oldBookingStatus)
                         || "EN_ROUTE".equals(oldBookingStatus)) {
+
                     nextBookingStatus = "IN_PROGRESS";
                 }
             }
 
+            // Tất cả Cleaner đã báo hoàn thành
             case "SUBMIT_COMPLETION" -> {
 
                 List<BookingAssignment> assignments =
@@ -383,74 +412,151 @@ public class CleanerAssignmentService {
                         );
 
                 // Bỏ qua các Assignment đã từ chối hoặc bị hủy.
-                List<BookingAssignment> activeAssignments = assignments.stream()
-                        .filter(a -> {
-                            String status = normalizeStatus(a.getStatus());
-                            return !"DECLINED".equals(status)
-                                    && !"CANCELLED".equals(status);
-                        })
-                        .toList();
+                List<BookingAssignment> activeAssignments =
+                        assignments.stream()
+                                .filter(assignment -> {
+                                    String status =
+                                            normalizeStatus(assignment.getStatus());
 
-                boolean allSubmitted = !activeAssignments.isEmpty()
-                        && activeAssignments.stream()
-                        .allMatch(a ->
-                                "WORK_SUBMITTED".equals(normalizeStatus(a.getStatus()))
-                                        || "COMPLETED".equals(normalizeStatus(a.getStatus()))
-                        );
+                                    return !"DECLINED".equals(status)
+                                            && !"CANCELLED".equals(status);
+                                })
+                                .toList();
 
-                if (allSubmitted && "IN_PROGRESS".equals(oldBookingStatus)) {
+                boolean allSubmitted =
+                        !activeAssignments.isEmpty()
+                                && activeAssignments.stream()
+                                .allMatch(assignment -> {
+                                    String status =
+                                            normalizeStatus(assignment.getStatus());
+
+                                    return "WORK_SUBMITTED".equals(status)
+                                            || "COMPLETED".equals(status);
+                                });
+
+                if (allSubmitted
+                        && "IN_PROGRESS".equals(oldBookingStatus)) {
+
                     nextBookingStatus = "PENDING_COMPLETION";
                 }
             }
 
+            // Cleaner từ chối phân công
             case "DECLINE" -> {
-                // Nếu cleaner từ chối và số người còn lại thiếu hụt, đưa đơn về CONFIRMED
-                List<BookingItem> items = bookingItemRepository.findByBookingId(booking.getId());
-                int requiredEmployees = (items == null || items.isEmpty()) ? 1 :
-                        items.stream()
-                                .mapToInt(it -> (it.getEmployeeCount() != null && it.getEmployeeCount() > 0 ? it.getEmployeeCount() : 1)
-                                        * (it.getQuantity() != null && it.getQuantity() > 0 ? it.getQuantity() : 1))
+
+                List<BookingItem> items =
+                        bookingItemRepository.findByBookingId(
+                                booking.getId()
+                        );
+
+                int requiredEmployees =
+                        (items == null || items.isEmpty())
+                                ? 1
+                                : items.stream()
+                                .mapToInt(item -> {
+                                    int employeeCount =
+                                            item.getEmployeeCount() != null
+                                                    && item.getEmployeeCount() > 0
+                                                    ? item.getEmployeeCount()
+                                                    : 1;
+
+                                    int quantity =
+                                            item.getQuantity() != null
+                                                    && item.getQuantity() > 0
+                                                    ? item.getQuantity()
+                                                    : 1;
+
+                                    return employeeCount * quantity;
+                                })
                                 .sum();
-                if (requiredEmployees <= 0) requiredEmployees = 1;
 
-                long remainingActive = assignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId()).stream()
-                        .filter(a -> !"DECLINED".equalsIgnoreCase(a.getStatus()) && !"CANCELLED".equalsIgnoreCase(a.getStatus()))
-                        .count();
+                if (requiredEmployees <= 0) {
+                    requiredEmployees = 1;
+                }
 
-                if (remainingActive < requiredEmployees && ("ASSIGNED".equals(oldBookingStatus) || "EN_ROUTE".equals(oldBookingStatus))) {
+                long remainingActive =
+                        assignmentRepository
+                                .findByBooking_IdOrderByIdAsc(booking.getId())
+                                .stream()
+                                .filter(assignment -> {
+                                    String status =
+                                            normalizeStatus(assignment.getStatus());
+
+                                    return !"DECLINED".equals(status)
+                                            && !"CANCELLED".equals(status);
+                                })
+                                .count();
+
+                // Nếu thiếu nhân viên, đưa Booking về CONFIRMED
+                // để Provider có thể phân công lại.
+                if (remainingActive < requiredEmployees
+                        && (
+                        "ASSIGNED".equals(oldBookingStatus)
+                                || "EN_ROUTE".equals(oldBookingStatus)
+                )) {
+
                     nextBookingStatus = "CONFIRMED";
                 }
 
                 // Gửi thông báo cho nhà cung cấp
-                if (booking.getPartner() != null && booking.getPartner().getUser() != null) {
-                    adminNotificationRepository.save(AdminNotification.builder()
-                            .recipient(booking.getPartner().getUser())
-                            .type("ASSIGNMENT_DECLINED")
-                            .title("Nhân viên từ chối nhận việc")
-                            .message("Nhân viên " + cleanerUser.getFullName() + " đã từ chối phân công cho đơn hàng "
-                                    + booking.getBookingCode() + (note != null && !note.isBlank() ? " (Lý do: " + note + ")" : "")
-                                    + ". Vui lòng phân công nhân viên thay thế.")
-                            .referenceType("BOOKING")
-                            .referenceId(booking.getId())
-                            .createdAt(now)
-                            .build());
+                if (booking.getPartner() != null
+                        && booking.getPartner().getUser() != null) {
+
+                    adminNotificationRepository.save(
+                            AdminNotification.builder()
+                                    .recipient(booking.getPartner().getUser())
+                                    .type("ASSIGNMENT_DECLINED")
+                                    .title("Nhân viên từ chối nhận việc")
+                                    .message(
+                                            "Nhân viên "
+                                                    + cleanerUser.getFullName()
+                                                    + " đã từ chối phân công cho đơn hàng "
+                                                    + booking.getBookingCode()
+                                                    + (
+                                                    note != null && !note.isBlank()
+                                                            ? " (Lý do: " + note + ")"
+                                                            : ""
+                                            )
+                                                    + ". Vui lòng phân công nhân viên thay thế."
+                                    )
+                                    .referenceType("BOOKING")
+                                    .referenceId(booking.getId())
+                                    .createdAt(now)
+                                    .build()
+                    );
                 }
             }
 
             default -> {
+                // ACCEPT không làm thay đổi trạng thái Booking chung.
             }
         }
 
-        // Chỉ lưu lịch sử Booking khi trạng thái Booking thực sự thay đổi (đồng bộ qua BookingStateEngine A02)
+        // Chỉ cập nhật Booking nếu trạng thái thực sự thay đổi.
         if (!oldBookingStatus.equals(nextBookingStatus)) {
-            org.ckitmdt.backend.dto.booking.BookingStatusEnum targetEnum = org.ckitmdt.backend.dto.booking.BookingStatusEnum.valueOf(nextBookingStatus);
-            String transitionNote = note != null && !note.isBlank()
-                    ? note
-                    : "Cập nhật tiến độ từ hành động Cleaner: " + action;
-            bookingStateEngine.transitionBooking(booking, targetEnum, cleanerUser, transitionNote);
+
+            org.ckitmdt.backend.dto.booking.BookingStatusEnum targetEnum =
+                    org.ckitmdt.backend.dto.booking.BookingStatusEnum.valueOf(
+                            nextBookingStatus
+                    );
+
+            String transitionNote =
+                    note != null && !note.isBlank()
+                            ? note
+                            : "Cập nhật tiến độ từ hành động Cleaner: " + action;
+
+            bookingStateEngine.transitionBooking(
+                    booking,
+                    targetEnum,
+                    cleanerUser,
+                    transitionNote
+            );
         }
     }
 
+    /**
+     * Chuyển Assignment thành DTO trả về Frontend.
+     */
     private CleanerAssignmentResponse mapToResponse(
             BookingAssignment assignment
     ) {
@@ -460,8 +566,10 @@ public class CleanerAssignmentService {
                         assignment.getBooking()
                 );
 
-        Employee emp = assignment.getEmployee();
-        User empUser = emp != null ? emp.getUser() : null;
+        Employee employee = assignment.getEmployee();
+
+        User employeeUser =
+                employee != null ? employee.getUser() : null;
 
         return CleanerAssignmentResponse.builder()
                 .assignmentId(assignment.getId())
@@ -471,14 +579,27 @@ public class CleanerAssignmentService {
                 .startedAt(assignment.getStartedAt())
                 .completedAt(assignment.getCompletedAt())
                 .assignmentNote(assignment.getNote())
-                .employeeId(emp != null ? emp.getId() : null)
-                .employeeCode(emp != null ? emp.getEmployeeCode() : null)
-                .employeeName(empUser != null ? empUser.getFullName() : null)
-                .employeePhone(empUser != null ? empUser.getPhone() : null)
+                .employeeId(employee != null ? employee.getId() : null)
+                .employeeCode(
+                        employee != null ? employee.getEmployeeCode() : null
+                )
+                .employeeName(
+                        employeeUser != null
+                                ? employeeUser.getFullName()
+                                : null
+                )
+                .employeePhone(
+                        employeeUser != null
+                                ? employeeUser.getPhone()
+                                : null
+                )
                 .booking(bookingResponse)
                 .build();
     }
 
+    /**
+     * Tìm tài khoản Cleaner theo email đăng nhập.
+     */
     private User getUserByEmail(String email) {
 
         if (email == null || email.isBlank()) {
@@ -495,6 +616,9 @@ public class CleanerAssignmentService {
                 ));
     }
 
+    /**
+     * Kiểm tra vai trò Cleaner.
+     */
     private boolean isCleanerRole(String role) {
 
         if (role == null) {
@@ -509,6 +633,9 @@ public class CleanerAssignmentService {
                 || normalized.equals("ROLE_EMPLOYEE");
     }
 
+    /**
+     * Chuẩn hóa chuỗi trạng thái.
+     */
     private String normalizeStatus(String value) {
 
         return value == null
@@ -516,6 +643,9 @@ public class CleanerAssignmentService {
                 : value.trim().toUpperCase(Locale.ROOT);
     }
 
+    /**
+     * Tạo lỗi khi Assignment không thể chuyển trạng thái.
+     */
     private ResponseStatusException invalidAssignmentTransition(
             String currentStatus,
             String action
