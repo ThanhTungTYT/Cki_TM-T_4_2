@@ -163,6 +163,23 @@ public class PromotionRewardService {
             discount = discount.min(eligibleSubtotal);
         }
 
+        // Promotions that have redemption rows represent customer-specific vouchers.
+        // Validate and attach the customer's available redemption even when they are
+        // applying the voucher without redeeming Ccoin.
+        if (promotion != null && rewardRedemptionRepository.existsByPromotion_Id(promotion.getId())) {
+            var ownedVouchers = lockForUpdate
+                    ? rewardRedemptionRepository.findAvailableByUserAndPromotionForUpdate(userId, promotion.getId())
+                    : rewardRedemptionRepository.findByUser_IdAndPromotion_IdAndStatusOrderByRedeemedAtAsc(
+                            userId, promotion.getId(), "AVAILABLE");
+            voucher = ownedVouchers.stream()
+                    .filter(item -> item.getExpiresAt() == null || now.isBefore(item.getExpiresAt()))
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.FORBIDDEN,
+                            "Voucher này không thuộc tài khoản của bạn, đã được sử dụng, đang giữ cho đơn khác hoặc đã hết hạn."
+                    ));
+        }
+
         if (requested > 0) {
             policy = rewardPolicyRepository.findById(1L).orElse(null);
 
@@ -204,19 +221,6 @@ public class PromotionRewardService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage());
             }
 
-            if (promotion != null && rewardRedemptionRepository.existsByPromotion_Id(promotion.getId())) {
-                var ownedVouchers = lockForUpdate
-                        ? rewardRedemptionRepository.findAvailableByUserAndPromotionForUpdate(userId, promotion.getId())
-                        : rewardRedemptionRepository.findByUser_IdAndPromotion_IdAndStatusOrderByRedeemedAtAsc(
-                                userId, promotion.getId(), "AVAILABLE");
-                voucher = ownedVouchers.stream()
-                        .filter(item -> item.getExpiresAt() == null || now.isBefore(item.getExpiresAt()))
-                        .findFirst()
-                        .orElseThrow(() -> new ResponseStatusException(
-                                HttpStatus.FORBIDDEN,
-                                "Voucher này không thuộc tài khoản của bạn, đã được sử dụng, đang giữ cho đơn khác hoặc đã hết hạn."
-                        ));
-            }
             pointsDiscount = BigDecimal.valueOf(pointsUsed);
         }
 

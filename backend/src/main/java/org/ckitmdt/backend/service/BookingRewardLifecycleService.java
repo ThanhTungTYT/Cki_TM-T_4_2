@@ -63,14 +63,20 @@ public class BookingRewardLifecycleService {
     }
 
     private void releaseHeldVouchers(Booking booking) {
-        List<RewardRedemption> held = rewardRedemptionRepository
-                .findByBookingAndStatusForUpdate(booking.getId(), "HELD");
         LocalDateTime now = LocalDateTime.now();
-        for (RewardRedemption voucher : held) {
-            boolean expired = voucher.getExpiresAt() != null && !now.isBefore(voucher.getExpiresAt());
-            voucher.setStatus(expired ? "EXPIRED" : "AVAILABLE");
-            voucher.setBooking(null);
-            rewardRedemptionRepository.save(voucher);
+        for (String status : List.of("HELD", "USED")) {
+            List<RewardRedemption> vouchers = rewardRedemptionRepository
+                    .findByBookingAndStatusForUpdate(booking.getId(), status);
+            for (RewardRedemption voucher : vouchers) {
+                boolean expired = voucher.getExpiresAt() != null && !now.isBefore(voucher.getExpiresAt());
+                if (!expired && voucher.getPromotion() != null
+                        && voucher.getPromotion().getEndAt() != null) {
+                    expired = !now.isBefore(voucher.getPromotion().getEndAt());
+                }
+                voucher.setStatus(expired ? "EXPIRED" : "AVAILABLE");
+                voucher.setBooking(null);
+                rewardRedemptionRepository.save(voucher);
+            }
         }
     }
 
