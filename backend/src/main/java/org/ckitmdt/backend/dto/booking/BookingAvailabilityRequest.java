@@ -21,4 +21,6 @@ public class BookingAvailabilityRequest {
     @NotEmpty
     @Valid
     private List<BookingItemRequest> items;
+
+    private Long excludeBookingId;
 }
