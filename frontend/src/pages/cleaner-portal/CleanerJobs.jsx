@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bookingApi } from '../../services/api';
 import './CleanerJobs.css';
@@ -7,11 +6,20 @@ const STATUS_CONFIG = {
     PENDING_PAYMENT: { label: 'Chờ thanh toán', type: 'pending' },
     PENDING_PROVIDER: { label: 'Chờ nhà cung cấp', type: 'pending' },
     CONFIRMED: { label: 'Đã xác nhận', type: 'confirmed' },
-    ASSIGNED: { label: 'Đã phân công', type: 'assigned' },
+    ASSIGNED: { label: 'Chờ nhận việc', type: 'assigned' },
+    ACCEPTED: { label: 'Đã nhận việc', type: 'confirmed' },
     EN_ROUTE: { label: 'Đang di chuyển', type: 'progress' },
     IN_PROGRESS: { label: 'Đang thực hiện', type: 'progress' },
-    PENDING_COMPLETION: { label: 'Chờ nghiệm thu', type: 'waiting' },
+    WORK_SUBMITTED: {
+        label: 'Chờ xác nhận hoàn thành',
+        type: 'waiting'
+    },
+    PENDING_COMPLETION: {
+        label: 'Chờ nghiệm thu',
+        type: 'waiting'
+    },
     COMPLETED: { label: 'Hoàn thành', type: 'completed' },
+    DECLINED: { label: 'Đã từ chối', type: 'cancelled' },
     CANCELLED: { label: 'Đã hủy', type: 'cancelled' },
     REJECTED: { label: 'Bị từ chối', type: 'cancelled' },
     EXPIRED: { label: 'Hết hạn', type: 'cancelled' }
@@ -59,13 +67,25 @@ function getStatus(status) {
 function getFilterGroup(status) {
     const key = (status || '').toUpperCase();
 
-    if (key === 'COMPLETED') return 'COMPLETED';
+    if (key === 'COMPLETED') {
+        return 'COMPLETED';
+    }
 
-    if (['CANCELLED', 'REJECTED', 'EXPIRED'].includes(key)) {
+    if (
+        ['CANCELLED', 'REJECTED', 'EXPIRED', 'DECLINED'].includes(key)
+    ) {
         return 'CANCELLED';
     }
 
-    if (['EN_ROUTE', 'IN_PROGRESS', 'PENDING_COMPLETION'].includes(key)) {
+    if (
+        [
+            'ACCEPTED',
+            'EN_ROUTE',
+            'IN_PROGRESS',
+            'WORK_SUBMITTED',
+            'PENDING_COMPLETION'
+        ].includes(key)
+    ) {
         return 'IN_PROGRESS';
     }
 
@@ -80,23 +100,32 @@ function CleanerJobs() {
     const [filter, setFilter] = useState('ALL');
     const [expandedId, setExpandedId] = useState(null);
 
-    // Quản lý trạng thái thao tác trên từng đơn
     const [processingId, setProcessingId] = useState(null);
 
-    // Thông báo kết quả thao tác
     const [actionFeedback, setActionFeedback] = useState({
         bookingId: null,
         message: '',
         type: ''
     });
 
-    // Hàm chỉ gọi API và trả về dữ liệu
+    // Lấy Assignment của Cleaner đang đăng nhập.
+    // Mỗi Booking được gắn với Assignment tương ứng của Cleaner.
     const fetchBookings = useCallback(async () => {
-        const data = await bookingApi.getCleanerBookings();
-        return Array.isArray(data) ? data : [];
+        const assignments = await bookingApi.getCleanerAssignments();
+
+        if (!Array.isArray(assignments)) {
+            return [];
+        }
+
+        return assignments
+            .filter((assignment) => assignment?.booking)
+            .map((assignment) => ({
+                ...assignment.booking,
+                cleanerAssignment: assignment
+            }));
     }, []);
 
-    // Tải lại danh sách khi người dùng chủ động yêu cầu
+    // Tải lại danh sách công việc.
     const loadBookings = useCallback(async () => {
         setLoading(true);
         setError('');
@@ -114,7 +143,6 @@ function CleanerJobs() {
     }, [fetchBookings]);
 
     // Tải dữ liệu lần đầu.
-    // Các setState chỉ chạy trong callback bất đồng bộ của Promise.
     useEffect(() => {
         let cancelled = false;
 
@@ -142,12 +170,23 @@ function CleanerJobs() {
         };
     }, [fetchBookings]);
 
-    // Xử lý các thao tác cập nhật trạng thái đơn hàng
+    // Xử lý các thao tác trên Assignment của Cleaner.
     async function handleBookingAction(booking, action) {
         if (processingId !== null) return;
 
+        const assignment = booking.cleanerAssignment;
+
+        if (!assignment?.assignmentId) {
+            setActionFeedback({
+                bookingId: booking.id,
+                message: 'Không tìm thấy phân công của bạn.',
+                type: 'error'
+            });
+            return;
+        }
+
         const actionMessages = {
-            START_TRAVEL: 'Đã bắt đầu di chuyển đến địa điểm làm việc.',
+            ACCEPT: 'Đã nhận công việc.',
             START_JOB: 'Đã bắt đầu thực hiện công việc.',
             SUBMIT_COMPLETION:
                 'Đã gửi yêu cầu xác nhận hoàn thành cho khách hàng.'
@@ -162,25 +201,10 @@ function CleanerJobs() {
         });
 
         try {
-            const updatedBooking = await bookingApi.executeAction(
-                booking.id,
-                {
-                    action,
-                    version: booking.version
-                }
+            await bookingApi.executeCleanerAssignmentAction(
+                assignment.assignmentId,
+                action
             );
-
-            if (updatedBooking && updatedBooking.id != null) {
-                setBookings((currentBookings) =>
-                    currentBookings.map((item) =>
-                        item.id === updatedBooking.id
-                            ? updatedBooking
-                            : item
-                    )
-                );
-            } else {
-                await loadBookings();
-            }
 
             setActionFeedback({
                 bookingId: booking.id,
@@ -188,28 +212,50 @@ function CleanerJobs() {
                 type: 'success'
             });
 
+            await loadBookings();
         } catch (err) {
             setActionFeedback({
                 bookingId: booking.id,
                 message:
-                    err.message || 'Không thể cập nhật trạng thái công việc.',
+                    err.message ||
+                    'Không thể cập nhật trạng thái công việc.',
                 type: 'error'
             });
 
-            // Tải lại dữ liệu mới nhất nếu thao tác thất bại
             await loadBookings();
-
         } finally {
             setProcessingId(null);
         }
     }
 
+    // Cleaner từ chối nhận phân công.
     async function handleDeclineAssignment(booking) {
         if (processingId !== null) return;
-        const note = window.prompt('Nhập lý do từ chối công việc này:');
+
+        const assignment = booking.cleanerAssignment;
+
+        if (!assignment?.assignmentId) {
+            setActionFeedback({
+                bookingId: booking.id,
+                message: 'Không tìm thấy phân công của bạn.',
+                type: 'error'
+            });
+            return;
+        }
+
+        const note = window.prompt(
+            'Nhập lý do từ chối công việc này:'
+        );
+
         if (note == null) return;
 
+        if (!note.trim()) {
+            window.alert('Vui lòng nhập lý do từ chối.');
+            return;
+        }
+
         setProcessingId(booking.id);
+
         setActionFeedback({
             bookingId: booking.id,
             message: '',
@@ -217,19 +263,11 @@ function CleanerJobs() {
         });
 
         try {
-            const myAssignment = (booking.assignments || []).find(
-                (a) => (a.assignmentStatus || a.status) !== 'CANCELLED' && (a.assignmentStatus || a.status) !== 'DECLINED'
+            await bookingApi.executeCleanerAssignmentAction(
+                assignment.assignmentId,
+                'DECLINE',
+                note.trim()
             );
-
-            if (myAssignment?.assignmentId || myAssignment?.id) {
-                await bookingApi.executeCleanerAssignmentAction(
-                    myAssignment.assignmentId || myAssignment.id,
-                    'DECLINE',
-                    note
-                );
-            } else {
-                throw new Error('Không tìm thấy thông tin phân công của bạn.');
-            }
 
             setActionFeedback({
                 bookingId: booking.id,
@@ -241,42 +279,61 @@ function CleanerJobs() {
         } catch (err) {
             setActionFeedback({
                 bookingId: booking.id,
-                message: err.message || 'Không thể từ chối phân công.',
+                message:
+                    err.message ||
+                    'Không thể từ chối phân công.',
                 type: 'error'
             });
+
             await loadBookings();
         } finally {
             setProcessingId(null);
         }
     }
 
-    // Thống kê công việc
+    // Thống kê công việc theo trạng thái Assignment.
     const stats = useMemo(() => {
         return {
             total: bookings.length,
 
             upcoming: bookings.filter(
-                (b) => getFilterGroup(b.status) === 'UPCOMING'
+                (booking) =>
+                    getFilterGroup(
+                        booking.cleanerAssignment?.assignmentStatus ||
+                        booking.status
+                    ) === 'UPCOMING'
             ).length,
 
             inProgress: bookings.filter(
-                (b) => getFilterGroup(b.status) === 'IN_PROGRESS'
+                (booking) =>
+                    getFilterGroup(
+                        booking.cleanerAssignment?.assignmentStatus ||
+                        booking.status
+                    ) === 'IN_PROGRESS'
             ).length,
 
             completed: bookings.filter(
-                (b) => getFilterGroup(b.status) === 'COMPLETED'
+                (booking) =>
+                    getFilterGroup(
+                        booking.cleanerAssignment?.assignmentStatus ||
+                        booking.status
+                    ) === 'COMPLETED'
             ).length
         };
     }, [bookings]);
 
-    // Tìm kiếm và lọc công việc
+    // Tìm kiếm và lọc công việc.
     const filteredBookings = useMemo(() => {
         const keyword = search.trim().toLowerCase();
 
         return bookings.filter((booking) => {
+            const assignmentStatus =
+                booking.cleanerAssignment?.assignmentStatus ||
+                booking.status;
+
             const matchFilter =
                 filter === 'ALL' ||
-                getFilterGroup(booking.status) === filter;
+                getFilterGroup(assignmentStatus) === filter;
 
             const serviceNames = (booking.items || [])
                 .map((item) => item.serviceName || '')
@@ -289,7 +346,9 @@ function CleanerJobs() {
                 booking.fullAddress,
                 booking.partnerName,
                 serviceNames
-            ].join(' ').toLowerCase();
+            ]
+                .join(' ')
+                .toLowerCase();
 
             const matchSearch =
                 !keyword || searchableText.includes(keyword);
@@ -357,6 +416,7 @@ function CleanerJobs() {
             <div className="cj-toolbar">
                 <div className="cj-search">
                     <span>⌕</span>
+
                     <input
                         type="text"
                         placeholder="Tìm mã đơn, khách hàng, địa chỉ..."
@@ -370,7 +430,9 @@ function CleanerJobs() {
                         <button
                             type="button"
                             key={item.value}
-                            className={filter === item.value ? 'active' : ''}
+                            className={
+                                filter === item.value ? 'active' : ''
+                            }
                             onClick={() => setFilter(item.value)}
                         >
                             {item.label}
@@ -392,7 +454,11 @@ function CleanerJobs() {
                 <div className="cj-error">
                     <strong>Không tải được công việc</strong>
                     <p>{error}</p>
-                    <button type="button" onClick={loadBookings}>
+
+                    <button
+                        type="button"
+                        onClick={loadBookings}
+                    >
                         Thử lại
                     </button>
                 </div>
@@ -433,7 +499,13 @@ function CleanerJobs() {
             {!loading && !error && filteredBookings.length > 0 && (
                 <div className="cj-booking-list">
                     {filteredBookings.map((booking) => {
-                        const status = getStatus(booking.status);
+                        const assignmentStatus = String(
+                            booking.cleanerAssignment?.assignmentStatus ||
+                            booking.status ||
+                            ''
+                        ).toUpperCase();
+
+                        const status = getStatus(assignmentStatus);
                         const expanded = expandedId === booking.id;
 
                         return (
@@ -444,11 +516,14 @@ function CleanerJobs() {
                                 <div className="cj-card-top">
                                     <div>
                                         <span className="cj-booking-code">
-                                            MÃ ĐƠN: {booking.bookingCode || `#${booking.id}`}
+                                            MÃ ĐƠN:{' '}
+                                            {booking.bookingCode ||
+                                                `#${booking.id}`}
                                         </span>
 
                                         <h3>
-                                            {booking.customerName || 'Khách hàng'}
+                                            {booking.customerName ||
+                                                'Khách hàng'}
                                         </h3>
                                     </div>
 
@@ -466,7 +541,9 @@ function CleanerJobs() {
                                         </span>
 
                                         <strong>
-                                            {formatDate(booking.scheduledStart)}
+                                            {formatDate(
+                                                booking.scheduledStart
+                                            )}
                                         </strong>
                                     </div>
 
@@ -476,7 +553,8 @@ function CleanerJobs() {
                                         </span>
 
                                         <strong>
-                                            {booking.fullAddress || 'Chưa có địa chỉ'}
+                                            {booking.fullAddress ||
+                                                'Chưa có địa chỉ'}
                                         </strong>
                                     </div>
 
@@ -488,7 +566,10 @@ function CleanerJobs() {
                                         <strong>
                                             {booking.items?.length
                                                 ? booking.items
-                                                    .map((item) => item.serviceName)
+                                                    .map(
+                                                        (item) =>
+                                                            item.serviceName
+                                                    )
                                                     .filter(Boolean)
                                                     .join(', ')
                                                 : 'Chưa có thông tin dịch vụ'}
@@ -501,7 +582,9 @@ function CleanerJobs() {
                                         </span>
 
                                         <strong className="cj-amount">
-                                            {formatMoney(booking.totalAmount)}
+                                            {formatMoney(
+                                                booking.totalAmount
+                                            )}
                                         </strong>
                                     </div>
                                 </div>
@@ -509,70 +592,62 @@ function CleanerJobs() {
                                 {/* XEM THÔNG TIN */}
                                 <div className="cj-card-bottom">
                                     <span>
-                                        {booking.items?.length || 0} hạng mục dịch vụ
+                                        {booking.items?.length || 0}{' '}
+                                        hạng mục dịch vụ
                                     </span>
 
                                     <button
                                         type="button"
                                         onClick={() =>
                                             setExpandedId(
-                                                expanded ? null : booking.id
+                                                expanded
+                                                    ? null
+                                                    : booking.id
                                             )
                                         }
                                     >
-                                        {expanded ? 'Thu gọn' : 'Xem thông tin'}
-                                        <span>{expanded ? '⌃' : '⌄'}</span>
+                                        {expanded
+                                            ? 'Thu gọn'
+                                            : 'Xem thông tin'}
+
+                                        <span>
+                                            {expanded ? '⌃' : '⌄'}
+                                        </span>
                                     </button>
                                 </div>
 
-                                {/* CÁC NÚT THAO TÁC */}
+                                {/* CÁC NÚT THAO TÁC CỦA CLEANER */}
                                 <div className="cj-actions">
-                                    {String(booking.status).toUpperCase() === 'CONFIRMED' && (
-                                        <p className="cj-waiting-confirmation" style={{ color: '#2563eb' }}>
-                                            Đã được phân công. Chờ nhà cung cấp bổ sung đủ đội ngũ nhân sự trước khi thực hiện.
-                                        </p>
-                                    )}
-
-                                    {String(booking.status).toUpperCase() === 'ASSIGNED' && (
+                                    {assignmentStatus === 'ASSIGNED' && (
                                         <>
                                             <button
                                                 type="button"
-                                                className="cj-action-btn cj-action-travel"
-                                                disabled={processingId !== null}
-                                                onClick={() =>
-                                                    handleBookingAction(
-                                                        booking,
-                                                        'START_TRAVEL'
-                                                    )
-                                                }
-                                            >
-                                                {processingId === booking.id
-                                                    ? 'Đang xử lý...'
-                                                    : 'Bắt đầu di chuyển'}
-                                            </button>
-
-                                            <button
-                                                type="button"
                                                 className="cj-action-btn cj-action-start"
-                                                disabled={processingId !== null}
+                                                disabled={
+                                                    processingId !== null
+                                                }
                                                 onClick={() =>
                                                     handleBookingAction(
                                                         booking,
-                                                        'START_JOB'
+                                                        'ACCEPT'
                                                     )
                                                 }
                                             >
                                                 {processingId === booking.id
                                                     ? 'Đang xử lý...'
-                                                    : 'Bắt đầu làm ngay'}
+                                                    : 'Nhận việc'}
                                             </button>
 
                                             <button
                                                 type="button"
                                                 className="cj-action-btn cj-action-decline"
-                                                disabled={processingId !== null}
+                                                disabled={
+                                                    processingId !== null
+                                                }
                                                 onClick={() =>
-                                                    handleDeclineAssignment(booking)
+                                                    handleDeclineAssignment(
+                                                        booking
+                                                    )
                                                 }
                                             >
                                                 Từ chối
@@ -580,11 +655,13 @@ function CleanerJobs() {
                                         </>
                                     )}
 
-                                    {String(booking.status).toUpperCase() === 'EN_ROUTE' && (
+                                    {assignmentStatus === 'ACCEPTED' && (
                                         <button
                                             type="button"
                                             className="cj-action-btn cj-action-start"
-                                            disabled={processingId !== null}
+                                            disabled={
+                                                processingId !== null
+                                            }
                                             onClick={() =>
                                                 handleBookingAction(
                                                     booking,
@@ -598,11 +675,13 @@ function CleanerJobs() {
                                         </button>
                                     )}
 
-                                    {String(booking.status).toUpperCase() === 'IN_PROGRESS' && (
+                                    {assignmentStatus === 'IN_PROGRESS' && (
                                         <button
                                             type="button"
                                             className="cj-action-btn cj-action-complete"
-                                            disabled={processingId !== null}
+                                            disabled={
+                                                processingId !== null
+                                            }
                                             onClick={() =>
                                                 handleBookingAction(
                                                     booking,
@@ -616,9 +695,22 @@ function CleanerJobs() {
                                         </button>
                                     )}
 
-                                    {String(booking.status).toUpperCase() === 'PENDING_COMPLETION' && (
+                                    {assignmentStatus === 'WORK_SUBMITTED' && (
                                         <p className="cj-waiting-confirmation">
-                                            Đã báo hoàn thành, đang chờ khách hàng xác nhận.
+                                            Bạn đã báo hoàn thành, đang chờ
+                                            khách hàng xác nhận.
+                                        </p>
+                                    )}
+
+                                    {assignmentStatus === 'DECLINED' && (
+                                        <p className="cj-waiting-confirmation">
+                                            Bạn đã từ chối phân công này.
+                                        </p>
+                                    )}
+
+                                    {assignmentStatus === 'COMPLETED' && (
+                                        <p className="cj-waiting-confirmation">
+                                            Công việc đã hoàn thành.
                                         </p>
                                     )}
 
@@ -641,6 +733,7 @@ function CleanerJobs() {
                                         <div className="cj-detail-grid">
                                             <div>
                                                 <span>Người nhận</span>
+
                                                 <strong>
                                                     {booking.receiverName ||
                                                         booking.customerName ||
@@ -650,6 +743,7 @@ function CleanerJobs() {
 
                                             <div>
                                                 <span>Số điện thoại</span>
+
                                                 <strong>
                                                     {booking.receiverPhone ||
                                                         booking.customerPhone ||
@@ -659,15 +753,21 @@ function CleanerJobs() {
 
                                             <div>
                                                 <span>Nhà cung cấp</span>
+
                                                 <strong>
                                                     {booking.partnerName || '—'}
                                                 </strong>
                                             </div>
 
                                             <div>
-                                                <span>Thời gian kết thúc dự kiến</span>
+                                                <span>
+                                                    Thời gian kết thúc dự kiến
+                                                </span>
+
                                                 <strong>
-                                                    {formatDate(booking.scheduledEnd)}
+                                                    {formatDate(
+                                                        booking.scheduledEnd
+                                                    )}
                                                 </strong>
                                             </div>
                                         </div>
@@ -683,18 +783,21 @@ function CleanerJobs() {
                                                     >
                                                         <div>
                                                             <strong>
-                                                                {item.serviceName || 'Dịch vụ'}
+                                                                {item.serviceName ||
+                                                                    'Dịch vụ'}
                                                             </strong>
 
                                                             {item.packageName && (
                                                                 <span>
-                                                                    Gói: {item.packageName}
+                                                                    Gói:{' '}
+                                                                    {item.packageName}
                                                                 </span>
                                                             )}
 
                                                             {item.note && (
                                                                 <span>
-                                                                    Ghi chú: {item.note}
+                                                                    Ghi chú:{' '}
+                                                                    {item.note}
                                                                 </span>
                                                             )}
                                                         </div>
@@ -707,32 +810,68 @@ function CleanerJobs() {
                                             </div>
                                         ) : (
                                             <p className="cj-no-items">
-                                                Không có thông tin chi tiết dịch vụ.
+                                                Không có thông tin chi tiết
+                                                dịch vụ.
                                             </p>
                                         )}
 
                                         {booking.assignments?.length > 1 && (
                                             <>
-                                                <h4>Đội ngũ cùng thực hiện ({booking.assignments.length} người)</h4>
+                                                <h4>
+                                                    Đội ngũ cùng thực hiện (
+                                                    {booking.assignments.length}{' '}
+                                                    người)
+                                                </h4>
+
                                                 <div className="cj-items">
-                                                    {booking.assignments.map((asg) => (
-                                                        <div className="cj-item" key={asg.assignmentId || asg.id}>
-                                                            <div>
-                                                                <strong>{asg.employeeName || asg.employeeCode || 'Nhân viên'}</strong>
-                                                                {asg.employeePhone && <span> — SĐT: {asg.employeePhone}</span>}
+                                                    {booking.assignments.map(
+                                                        (assignment) => (
+                                                            <div
+                                                                className="cj-item"
+                                                                key={
+                                                                    assignment.assignmentId ||
+                                                                    assignment.id
+                                                                }
+                                                            >
+                                                                <div>
+                                                                    <strong>
+                                                                        {assignment.employeeName ||
+                                                                            assignment.employeeCode ||
+                                                                            'Nhân viên'}
+                                                                    </strong>
+
+                                                                    {assignment.employeePhone && (
+                                                                        <span>
+                                                                            {' '}
+                                                                            — SĐT:{' '}
+                                                                            {assignment.employeePhone}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+
+                                                                <span
+                                                                    style={{
+                                                                        fontSize:
+                                                                            '13px',
+                                                                        fontWeight: 600
+                                                                    }}
+                                                                >
+                                                                    {assignment.assignmentStatus ||
+                                                                        assignment.status ||
+                                                                        'Đã giao'}
+                                                                </span>
                                                             </div>
-                                                            <span style={{ fontSize: '13px', fontWeight: 600 }}>
-                                                                {asg.assignmentStatus || asg.status || 'Đã giao'}
-                                                            </span>
-                                                        </div>
-                                                    ))}
+                                                        )
+                                                    )}
                                                 </div>
                                             </>
                                         )}
 
                                         {booking.customerNote && (
                                             <>
-                                                <h4>Ghi chú của khách hàng</h4>
+                                                <h4>
+                                                    Ghi chú của khách hàng
+                                                </h4>
 
                                                 <p className="cj-customer-note">
                                                     {booking.customerNote}
