@@ -1,3 +1,4 @@
+
 package org.ckitmdt.backend.controller.reward;
 
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ import java.util.List;
 @RequestMapping("/api/rewards")
 @RequiredArgsConstructor
 public class RewardController {
+
     private final UserRepository userRepository;
     private final RewardAccountRepository rewardAccountRepository;
     private final RewardPolicyRepository rewardPolicyRepository;
@@ -58,7 +60,8 @@ public class RewardController {
                 .findByUser_Id(user.getId())
                 .orElse(null);
 
-        RewardPolicy policy = rewardPolicyRepository.findById(1L).orElse(null);
+        RewardPolicy policy = rewardPolicyRepository.findById(1L)
+                .orElse(null);
 
         List<RewardTransactionResponse> transactions = account == null
                 ? List.of()
@@ -68,13 +71,11 @@ public class RewardController {
                 .map(this::toTransactionResponse)
                 .toList();
 
-        RewardPolicyResponse policyResponse = toPolicyResponse(policy);
-
         RewardWalletResponse response = new RewardWalletResponse(
                 account == null ? 0 : zero(account.getBalance()),
                 account == null ? 0 : zero(account.getTotalEarned()),
                 account == null ? 0 : zero(account.getTotalRedeemed()),
-                policyResponse,
+                toPolicyResponse(policy),
                 transactions
         );
 
@@ -82,13 +83,17 @@ public class RewardController {
     }
 
     @GetMapping("/vouchers")
-    public ResponseEntity<List<VoucherResponse>> getMyVouchers(Authentication authentication) {
+    public ResponseEntity<List<VoucherResponse>> getMyVouchers(
+            Authentication authentication
+    ) {
         User user = requireCustomer(authentication);
+
         List<VoucherResponse> vouchers = rewardRedemptionRepository
                 .findByUser_IdOrderByRedeemedAtDesc(user.getId())
                 .stream()
                 .map(redemption -> {
                     var promotion = redemption.getPromotion();
+
                     return new VoucherResponse(
                             redemption.getId(),
                             promotion.getCode(),
@@ -96,26 +101,45 @@ public class RewardController {
                             promotion.getDescription(),
                             promotion.getDiscountType(),
                             promotion.getDiscountValue(),
-                            redemption.getPointsUsed() == null ? 0 : redemption.getPointsUsed(),
+                            redemption.getPointsUsed() == null
+                                    ? 0
+                                    : redemption.getPointsUsed(),
                             redemption.getStatus(),
                             redemption.getRedeemedAt(),
                             redemption.getExpiresAt(),
-                            redemption.getBooking() == null ? null : redemption.getBooking().getId()
+                            redemption.getBooking() == null
+                                    ? null
+                                    : redemption.getBooking().getId()
                     );
                 })
                 .toList();
+
         return ResponseEntity.ok(vouchers);
     }
 
     private User requireCustomer(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Vui lòng đăng nhập để xem voucher.");
+        if (authentication == null
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Vui lòng đăng nhập để xem voucher."
+            );
         }
+
         User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Không tìm thấy tài khoản đăng nhập."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Không tìm thấy tài khoản đăng nhập."
+                ));
+
         if (!"CUSTOMER".equalsIgnoreCase(user.getRole())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ khách hàng được xem ví voucher.");
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ khách hàng được xem ví voucher."
+            );
         }
+
         return user;
     }
 
@@ -133,11 +157,30 @@ public class RewardController {
     }
 
     private RewardPolicyResponse toPolicyResponse(RewardPolicy policy) {
+        if (policy == null) {
+            return new RewardPolicyResponse(
+                    BigDecimal.valueOf(10000),
+                    1,
+                    BigDecimal.valueOf(100),
+                    BigDecimal.valueOf(20),
+                    100,
+                    5000,
+                    12,
+                    true,
+                    false
+            );
+        }
+
         return new RewardPolicyResponse(
-                BigDecimal.valueOf(1000), 1, BigDecimal.ONE,
-                BigDecimal.valueOf(100), 1000, Integer.MAX_VALUE,
-                policy == null ? 0 : policy.getExpiryMonths(), true,
-                policy == null || Boolean.TRUE.equals(policy.getAllowCombineWithPromotion())
+                policy.getEarnAmountStep(),
+                policy.getEarnPoints(),
+                policy.getPointValue(),
+                policy.getMaxRedeemPercent(),
+                policy.getMinRedeemPoints(),
+                policy.getMaxRedeemPoints(),
+                policy.getExpiryMonths(),
+                Boolean.TRUE.equals(policy.getEnabled()),
+                Boolean.TRUE.equals(policy.getAllowCombineWithPromotion())
         );
     }
 
@@ -151,7 +194,8 @@ public class RewardController {
             int totalRedeemed,
             RewardPolicyResponse policy,
             List<RewardTransactionResponse> transactions
-    ) {}
+    ) {
+    }
 
     public record RewardPolicyResponse(
             BigDecimal earnAmountStep,
@@ -163,7 +207,8 @@ public class RewardController {
             Integer expiryMonths,
             Boolean enabled,
             Boolean allowCombineWithPromotion
-    ) {}
+    ) {
+    }
 
     public record RewardTransactionResponse(
             Long id,
@@ -172,7 +217,8 @@ public class RewardController {
             String description,
             LocalDateTime createdAt,
             LocalDateTime expiresAt
-    ) {}
+    ) {
+    }
 
     public record VoucherResponse(
             Long id,
@@ -186,5 +232,6 @@ public class RewardController {
             LocalDateTime redeemedAt,
             LocalDateTime expiresAt,
             Long bookingId
-    ) {}
+    ) {
+    }
 }

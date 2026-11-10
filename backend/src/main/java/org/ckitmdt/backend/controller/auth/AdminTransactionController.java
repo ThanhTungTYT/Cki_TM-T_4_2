@@ -4,6 +4,7 @@ package org.ckitmdt.backend.controller.auth;
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.CancellationRefund;
+import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.entity.Payment;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.BookingRepository;
@@ -47,7 +48,10 @@ public class AdminTransactionController {
 
         for (CancellationRefund refund : refundRepository.findAll()) {
             if (refund.getBooking() != null) {
-                refundsByBooking.put(refund.getBooking().getId(), refund);
+                refundsByBooking.put(
+                        refund.getBooking().getId(),
+                        refund
+                );
             }
         }
 
@@ -55,17 +59,34 @@ public class AdminTransactionController {
 
         for (Payment payment : payments) {
             Booking booking = payment.getBooking();
-            User customer = booking == null ? null : booking.getCustomer();
+            User customer = booking == null
+                    ? null
+                    : booking.getCustomer();
 
             Map<String, Object> item = new LinkedHashMap<>();
 
             item.put("id", payment.getId());
             item.put("bookingId", booking == null ? null : booking.getId());
-            item.put("bookingCode", booking == null ? "" : booking.getBookingCode());
-            item.put("bookingStatus", booking == null ? "" : booking.getStatus());
-            item.put("customerName", customer == null ? "" : customer.getFullName());
-            item.put("email", customer == null ? "" : customer.getEmail());
-            item.put("phone", customer == null ? "" : customer.getPhone());
+            item.put(
+                    "bookingCode",
+                    booking == null ? "" : booking.getBookingCode()
+            );
+            item.put(
+                    "bookingStatus",
+                    booking == null ? "" : booking.getStatus()
+            );
+            item.put(
+                    "customerName",
+                    customer == null ? "" : customer.getFullName()
+            );
+            item.put(
+                    "email",
+                    customer == null ? "" : customer.getEmail()
+            );
+            item.put(
+                    "phone",
+                    customer == null ? "" : customer.getPhone()
+            );
             item.put(
                     "partnerName",
                     booking == null || booking.getPartner() == null
@@ -94,7 +115,10 @@ public class AdminTransactionController {
                     ? null
                     : refundsByBooking.get(booking.getId());
 
-            item.put("refundStatus", refund == null ? null : refund.getStatus());
+            item.put(
+                    "refundStatus",
+                    refund == null ? null : refund.getStatus()
+            );
             item.put(
                     "approvedRefundAmount",
                     refund == null ? null : refund.getApprovedAmount()
@@ -116,27 +140,7 @@ public class AdminTransactionController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate toDate) {
 
-        if ((fromDate == null) != (toDate == null)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc."
-            );
-        }
-
-        if (fromDate != null && fromDate.isAfter(toDate)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Ngày bắt đầu không được sau ngày kết thúc."
-            );
-        }
-
-        if (fromDate != null
-                && ChronoUnit.DAYS.between(fromDate, toDate) > 365) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Khoảng thời gian không được vượt quá 366 ngày."
-            );
-        }
+        validateDateRange(fromDate, toDate);
 
         LocalDateTime start = fromDate == null
                 ? null
@@ -158,6 +162,7 @@ public class AdminTransactionController {
 
         for (Payment payment : payments) {
             String status = upper(payment.getStatus());
+
             LocalDateTime date = payment.getPaidAt() != null
                     ? payment.getPaidAt()
                     : payment.getCreatedAt();
@@ -203,10 +208,12 @@ public class AdminTransactionController {
             BigDecimal pointsDiscount = money(booking.getPointsDiscount());
             BigDecimal total = money(booking.getTotalAmount());
 
-            BigDecimal derivedFee = total
-                    .subtract(subtotal)
-                    .add(discount)
-                    .add(pointsDiscount);
+            BigDecimal derivedFee = calculateDerivedPlatformFee(
+                    subtotal,
+                    discount,
+                    pointsDiscount,
+                    total
+            );
 
             completedBookingCount++;
             completedBookingTotal = completedBookingTotal.add(total);
@@ -275,6 +282,237 @@ public class AdminTransactionController {
         );
 
         return result;
+    }
+
+    @GetMapping("/provider-reconciliation")
+    @Transactional(readOnly = true)
+    public Map<String, Object> getProviderReconciliation(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate fromDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate toDate) {
+
+        validateDateRange(fromDate, toDate);
+
+        LocalDateTime start = fromDate == null
+                ? null
+                : fromDate.atStartOfDay();
+
+        LocalDateTime end = toDate == null
+                ? null
+                : toDate.plusDays(1).atStartOfDay();
+
+        List<Booking> bookings = bookingRepository.findAll(
+                Sort.by(Sort.Direction.DESC, "completedAt")
+        );
+
+        Map<Long, CancellationRefund> refundsByBooking = new HashMap<>();
+
+        for (CancellationRefund refund : refundRepository.findAll()) {
+            if (refund.getBooking() != null) {
+                refundsByBooking.put(
+                        refund.getBooking().getId(),
+                        refund
+                );
+            }
+        }
+
+        Map<Long, Map<String, Object>> providersById =
+                new LinkedHashMap<>();
+
+        long completedBookingCount = 0;
+        BigDecimal totalServiceValue = BigDecimal.ZERO;
+        BigDecimal totalApprovedRefundAmount = BigDecimal.ZERO;
+        BigDecimal totalTransferredRefundAmount = BigDecimal.ZERO;
+
+        for (Booking booking : bookings) {
+            if (!"COMPLETED".equalsIgnoreCase(booking.getStatus())) {
+                continue;
+            }
+
+            if (!inRange(booking.getCompletedAt(), start, end)) {
+                continue;
+            }
+
+            Partner partner = booking.getPartner();
+
+            if (partner == null || partner.getId() == null) {
+                continue;
+            }
+
+            BigDecimal subtotal = money(booking.getSubtotal());
+            BigDecimal discount = money(booking.getDiscountAmount());
+            BigDecimal pointsDiscount = money(booking.getPointsDiscount());
+            BigDecimal total = money(booking.getTotalAmount());
+
+            BigDecimal derivedFee = calculateDerivedPlatformFee(
+                    subtotal,
+                    discount,
+                    pointsDiscount,
+                    total
+            );
+
+            CancellationRefund refund = refundsByBooking.get(booking.getId());
+
+            String refundStatus = refund == null
+                    ? null
+                    : refund.getStatus();
+
+            BigDecimal approvedRefund = BigDecimal.ZERO;
+            BigDecimal transferredRefund = BigDecimal.ZERO;
+
+            if (refund != null && "APPROVED".equalsIgnoreCase(refundStatus)) {
+                approvedRefund = money(refund.getApprovedAmount());
+
+                boolean hasTransferProof =
+                        refund.getTransferredAt() != null
+                                && refund.getTransferEvidenceUrl() != null
+                                && !refund.getTransferEvidenceUrl().trim().isEmpty();
+
+                if (hasTransferProof) {
+                    transferredRefund = approvedRefund;
+                }
+            }
+
+            Map<String, Object> provider = providersById.get(partner.getId());
+
+            if (provider == null) {
+                provider = new LinkedHashMap<>();
+                provider.put("partnerId", partner.getId());
+                provider.put("partnerName", partner.getBusinessName());
+                provider.put("partnerStatus", partner.getStatus());
+                provider.put("completedBookingCount", 0L);
+                provider.put("serviceValue", BigDecimal.ZERO);
+                provider.put("derivedPlatformFee", BigDecimal.ZERO);
+                provider.put("approvedRefundAmount", BigDecimal.ZERO);
+                provider.put("transferredRefundAmount", BigDecimal.ZERO);
+                provider.put(
+                        "provisionalValueAfterApprovedRefunds",
+                        BigDecimal.ZERO
+                );
+                provider.put("bookings", new ArrayList<Map<String, Object>>());
+
+                providersById.put(partner.getId(), provider);
+            }
+
+            long providerBookingCount =
+                    ((Number) provider.get("completedBookingCount")).longValue();
+
+            BigDecimal providerServiceValue =
+                    money((BigDecimal) provider.get("serviceValue"));
+
+            BigDecimal providerDerivedFee =
+                    money((BigDecimal) provider.get("derivedPlatformFee"));
+
+            BigDecimal providerApprovedRefund =
+                    money((BigDecimal) provider.get("approvedRefundAmount"));
+
+            BigDecimal providerTransferredRefund =
+                    money((BigDecimal) provider.get("transferredRefundAmount"));
+
+            providerBookingCount++;
+            providerServiceValue = providerServiceValue.add(subtotal);
+            providerDerivedFee = providerDerivedFee.add(derivedFee);
+            providerApprovedRefund = providerApprovedRefund.add(approvedRefund);
+            providerTransferredRefund =
+                    providerTransferredRefund.add(transferredRefund);
+
+            provider.put("completedBookingCount", providerBookingCount);
+            provider.put("serviceValue", providerServiceValue);
+            provider.put("derivedPlatformFee", providerDerivedFee);
+            provider.put("approvedRefundAmount", providerApprovedRefund);
+            provider.put("transferredRefundAmount", providerTransferredRefund);
+            provider.put(
+                    "provisionalValueAfterApprovedRefunds",
+                    providerServiceValue.subtract(providerApprovedRefund)
+            );
+
+            Map<String, Object> bookingItem = new LinkedHashMap<>();
+
+            bookingItem.put("bookingId", booking.getId());
+            bookingItem.put("bookingCode", booking.getBookingCode());
+            bookingItem.put("completedAt", booking.getCompletedAt());
+            bookingItem.put("serviceValue", subtotal);
+            bookingItem.put("bookingTotal", total);
+            bookingItem.put("derivedPlatformFee", derivedFee);
+            bookingItem.put("approvedRefundAmount", approvedRefund);
+            bookingItem.put("transferredRefundAmount", transferredRefund);
+            bookingItem.put("refundStatus", refundStatus);
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> providerBookings =
+                    (List<Map<String, Object>>) provider.get("bookings");
+
+            providerBookings.add(bookingItem);
+
+            completedBookingCount++;
+            totalServiceValue = totalServiceValue.add(subtotal);
+            totalApprovedRefundAmount =
+                    totalApprovedRefundAmount.add(approvedRefund);
+            totalTransferredRefundAmount =
+                    totalTransferredRefundAmount.add(transferredRefund);
+        }
+
+        List<Map<String, Object>> providerList =
+                new ArrayList<>(providersById.values());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        result.put("fromDate", fromDate);
+        result.put("toDate", toDate);
+        result.put("providerCount", providerList.size());
+        result.put("completedBookingCount", completedBookingCount);
+        result.put("serviceValue", totalServiceValue);
+        result.put("approvedRefundAmount", totalApprovedRefundAmount);
+        result.put("transferredRefundAmount", totalTransferredRefundAmount);
+        result.put("providers", providerList);
+        result.put(
+                "notice",
+                "Dữ liệu được tổng hợp từ các đơn COMPLETED. Phí sàn là giá trị suy ra từ snapshot đơn, không phải bút toán kế toán độc lập. Hoàn tiền đã duyệt không đồng nghĩa đã chuyển tiền. Khoản hoàn chỉ được tính là đã chuyển khi có thời điểm chuyển và chứng từ chuyển tiền. Đây chưa phải sổ chi trả Provider."
+        );
+
+        return result;
+    }
+
+    private void validateDateRange(
+            LocalDate fromDate,
+            LocalDate toDate) {
+
+        if ((fromDate == null) != (toDate == null)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc."
+            );
+        }
+
+        if (fromDate != null && fromDate.isAfter(toDate)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Ngày bắt đầu không được sau ngày kết thúc."
+            );
+        }
+
+        if (fromDate != null
+                && ChronoUnit.DAYS.between(fromDate, toDate) > 365) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Khoảng thời gian không được vượt quá 366 ngày."
+            );
+        }
+    }
+
+    private BigDecimal calculateDerivedPlatformFee(
+            BigDecimal subtotal,
+            BigDecimal discount,
+            BigDecimal pointsDiscount,
+            BigDecimal total) {
+
+        return total
+                .subtract(subtotal)
+                .add(discount)
+                .add(pointsDiscount);
     }
 
     private boolean inRange(

@@ -1,3 +1,4 @@
+
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -14,7 +15,8 @@ import {
     faGift,
     faUserGear,
     faBell,
-    faBoxOpen
+    faBoxOpen,
+    faFileInvoiceDollar
 } from "@fortawesome/free-solid-svg-icons";
 import AdminNotificationRealtime from "../../components/AdminNotificationRealtime";
 import AdminOverviewCards from "./AdminOverviewCards";
@@ -28,7 +30,9 @@ const menuItems = [
     { label: "Duyệt yêu cầu ĐT", path: "/admin/provider-requests", icon: faClipboardCheck },
     { label: "Quản lý tài khoản", path: "/admin/accounts", icon: faUsers },
     { label: "Quản lý dịch vụ", path: "/admin/services", icon: faTags },
+    { label: "Duyệt dịch vụ Provider", path: "/admin/provider-service-approvals", icon: faClipboardCheck },
     { label: "Quản lý giao dịch", path: "/admin/transactions", icon: faCreditCard },
+    { label: "Đối soát Provider", path: "/admin/provider-settlements", icon: faFileInvoiceDollar },
     { label: "Quản lý hoàn tiền", path: "/admin/refunds", icon: faMoneyBillTransfer },
     { label: "Quản lý khiếu nại", path: "/admin/complaints", icon: faTriangleExclamation },
     { label: "Ưu đãi & điểm thưởng", path: "/admin/promotions", icon: faGift },
@@ -43,19 +47,34 @@ function AdminLayout({ children }) {
 
     const currentUser = (() => {
         try {
-            return JSON.parse(sessionStorage.getItem("user") || localStorage.getItem("user") || "{}");
+            return JSON.parse(
+                sessionStorage.getItem("user") ||
+                localStorage.getItem("user") ||
+                "{}"
+            );
         } catch {
             return {};
         }
     })();
 
-    const currentRole = String(currentUser.role || "").replace(/^ROLE_/i, "").toUpperCase();
+    const currentRole = String(currentUser.role || "")
+        .replace(/^ROLE_/i, "")
+        .toUpperCase();
+
     const isStaff = currentRole === "STAFF";
     const isAdmin = currentRole === "ADMIN";
 
     const visibleMenuItems = isStaff
-        ? menuItems.filter(item => ["/admin/orders", "/admin/reward-orders", "/admin/complaints", "/admin/staff-operations"].includes(item.path))
-        : menuItems;
+        ? menuItems.filter(item =>
+            [
+                "/admin/reward-orders",
+                "/admin/complaints",
+                "/admin/staff-operations"
+            ].includes(item.path)
+        )
+        : isAdmin
+            ? menuItems
+            : [];
 
     const handleLogout = () => {
         localStorage.removeItem("token");
@@ -70,39 +89,60 @@ function AdminLayout({ children }) {
     return (
         <div className="admin-layout">
             {(isAdmin || isStaff) && <AdminNotificationRealtime />}
+
             <aside className="admin-sidebar">
-                <Link to="/admin" className="admin-brand" style={{ textDecoration: "none", color: "inherit" }}>
+                <Link
+                    to="/admin"
+                    className="admin-brand"
+                    style={{ textDecoration: "none", color: "inherit" }}
+                >
                     <div className="admin-brand-icon">
                         <FontAwesomeIcon icon={faHouse} />
                     </div>
+
                     <div>
                         <strong>CleanMate</strong>
                         <span>ADMIN PANEL</span>
                     </div>
                 </Link>
+
                 <div className="admin-menu-title">MENU QUẢN TRỊ</div>
+
                 <nav className="admin-menu">
                     {visibleMenuItems.map(item => {
                         const isActive = item.path === "/admin"
                             ? location.pathname === "/admin"
-                            : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+                            : location.pathname === item.path ||
+                            location.pathname.startsWith(`${item.path}/`);
 
                         return (
-                            <Link key={item.path} to={item.path} className={`admin-menu-item ${isActive ? "active" : ""}`}>
+                            <Link
+                                key={item.path}
+                                to={item.path}
+                                className={`admin-menu-item ${isActive ? "active" : ""}`}
+                            >
                                 <FontAwesomeIcon icon={item.icon} />
                                 <span>{item.label}</span>
                             </Link>
                         );
                     })}
                 </nav>
+
                 <div className="admin-sidebar-bottom">
                     <div className="admin-user">
-                        <div className="admin-avatar">{isStaff ? "ST" : "AD"}</div>
+                        <div className="admin-avatar">
+                            {isStaff ? "ST" : "AD"}
+                        </div>
+
                         <div className="admin-user-info">
-                            <strong>{currentUser.fullName || (isStaff ? "Nhân viên" : "Quản trị viên")}</strong>
+                            <strong>
+                                {currentUser.fullName ||
+                                    (isStaff ? "Nhân viên" : "Quản trị viên")}
+                            </strong>
                             <span>{isStaff ? "Staff" : "Administrator"}</span>
                         </div>
                     </div>
+
                     <button
                         type="button"
                         className="admin-menu-item logout"
@@ -121,8 +161,11 @@ function AdminLayout({ children }) {
                     </button>
                 </div>
             </aside>
+
             <main className="admin-main">
-                {isAdmin && location.pathname === "/admin" && <AdminOverviewCards />}
+                {isAdmin && location.pathname === "/admin" && (
+                    <AdminOverviewCards />
+                )}
                 {children}
             </main>
         </div>

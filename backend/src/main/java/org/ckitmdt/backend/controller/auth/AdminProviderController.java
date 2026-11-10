@@ -148,6 +148,63 @@ public class AdminProviderController {
         return result;
     }
 
+    @PostMapping("/{id}/request-info")
+    @Transactional
+    public Map<String, Object> requestProviderInformation(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> request,
+            Authentication authentication) {
+
+        Partner partner = findPartnerForUpdate(id);
+        requireLinkedUser(partner);
+
+        String reason = requireReason(
+                request == null ? null : request.get("reason"),
+                "nội dung thông tin cần bổ sung"
+        );
+
+        String currentStatus = normalizePartnerStatus(partner);
+
+        if (!"PENDING".equals(currentStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Chỉ hồ sơ đang chờ duyệt mới được yêu cầu bổ sung thông tin."
+            );
+        }
+
+        saveHistory(
+                partner,
+                currentStatus,
+                currentStatus,
+                reason,
+                "REQUEST_INFO",
+                authentication
+        );
+
+        auditLogService.record(
+                authentication,
+                "PROVIDER_INFORMATION_REQUESTED",
+                "PARTNER",
+                partner.getId(),
+                reason,
+                "status=PENDING",
+                "status=PENDING;action=REQUEST_INFO"
+        );
+
+        sendProviderNotification(
+                partner,
+                "PROVIDER_INFORMATION_REQUESTED",
+                "Hồ sơ doanh nghiệp cần bổ sung thông tin",
+                "Admin yêu cầu bạn bổ sung hoặc làm rõ thông tin hồ sơ: " + reason
+        );
+
+        Map<String, Object> result = toResponse(partner);
+        result.put("message", "Đã gửi yêu cầu bổ sung thông tin cho nhà cung cấp. Hồ sơ vẫn ở trạng thái chờ duyệt.");
+        result.put("requestedInformation", reason);
+
+        return result;
+    }
+
     @PostMapping("/{id}/reject")
     @Transactional
     public Map<String, Object> rejectProvider(

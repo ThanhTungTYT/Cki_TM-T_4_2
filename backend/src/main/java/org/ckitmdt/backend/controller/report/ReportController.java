@@ -73,34 +73,26 @@ public class ReportController {
         String evidenceUrl = text(body.get("evidenceUrl"));
 
         if (subject.isBlank() || subject.length() > 120) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Tiêu đề không được để trống và không vượt quá 120 ký tự."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Tiêu đề không được để trống và không vượt quá 120 ký tự.");
         }
 
         if (description.length() < 10 || description.length() > 10000) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Nội dung khiếu nại phải từ 10 đến 10000 ký tự."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Nội dung khiếu nại phải từ 10 đến 10000 ký tự.");
         }
 
         if (reportedRole.length() > 30 || reportedName.length() > 150
                 || evidenceUrl.length() > 1000 || category.length() > 40) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Thông tin khiếu nại vượt quá giới hạn cho phép."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Thông tin khiếu nại vượt quá giới hạn cho phép.");
         }
 
         Booking booking = resolveBooking(body);
 
         if (booking != null && !canAccessBooking(reporter, booking)) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "Bạn không có quyền báo cáo đơn hàng này."
-            );
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Bạn không có quyền báo cáo đơn hàng này.");
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -120,7 +112,9 @@ public class ReportController {
                 .responseSlaStartedAt(now)
                 .build();
 
-        return row(reportRepository.save(report));
+        ReportTicket saved = reportRepository.save(report);
+
+        return row(saved);
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -203,17 +197,17 @@ public class ReportController {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getAllReports(Authentication auth) {
         User operator = requireStaff(auth);
-        List<ReportTicket> tickets = reportRepository.findTop200ByOrderByCreatedAtDesc();
+        List<ReportTicket> tickets;
 
-        if (!isAdmin(operator)) {
-            Set<Long> assignedTicketIds = assignmentRepository
+        if (isAdmin(operator)) {
+            tickets = reportRepository.findTop200ByOrderByCreatedAtDesc();
+        } else {
+            tickets = assignmentRepository
                     .findByStaff_IdAndActiveTrueOrderByAssignedAtDesc(operator.getId())
                     .stream()
-                    .map(assignment -> assignment.getTicket().getId())
-                    .collect(java.util.stream.Collectors.toSet());
-
-            tickets = tickets.stream()
-                    .filter(ticket -> assignedTicketIds.contains(ticket.getId()))
+                    .map(assignment -> assignment.getTicket())
+                    .filter(Objects::nonNull)
+                    .distinct()
                     .toList();
         }
 
@@ -266,17 +260,13 @@ public class ReportController {
         }
 
         if (content.isBlank() || content.length() > 10000) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Nội dung phản hồi phải từ 1 đến 10000 ký tự."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Nội dung phản hồi phải từ 1 đến 10000 ký tự.");
         }
 
         if (evidenceUrl.length() > 1000) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Liên kết tệp đính kèm không được vượt quá 1000 ký tự."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Liên kết tệp đính kèm không được vượt quá 1000 ký tự.");
         }
 
         String role = upper(user.getRole());
@@ -305,15 +295,24 @@ public class ReportController {
 
         ComplaintResponse saved = responseRepository.save(response);
 
-        if (!"CUSTOMER".equals(role) && report.getFirstRespondedAt() == null) {
-            report.setFirstRespondedAt(now);
-        }
+        auditLogService.record(
+                auth,
+                "COMPLAINT_RESPONSE_ADDED",
+                "REPORT_TICKET",
+                report.getId(),
+                "Thêm phản hồi khiếu nại.",
+                "responseCount=append-only",
+                "authorRole=" + role + ";responseId=" + saved.getId()
+        );
 
         if (isProviderForReport(user, report)) {
             report.setStatus("PROVIDER_RESPONDED");
             report.setUpdatedAt(now);
         } else if (isStaff(user)) {
-            report.setStatus("IN_PROGRESS");
+            if ("OPEN".equals(upper(report.getStatus()))) {
+                report.setStatus("IN_PROGRESS");
+            }
+
             report.setHandledBy(user.getEmail());
             report.setUpdatedAt(now);
         }
@@ -418,23 +417,82 @@ public class ReportController {
                 ));
 
         requireReportAccess(operator, report);
-        ensureNotTerminal(report);
 
         String status = upper(text(body.get("status")));
         String resolution = text(body.get("resolution"));
+        String oldStatus = upper(report.getStatus());
+        String oldResolution = text(report.getResolution());
 
-        if (!Set.of("IN_PROGRESS", "RESOLVED", "REJECTED").contains(status)) {
+        Set<String> supportedStatuses = Set.of(
+                "IN_PROGRESS",
+                "WAITING_PROVIDER",
+                "UNDER_REVIEW",
+                "RESOLVED",
+                "REJECTED",
+                "CLOSED"
+        );
+
+        if (!supportedStatuses.contains(status)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Trạng thái xử lý không hợp lệ."
             );
         }
 
-        if (("RESOLVED".equals(status) || "REJECTED".equals(status))
+        if ("CLOSED".equals(oldStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Khiếu nại đã đóng, không thể cập nhật."
+            );
+        }
+
+        if (Set.of("RESOLVED", "REJECTED").contains(oldStatus)
+                && !"CLOSED".equals(status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Khiếu nại đã có kết luận. Chỉ Admin mới được đóng hồ sơ."
+            );
+        }
+
+        if ("CLOSED".equals(status)
+                && !Set.of("RESOLVED", "REJECTED").contains(oldStatus)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Chỉ được đóng khiếu nại sau khi đã có kết luận RESOLVED hoặc REJECTED."
+            );
+        }
+
+        if (Set.of("RESOLVED", "REJECTED", "CLOSED").contains(status)
+                && !isAdmin(operator)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ Admin được quyền kết luận hoặc đóng khiếu nại."
+            );
+        }
+
+        if (!isAllowedTransition(oldStatus, status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Không thể chuyển trạng thái khiếu nại từ "
+                            + oldStatus + " sang " + status + "."
+            );
+        }
+
+        if ("WAITING_PROVIDER".equals(status)
+                && (report.getBooking() == null
+                || report.getBooking().getPartner() == null
+                || report.getBooking().getPartner().getUser() == null)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Khiếu nại này không có Provider liên kết để yêu cầu giải trình."
+            );
+        }
+
+        if (Set.of("RESOLVED", "REJECTED").contains(status)
                 && resolution.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Vui lòng nhập kết quả xử lý trước khi kết thúc khiếu nại."
+                    "Vui lòng nhập căn cứ và kết quả xử lý trước khi kết luận khiếu nại."
             );
         }
 
@@ -446,8 +504,6 @@ public class ReportController {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        String oldStatus = upper(report.getStatus());
-        String oldResolution = text(report.getResolution());
 
         if (!resolution.isBlank() && !resolution.equals(oldResolution)) {
             String authorName = text(operator.getFullName());
@@ -456,23 +512,37 @@ public class ReportController {
                 authorName = text(operator.getEmail());
             }
 
-            ComplaintResponse response = ComplaintResponse.builder()
-                    .ticket(report)
-                    .author(operator)
-                    .authorName(authorName)
-                    .authorRole(upper(operator.getRole()))
-                    .content(resolution)
-                    .createdAt(now)
-                    .build();
+            ComplaintResponse savedResponse = responseRepository.save(
+                    ComplaintResponse.builder()
+                            .ticket(report)
+                            .author(operator)
+                            .authorName(authorName)
+                            .authorRole(upper(operator.getRole()))
+                            .content(resolution)
+                            .createdAt(now)
+                            .build()
+            );
 
-            responseRepository.save(response);
+            auditLogService.record(
+                    auth,
+                    "COMPLAINT_RESOLUTION_RECORDED",
+                    "REPORT_TICKET",
+                    report.getId(),
+                    "Lưu căn cứ/kết quả xử lý khiếu nại.",
+                    "resolution=" + oldResolution,
+                    "resolutionResponseId=" + savedResponse.getId()
+            );
         }
         if (!resolution.isBlank() && report.getFirstRespondedAt() == null) {
             report.setFirstRespondedAt(now);
         }
 
         report.setStatus(status);
-        report.setResolution(resolution.isBlank() ? null : resolution);
+
+        if (!resolution.isBlank()) {
+            report.setResolution(resolution);
+        }
+
         report.setHandledBy(operator.getEmail());
         report.setUpdatedAt(now);
 
@@ -483,9 +553,11 @@ public class ReportController {
                 "COMPLAINT_STATUS_CHANGED",
                 "REPORT_TICKET",
                 saved.getId(),
-                resolution.isBlank() ? "Cập nhật trạng thái khiếu nại." : resolution,
-                "status=" + oldStatus,
-                "status=" + status
+                resolution.isBlank()
+                        ? "Cập nhật trạng thái khiếu nại."
+                        : resolution,
+                "status=" + oldStatus + ";resolution=" + oldResolution,
+                "status=" + status + ";resolution=" + text(saved.getResolution())
         );
 
         if ("CUSTOMER".equals(upper(saved.getReporter().getRole()))) {
@@ -493,7 +565,8 @@ public class ReportController {
                     saved.getReporter(),
                     "COMPLAINT_" + status,
                     "Cập nhật khiếu nại",
-                    "Khiếu nại '" + saved.getSubject() + "' đã chuyển sang trạng thái " + status + ".",
+                    "Khiếu nại '" + saved.getSubject()
+                            + "' đã chuyển sang trạng thái " + status + ".",
                     "COMPLAINT",
                     saved.getId()
             );
@@ -516,7 +589,8 @@ public class ReportController {
             notificationRepository.save(AdminNotification.builder()
                     .recipient(saved.getBooking().getPartner().getUser())
                     .type("COMPLAINT_" + status)
-                    .title("Khiếu nại #" + saved.getId() + " đã được xử lý (" + status + ")")
+                    .title("Khiếu nại #" + saved.getId()
+                            + " đã được cập nhật (" + status + ")")
                     .message(providerMessage)
                     .referenceType("REPORT_TICKET")
                     .referenceId(saved.getId())
@@ -525,6 +599,40 @@ public class ReportController {
         }
 
         return row(saved);
+    }
+
+    private boolean isAllowedTransition(String oldStatus, String newStatus) {
+        if (oldStatus.equals(newStatus)) {
+            return false;
+        }
+
+        return switch (oldStatus) {
+            case "OPEN" -> Set.of(
+                    "IN_PROGRESS",
+                    "WAITING_PROVIDER",
+                    "UNDER_REVIEW"
+            ).contains(newStatus);
+            case "IN_PROGRESS" -> Set.of(
+                    "WAITING_PROVIDER",
+                    "UNDER_REVIEW"
+            ).contains(newStatus);
+            case "WAITING_PROVIDER" -> Set.of(
+                    "IN_PROGRESS",
+                    "UNDER_REVIEW"
+            ).contains(newStatus);
+            case "PROVIDER_RESPONDED" -> Set.of(
+                    "IN_PROGRESS",
+                    "UNDER_REVIEW",
+                    "WAITING_PROVIDER"
+            ).contains(newStatus);
+            case "UNDER_REVIEW" -> Set.of(
+                    "WAITING_PROVIDER",
+                    "RESOLVED",
+                    "REJECTED"
+            ).contains(newStatus);
+            case "RESOLVED", "REJECTED" -> "CLOSED".equals(newStatus);
+            default -> false;
+        };
     }
 
     private Booking resolveBooking(Map<String, Object> body) {
@@ -601,7 +709,9 @@ public class ReportController {
     private void ensureNotTerminal(ReportTicket report) {
         String status = upper(report.getStatus());
 
-        if ("RESOLVED".equals(status) || "REJECTED".equals(status)) {
+        if ("RESOLVED".equals(status)
+                || "REJECTED".equals(status)
+                || "CLOSED".equals(status)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "Khiếu nại đã kết thúc xử lý, không thể tiếp tục thay đổi."
@@ -649,7 +759,8 @@ public class ReportController {
     }
 
     private boolean isAdmin(User user) {
-        return Set.of("ADMIN", "ROLE_ADMIN").contains(upper(user.getRole()));
+        return Set.of("ADMIN", "ROLE_ADMIN")
+                .contains(upper(user.getRole()));
     }
 
     private boolean isProviderForReport(User user, ReportTicket report) {
@@ -681,10 +792,6 @@ public class ReportController {
     }
 
     private boolean canAccessBooking(User user, Booking booking) {
-        if (isStaff(user)) {
-            return true;
-        }
-
         boolean customer = booking.getCustomer() != null
                 && Objects.equals(
                 booking.getCustomer().getId(),
