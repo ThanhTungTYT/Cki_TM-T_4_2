@@ -438,6 +438,27 @@ public class CleanerAssignmentService {
                         && "IN_PROGRESS".equals(oldBookingStatus)) {
 
                     nextBookingStatus = "PENDING_COMPLETION";
+
+                    // Thông báo cho Provider khi toàn bộ Cleaner đã báo hoàn thành.
+                    if (booking.getPartner() != null
+                            && booking.getPartner().getUser() != null) {
+
+                        adminNotificationRepository.save(
+                                AdminNotification.builder()
+                                        .recipient(booking.getPartner().getUser())
+                                        .type("CLEANER_WORK_SUBMITTED")
+                                        .title("Nhân viên đã báo hoàn thành công việc")
+                                        .message(
+                                                "Tất cả nhân viên được phân công đã báo hoàn thành đơn hàng "
+                                                        + booking.getBookingCode()
+                                                        + ". Vui lòng kiểm tra và theo dõi khách hàng nghiệm thu."
+                                        )
+                                        .referenceType("BOOKING")
+                                        .referenceId(booking.getId())
+                                        .createdAt(now)
+                                        .build()
+                        );
+                    }
                 }
             }
 

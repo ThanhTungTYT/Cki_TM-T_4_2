@@ -1006,6 +1006,58 @@ function CleanerJobs() {
                                             </div>
                                         </div>
 
+                                        <h4>Tiến độ công việc</h4>
+
+                                        {(() => {
+                                            const assignment = booking.cleanerAssignment || {};
+
+                                            const steps = [
+                                                {
+                                                    label: 'Được phân công',
+                                                    time: assignment.assignedAt
+                                                },
+                                                {
+                                                    label: 'Đã nhận việc',
+                                                    time: assignment.acceptedAt
+                                                },
+                                                {
+                                                    label: 'Bắt đầu thực hiện',
+                                                    time: assignment.startedAt
+                                                },
+                                                {
+                                                    label: 'Đã gửi báo hoàn thành',
+                                                    time: assignment.completedAt
+                                                }
+                                            ];
+
+                                            return (
+                                                <div className="cj-progress-timeline">
+                                                    {steps.map((step, index) => (
+                                                        <div
+                                                            className={`cj-progress-step ${
+                                                                step.time ? 'done' : ''
+                                                            }`}
+                                                            key={step.label}
+                                                        >
+                    <span className="cj-progress-dot">
+                        {step.time ? '✓' : index + 1}
+                    </span>
+
+                                                            <div>
+                                                                <strong>{step.label}</strong>
+                                                                <span>
+                            {step.time
+                                ? formatDate(step.time)
+                                : 'Chưa thực hiện'}
+                        </span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
+
+
                                         <h4>Danh sách dịch vụ</h4>
 
                                         {booking.items?.length > 0 ? (

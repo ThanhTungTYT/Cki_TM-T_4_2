@@ -162,18 +162,13 @@ public class BookingService {
             boolean meetsNotice = !start.isBefore(now.plusMinutes(effectiveMinimumNoticeMinutes()))
                     || (excludedBooking != null && start.equals(excludedBooking.getScheduledStart()));
             boolean withinWorkingHours = isWithinWorkingHours(start, end);
-            long reservedEmployees = activeEmployees;
-            if (meetsNotice && withinWorkingHours) {
-                reservedEmployees = request.getExcludeBookingId() == null
-                        ? bookingItemRepository.countReservedEmployees(
-                                partner.getId(),
-                                start.minusMinutes(effectiveTravelBufferMinutes()),
-                                end.plusMinutes(effectiveTravelBufferMinutes()), now)
-                        : bookingItemRepository.countReservedEmployeesExcludingBooking(
-                                partner.getId(), request.getExcludeBookingId(),
-                                start.minusMinutes(effectiveTravelBufferMinutes()),
-                                end.plusMinutes(effectiveTravelBufferMinutes()), now);
-            }
+            long reservedEmployees = meetsNotice && withinWorkingHours
+                    ? bookingItemRepository.countReservedEmployees(
+                    partner.getId(),
+                    start.minusMinutes(effectiveTravelBufferMinutes()),
+                    end.plusMinutes(effectiveTravelBufferMinutes()),
+                    now)
+                    : activeEmployees;
             boolean available = meetsNotice && withinWorkingHours && activeEmployees > 0
                     && reservedEmployees + employeesNeeded <= activeEmployees;
             String message = !meetsNotice ? "Cần đặt trước ít nhất "
@@ -656,10 +651,8 @@ public class BookingService {
 
     @Transactional(readOnly = true)
     public List<BookingResponse> getCleanerBookings(String userEmail) {
-
         User cleaner = getUserByEmail(userEmail);
 
-        // Chỉ tài khoản Cleaner/Employee mới được sử dụng API này
         if (!isCleanerRole(cleaner.getRole())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -667,40 +660,31 @@ public class BookingService {
             );
         }
 
-        // Tìm hồ sơ nhân viên tương ứng với tài khoản đăng nhập
         Employee employee = employeeRepository.findByUser_Id(cleaner.getId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy hồ sơ nhân viên."
                 ));
 
-        if (!"ACTIVE".equalsIgnoreCase(employee.getStatus())
-                || !"ACTIVE".equalsIgnoreCase(cleaner.getStatus())) {
+        if (!isActive(employee.getStatus()) || !isActive(cleaner.getStatus())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Tài khoản nhân viên hiện không hoạt động."
             );
         }
 
-        // Lấy các công việc đã được nhà cung cấp phân công cho nhân viên
         return bookingAssignmentRepository
                 .findByEmployee_IdOrderByAssignedAtDesc(employee.getId())
                 .stream()
-                .filter(assignment -> assignment.getBooking() != null)
-                .map(assignment ->
-                        bookingStateEngine.mapToBookingResponse(
-                                assignment.getBooking()
-                        )
-                )
+                .filter(this::isValidCleanerProviderAssignment)
+                .map(assignment -> bookingStateEngine.mapToBookingResponse(assignment.getBooking()))
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<CleanerAssignmentResponse> getCleanerAssignments(String userEmail) {
-
         User cleaner = getUserByEmail(userEmail);
 
-        // Chỉ tài khoản Cleaner/Employee mới được sử dụng API này
         if (!isCleanerRole(cleaner.getRole())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -708,26 +692,23 @@ public class BookingService {
             );
         }
 
-        // Tìm hồ sơ nhân viên tương ứng với tài khoản đăng nhập
         Employee employee = employeeRepository.findByUser_Id(cleaner.getId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy hồ sơ nhân viên."
                 ));
 
-        if (!"ACTIVE".equalsIgnoreCase(employee.getStatus())
-                || !"ACTIVE".equalsIgnoreCase(cleaner.getStatus())) {
+        if (!isActive(employee.getStatus()) || !isActive(cleaner.getStatus())) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Tài khoản nhân viên hiện không hoạt động."
             );
         }
 
-        // Lấy từng bản ghi phân công của nhân viên
         return bookingAssignmentRepository
                 .findByEmployee_IdOrderByAssignedAtDesc(employee.getId())
                 .stream()
-                .filter(assignment -> assignment.getBooking() != null)
+                .filter(this::isValidCleanerProviderAssignment)
                 .map(assignment -> CleanerAssignmentResponse.builder()
                         .assignmentId(assignment.getId())
                         .assignmentStatus(assignment.getStatus())
@@ -736,17 +717,10 @@ public class BookingService {
                         .startedAt(assignment.getStartedAt())
                         .completedAt(assignment.getCompletedAt())
                         .assignmentNote(assignment.getNote())
-                        .booking(
-                                bookingStateEngine.mapToBookingResponse(
-                                        assignment.getBooking()
-                                )
-                        )
-                        .build()
-                )
+                        .booking(bookingStateEngine.mapToBookingResponse(assignment.getBooking()))
+                        .build())
                 .collect(Collectors.toList());
     }
-
-
 
     @Transactional(readOnly = true)
     public BookingResponse getBookingDetail(Long id, String userEmail) {
@@ -932,9 +906,9 @@ public class BookingService {
             BookingItemRequest requested = requestedItems.get(index);
             if (!Objects.equals(stored.getService().getId(), requested.getServiceId())
                     || !Objects.equals(stored.getServicePackage() != null
-                            ? stored.getServicePackage().getId() : null, requested.getPackageId())
+                    ? stored.getServicePackage().getId() : null, requested.getPackageId())
                     || !Objects.equals(stored.getQuantity(), requested.getQuantity() == null
-                            ? 1 : requested.getQuantity())) {
+                    ? 1 : requested.getQuantity())) {
                 return false;
             }
         }
@@ -966,21 +940,34 @@ public class BookingService {
         return bookingAssignmentRepository
                 .findByBooking_IdOrderByIdAsc(booking.getId())
                 .stream()
-                .filter(assignment -> assignment.getEmployee() != null)
-                .anyMatch(assignment -> {
+                .filter(this::isValidCleanerProviderAssignment)
+                .anyMatch(assignment -> assignment.getEmployee().getUser() != null
+                        && Objects.equals(assignment.getEmployee().getUser().getId(), user.getId()));
+    }
 
-                    Employee employee = assignment.getEmployee();
+    /**
+     * Kiểm tra Employee, Assignment và Booking có cùng thuộc một Provider hay không.
+     */
+    private boolean isValidCleanerProviderAssignment(BookingAssignment assignment) {
+        if (assignment == null || assignment.getEmployee() == null
+                || assignment.getPartner() == null || assignment.getBooking() == null) {
+            return false;
+        }
 
-                    return employee.getUser() != null
-                            && Objects.equals(
-                            employee.getUser().getId(),
-                            user.getId()
-                    )
-                            && "ACTIVE".equalsIgnoreCase(employee.getStatus())
-                            && "ACTIVE".equalsIgnoreCase(
-                            employee.getUser().getStatus()
-                    );
-                });
+        Employee employee = assignment.getEmployee();
+        Partner assignmentPartner = assignment.getPartner();
+        Booking booking = assignment.getBooking();
+
+        if (employee.getPartner() == null || booking.getPartner() == null
+                || assignmentPartner.getUser() == null) {
+            return false;
+        }
+
+        return Objects.equals(employee.getPartner().getId(), assignmentPartner.getId())
+                && Objects.equals(assignmentPartner.getId(), booking.getPartner().getId())
+                && isActive(employee.getStatus())
+                && employee.getUser() != null
+                && isActive(employee.getUser().getStatus());
     }
 
 
