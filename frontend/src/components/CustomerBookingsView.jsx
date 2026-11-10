@@ -21,6 +21,7 @@ import {
     faRotateLeft
 } from '@fortawesome/free-solid-svg-icons';
 import { bookingApi, refundApi } from '../services/api';
+import { createVNPayPayment } from '../services/paymentService';
 import './CustomerBookingsView.css';
 
 function formatPrice(amount) {
@@ -202,10 +203,13 @@ function mapBooking(booking) {
         pricing: {
             subtotal: booking.subtotal ?? null,
             discount: booking.discountAmount ?? null,
+            pointsDiscount: booking.pointsDiscount ?? null,
             totalAmount: booking.totalAmount ?? null
         },
         paymentMethod: booking.paymentMethod || '',
         paymentStatus: booking.paymentStatus || '',
+        paymentRecords: Array.isArray(booking.paymentRecords) ? booking.paymentRecords : [],
+        refundRecords: Array.isArray(booking.refundRecords) ? booking.refundRecords : [],
         history: mapHistory(booking.statusHistory)
     };
 }
@@ -236,6 +240,8 @@ export default function CustomerBookingsView() {
     const [rescheduleAvailabilityLoading, setRescheduleAvailabilityLoading] = useState(false);
     const [rescheduleLoading, setRescheduleLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
+    const [paymentLoading, setPaymentLoading] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
 
     const showFeedback = (message, type = 'success') => {
         setFeedbackType(type);
@@ -492,9 +498,11 @@ export default function CustomerBookingsView() {
             return;
         }
 
-        if (!window.confirm(`Bạn có chắc muốn hủy đơn ${selectedBooking.id}?`)) {
-            return;
-        }
+        setShowCancelModal(true);
+    };
+
+    const confirmCustomerCancel = async () => {
+        if (!selectedBooking?.dbId || actionLoading) return;
 
         try {
             setActionLoading(true);
@@ -510,6 +518,7 @@ export default function CustomerBookingsView() {
             );
 
             updateBookingFromResponse(updated);
+            setShowCancelModal(false);
             showFeedback('Đã gửi yêu cầu hủy đơn đến backend.', 'success');
         } catch (error) {
             showFeedback(
@@ -518,6 +527,23 @@ export default function CustomerBookingsView() {
             );
         } finally {
             setActionLoading(false);
+        }
+    };
+
+    const handlePayPendingBooking = async () => {
+        if (!selectedBooking?.dbId || paymentLoading) return;
+        setPaymentLoading(true);
+        setActionFeedback('');
+        try {
+            const data = await createVNPayPayment(selectedBooking.dbId);
+            if (!data?.txnRef || !data?.paymentUrl) {
+                throw new Error('Không nhận được thông tin chuyển đến cổng thanh toán.');
+            }
+            sessionStorage.setItem('pendingPaymentRef', data.txnRef);
+            window.location.assign(data.paymentUrl);
+        } catch (error) {
+            showFeedback(error.message || 'Không thể tạo giao dịch thanh toán.', 'error');
+            setPaymentLoading(false);
         }
     };
 
@@ -552,11 +578,16 @@ export default function CustomerBookingsView() {
             return;
         }
 
-        if (!['CANCELLED', 'REJECTED'].includes(selectedBooking.status)) {
+        if (!['CANCELLED', 'REJECTED', 'EXPIRED'].includes(selectedBooking.status)) {
             showFeedback(
-                'Chỉ đơn đã hủy hoặc bị từ chối mới có thể gửi yêu cầu hoàn tiền.',
+                'Chỉ đơn đã hủy, bị từ chối hoặc hết hạn mới có thể gửi yêu cầu hoàn tiền.',
                 'error'
             );
+            return;
+        }
+
+        if (selectedBooking.paymentStatus !== 'PAID') {
+            showFeedback('Đơn hàng chưa có thanh toán thành công để hoàn tiền.', 'error');
             return;
         }
 
@@ -796,6 +827,23 @@ export default function CustomerBookingsView() {
                                         </div>
                                     )}
 
+                                    {selectedBooking.status === 'PENDING_PAYMENT'
+                                        && selectedBooking.paymentStatus !== 'PAID'
+                                        && selectedBooking.dbId && (
+                                        <div className="customer-action-container customer-payment-action">
+                                            <button
+                                                type="button"
+                                                className="btn-action-pay"
+                                                onClick={handlePayPendingBooking}
+                                                disabled={paymentLoading}
+                                            >
+                                                <FontAwesomeIcon icon={faCreditCard} />
+                                                {' '}{paymentLoading ? 'Đang chuyển đến thanh toán...' : 'Thanh toán chuyển khoản'}
+                                            </button>
+                                            <small>Thanh toán trực tuyến qua VNPay cho đơn hàng này.</small>
+                                        </div>
+                                    )}
+
                                     {[
                                         'PENDING_PAYMENT',
                                         'PENDING_PROVIDER',
@@ -865,8 +913,9 @@ export default function CustomerBookingsView() {
 
                                     {[
                                         'CANCELLED',
-                                        'REJECTED'
-                                    ].includes(selectedBooking.status) && selectedBooking.dbId && (
+                                        'REJECTED',
+                                        'EXPIRED'
+                                    ].includes(selectedBooking.status) && selectedBooking.paymentStatus === 'PAID' && selectedBooking.dbId && !selectedRefund && (
                                         <div className="customer-action-container">
                                             <button
                                                 type="button"
@@ -1110,6 +1159,15 @@ export default function CustomerBookingsView() {
                                                 </div>
                                             )}
 
+                                            {Number(selectedBooking.pricing.pointsDiscount) > 0 && (
+                                                <div className="calc-row discount">
+                                                    <span>Giảm bằng Ccoin:</span>
+                                                    <span>
+                                                        -{formatPrice(selectedBooking.pricing.pointsDiscount)}
+                                                    </span>
+                                                </div>
+                                            )}
+
                                             <div className="calc-row final">
                                                 <span>
                                                     Tổng tiền
@@ -1125,9 +1183,44 @@ export default function CustomerBookingsView() {
                                             <div className="calc-row">
                                                 <span>Trạng thái thanh toán:</span>
                                                 <strong>
-                                                    {selectedBooking.paymentStatus || 'Chưa có dữ liệu'}
+                                                    {{
+                                                        PAID: 'Đã thanh toán',
+                                                        REVIEW: 'Cần đối soát',
+                                                        PENDING: 'Đang xử lý',
+                                                        FAILED: 'Thất bại',
+                                                        UNPAID: 'Chưa thanh toán'
+                                                    }[selectedBooking.paymentStatus] || selectedBooking.paymentStatus || 'Chưa có dữ liệu'}
                                                 </strong>
                                             </div>
+
+                                            {selectedBooking.paymentRecords.length > 0 && (
+                                                <div className="booking-records">
+                                                    <strong>Lịch sử thanh toán</strong>
+                                                    {selectedBooking.paymentRecords.map(payment => (
+                                                        <div className="calc-row" key={payment.id}>
+                                                            <span>
+                                                                {payment.method || payment.provider || 'Thanh toán'}
+                                                                {' · '}{payment.status || 'Chưa xác định'}
+                                                            </span>
+                                                            <span>{formatPrice(payment.amount)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {selectedBooking.refundRecords.length > 0 && (
+                                                <div className="booking-records">
+                                                    <strong>Lịch sử hoàn tiền</strong>
+                                                    {selectedBooking.refundRecords.map(refund => (
+                                                        <div className="calc-row" key={refund.id}>
+                                                            <span>{refund.status || 'Đang xử lý'}</span>
+                                                            <span>
+                                                                {formatPrice(refund.approvedAmount ?? refund.requestedAmount)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -1243,6 +1336,26 @@ export default function CustomerBookingsView() {
                                 disabled={refundLoading}
                             >
                                 Đóng
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showCancelModal && selectedBooking && (
+                <div className="modal-overlay" onMouseDown={event => {
+                    if (event.target === event.currentTarget && !actionLoading) setShowCancelModal(false);
+                }}>
+                    <div className="modal-card cancel-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="cancel-booking-title">
+                        <div className="modal-top">
+                            <div className="modal-ico cancel-confirm-icon"><FontAwesomeIcon icon={faShieldHalved} /></div>
+                            <h3 id="cancel-booking-title">Xác nhận hủy đơn</h3>
+                            <p>Bạn có chắc muốn hủy đơn dịch vụ #{selectedBooking.id} không? Trạng thái đơn sẽ được cập nhật theo chính sách hủy.</p>
+                        </div>
+                        <div className="modal-actions">
+                            <button type="button" className="btn-skip" disabled={actionLoading} onClick={() => setShowCancelModal(false)}>Quay lại</button>
+                            <button type="button" className="btn-confirm-cancel" disabled={actionLoading} onClick={confirmCustomerCancel}>
+                                {actionLoading ? 'Đang xử lý...' : 'Xác nhận hủy đơn'}
                             </button>
                         </div>
                     </div>

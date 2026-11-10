@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -57,5 +58,15 @@ public class ServiceReviewController {
     ) {
         serviceReviewService.deleteReview(serviceId, reviewId, authentication.getName());
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{reviewId}")
+    public ReviewResponseDto updateReview(
+            @PathVariable Long serviceId,
+            @PathVariable Long reviewId,
+            @Valid @RequestBody ReviewCreateRequest request,
+            Authentication authentication
+    ) {
+        return serviceReviewService.updateReview(serviceId, reviewId, authentication.getName(), request);
     }
 }

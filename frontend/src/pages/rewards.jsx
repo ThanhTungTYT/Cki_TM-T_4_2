@@ -22,9 +22,14 @@ export default function Rewards() {
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState('');
     const [pending, setPending] = useState(null);
+    const [editingAddress, setEditingAddress] = useState(null);
+    const [addressDraft, setAddressDraft] = useState('');
+    const [orderActionBusy, setOrderActionBusy] = useState(false);
+    const [cancelOrderTarget, setCancelOrderTarget] = useState(null);
     const [copiedVoucher, setCopiedVoucher] = useState('');
     const dialog = useRef(null);
     const ordersDialog = useRef(null);
+    const cancelDialog = useRef(null);
     const busy = useRef(false);
 
     async function refresh() {
@@ -41,6 +46,13 @@ export default function Rewards() {
             .finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
     }, [token]);
+
+    useEffect(() => {
+        const modal = cancelDialog.current;
+        if (!modal) return;
+        if (cancelOrderTarget && !modal.open) modal.showModal();
+        if (!cancelOrderTarget && modal.open) modal.close();
+    }, [cancelOrderTarget]);
 
     function openGift(gift) {
         setPending(null);
@@ -85,6 +97,43 @@ export default function Rewards() {
             setSuccess(`Đã xác nhận nhận quà cho đơn #${updated.id}.`);
         } catch (e) {
             setError(e.message);
+        }
+    }
+
+    async function saveAddress(order) {
+        if (!addressDraft.trim() || orderActionBusy) return;
+        setOrderActionBusy(true);
+        try {
+            const updated = await rewardApi.updateRedemptionAddress(order.id, addressDraft.trim());
+            setHistory(current => current.map(item => item.id === updated.id ? updated : item));
+            setEditingAddress(null);
+            setSuccess(`Đã cập nhật địa chỉ giao quà cho đơn #${updated.id}.`);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setOrderActionBusy(false);
+        }
+    }
+
+    function cancelOrder(order) {
+        if (orderActionBusy) return;
+        setCancelOrderTarget(order);
+    }
+
+    async function confirmCancelOrder() {
+        const order = cancelOrderTarget;
+        if (!order || orderActionBusy) return;
+        setOrderActionBusy(true);
+        try {
+            const updated = await rewardApi.cancelRedemption(order.id);
+            setHistory(current => current.map(item => item.id === updated.id ? updated : item));
+            setWallet(await rewardApi.wallet());
+            setSuccess(`Đã hủy đơn #${updated.id}; ${number(updated.pointsUsed)} Ccoin đã được hoàn lại.`);
+            setCancelOrderTarget(null);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setOrderActionBusy(false);
         }
     }
 
@@ -143,10 +192,28 @@ export default function Rewards() {
         <dialog className="rewards-orders-dialog" ref={ordersDialog}>
             <div className="rewards-orders-header"><div><span>LỊCH SỬ MUA QUÀ</span><h2>Đơn hàng khuyến mãi</h2></div><button type="button" aria-label="Đóng" onClick={() => ordersDialog.current?.close()}>×</button></div>
             {!history.length ? <p className="rewards-orders-empty">Bạn chưa có đơn đổi quà nào.</p> : <div className="rewards-orders-list">{history.map(order => <article className="rewards-order-item" key={order.id}>
-                <div className="rewards-order-title"><div><strong>{order.giftName}</strong><small>Đơn #{order.id} · {new Date(order.createdAt).toLocaleString('vi-VN')}</small></div><span className={`rewards-order-status ${String(order.status).toLowerCase()}`}>{({ PENDING: 'Đang xử lý', SHIPPED: 'Đang giao', DELIVERED: 'Đã giao' })[order.status] || order.status}</span></div>
-                <div className="rewards-order-info"><span>Người nhận: <strong>{order.recipientName}</strong></span><span>Điện thoại: <strong>{order.phone}</strong></span><span>Địa chỉ: <strong>{order.address}</strong></span><span>Đã dùng: <strong>{number(order.pointsUsed)} Ccoin</strong></span></div>
-                {order.status === 'SHIPPED' && <button type="button" className="rewards-order-received" onClick={() => confirmReceived(order.id)}>Đã nhận hàng</button>}
+                <div className="rewards-order-title"><div><strong>{order.giftName}</strong><small>Đơn #{order.id} · {new Date(order.createdAt).toLocaleString('vi-VN')}</small></div><span className={`rewards-order-status ${String(order.status).toLowerCase()}`}>{({ PENDING: 'Đang xử lý', SHIPPED: 'Đang giao', DELIVERED: 'Đã giao', CANCELLED: 'Đã hủy' })[order.status] || order.status}</span></div>
+                <div className="rewards-order-info"><span>Người nhận: <strong>{order.recipientName}</strong></span><span>Điện thoại: <strong>{order.phone}</strong></span><span>Địa chỉ: <strong>{order.address}</strong></span><span>Đã dùng: <strong>{number(order.pointsUsed)} Ccoin</strong></span>{order.cancelledAt && <span>Ngày hủy: <strong>{new Date(order.cancelledAt).toLocaleString('vi-VN')}</strong></span>}</div>
+                {order.status === 'PENDING' && <div className="rewards-order-actions">
+                    {editingAddress === order.id ? <div className="rewards-address-editor"><label htmlFor={`gift-address-${order.id}`}>Địa chỉ nhận quà<textarea id={`gift-address-${order.id}`} minLength={10} maxLength={500} value={addressDraft} onChange={event => setAddressDraft(event.target.value)} /></label><button type="button" disabled={orderActionBusy || addressDraft.trim().length < 10} onClick={() => saveAddress(order)}>{orderActionBusy ? 'Đang lưu…' : 'Lưu địa chỉ'}</button><button type="button" className="secondary" disabled={orderActionBusy} onClick={() => setEditingAddress(null)}>Đóng</button></div> : <button type="button" disabled={orderActionBusy} onClick={() => { setEditingAddress(order.id); setAddressDraft(order.address); }}>Sửa địa chỉ</button>}
+                    <button type="button" className="secondary" disabled={orderActionBusy} onClick={() => cancelOrder(order)}>{orderActionBusy ? 'Đang xử lý…' : 'Hủy đơn và hoàn Ccoin'}</button>
+                </div>}
+                {order.status === 'SHIPPED' && <button type="button" className="rewards-order-received" disabled={orderActionBusy} onClick={() => confirmReceived(order.id)}>Đã nhận hàng</button>}
             </article>)}</div>}
+        </dialog>
+        <dialog className="rewards-confirm-dialog" ref={cancelDialog} onCancel={event => {
+            if (orderActionBusy) event.preventDefault();
+            else setCancelOrderTarget(null);
+        }}>
+            {cancelOrderTarget && <>
+                <span className="rewards-confirm-icon" aria-hidden="true">!</span>
+                <h2>Xác nhận hủy đơn</h2>
+                <p>Bạn có chắc muốn hủy đơn đổi <strong>{cancelOrderTarget.giftName}</strong> không? {number(cancelOrderTarget.pointsUsed)} Ccoin sẽ được hoàn lại vào ví.</p>
+                <div className="rewards-confirm-actions">
+                    <button type="button" className="secondary" disabled={orderActionBusy} onClick={() => setCancelOrderTarget(null)}>Quay lại</button>
+                    <button type="button" className="danger" disabled={orderActionBusy} onClick={confirmCancelOrder}>{orderActionBusy ? 'Đang xử lý…' : 'Xác nhận hủy'}</button>
+                </div>
+            </>}
         </dialog>
     </main><Footer /></div>;
 }

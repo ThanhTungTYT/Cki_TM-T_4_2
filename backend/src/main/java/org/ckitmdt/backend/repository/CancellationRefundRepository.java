@@ -19,6 +19,8 @@ public interface CancellationRefundRepository
 
     Optional<CancellationRefund> findByBooking_Id(Long bookingId);
 
+    List<CancellationRefund> findByBooking_IdOrderByRequestedAtAsc(Long bookingId);
+
     List<CancellationRefund> findTop200ByOrderByRequestedAtDesc();
 
     List<CancellationRefund> findByRequestedBy_IdOrderByRequestedAtDesc(Long userId);

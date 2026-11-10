@@ -89,6 +89,17 @@
 
 .rewards-orders-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; width: min(760px, 94vw); max-height: 86vh; overflow: hidden; padding: 0; border: 1px solid #e2e8f0; border-radius: 16px; color: #1e385c; background: #fff; box-shadow: 0 24px 64px rgba(15, 23, 42, .22); }
 .rewards-orders-dialog::backdrop { background: rgba(15, 23, 42, .55); }
+.rewards-confirm-dialog { width: min(440px, calc(100vw - 32px)); margin: auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 16px; color: #1e385c; background: #fff; box-shadow: 0 24px 64px rgba(15, 23, 42, .24); text-align: center; }
+.rewards-confirm-dialog::backdrop { background: rgba(15, 23, 42, .58); }
+.rewards-confirm-dialog .rewards-confirm-icon { display: grid; width: 44px; height: 44px; place-items: center; margin: 0 auto 12px; border-radius: 50%; background: #fef2f2; color: #dc2626; font-size: 24px; font-weight: 800; }
+.rewards-confirm-dialog h2 { margin: 0 0 10px; font-size: 21px; }
+.rewards-confirm-dialog p { margin: 0; color: #475569; line-height: 1.65; }
+.rewards-confirm-actions { display: flex; justify-content: center; gap: 10px; margin-top: 24px; }
+.rewards-confirm-actions button { min-width: 132px; }
+.rewards-confirm-actions button.secondary { border-color: #cbd5e1; background: #fff; color: #334155; }
+.rewards-confirm-actions button.secondary:hover:not(:disabled) { border-color: #94a3b8; background: #f8fafc; }
+.rewards-confirm-actions button.danger { border-color: #dc2626; background: #dc2626; }
+.rewards-confirm-actions button.danger:hover:not(:disabled) { border-color: #b91c1c; background: #b91c1c; }
 .rewards-orders-header { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 24px; border-bottom: 1px solid #e2e8f0; background: #fff; }
 .rewards-orders-header > div > span { color: #2563eb; font-size: 11px; font-weight: 700; letter-spacing: .1em; }
 .rewards-orders-header h2 { margin: 4px 0 0; font-size: 21px; }
@@ -105,10 +116,17 @@
 .rewards-order-status.pending { background: #fff7ed; color: #c2410c; }
 .rewards-order-status.shipped { background: #eff6ff; color: #1d4ed8; }
 .rewards-order-status.delivered { background: #ecfdf5; color: #15803d; }
+.rewards-order-status.cancelled { background: #f1f5f9; color: #475569; }
 .rewards-order-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; margin: 14px 0; color: #64748b; font-size: 13px; overflow-wrap: anywhere; }
 .rewards-order-info > span:last-child { grid-column: 1 / -1; }
 .rewards-order-info strong { color: #334155; font-weight: 600; }
 .rewards-order-received { min-height: 36px !important; padding: 7px 12px !important; font-size: 13px !important; }
+.rewards-order-actions { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+.rewards-order-actions > button, .rewards-address-editor > button { min-height: 36px !important; padding: 7px 11px !important; font-size: 12px !important; }
+.rewards-order-actions > button.secondary, .rewards-address-editor > button.secondary { border-color: #cbd5e1; background: #fff; color: #475569; }
+.rewards-address-editor { display: grid; flex: 1 1 100%; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 9px; }
+.rewards-address-editor label { display: grid; gap: 5px; color: #475569; font-size: 12px; font-weight: 650; }
+.rewards-address-editor textarea { width: 100%; min-height: 68px; resize: vertical; padding: 9px 11px; border: 1px solid #cbd5e1; border-radius: 8px; color: #1e293b; font: inherit; font-weight: 400; }
 
 @media (max-width: 900px) {
     .rewards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
@@ -123,9 +141,14 @@
     .rewards-voucher { grid-template-columns: 1fr; gap: 12px; }
     .rewards-voucher > button { width: 100%; }
     .rewards-orders-dialog { max-height: 90vh; }
+    .rewards-confirm-dialog { padding: 22px 18px; }
+    .rewards-confirm-actions { flex-direction: column-reverse; }
+    .rewards-confirm-actions button { width: 100%; }
     .rewards-orders-header { padding: 18px; }
     .rewards-orders-list { max-height: calc(90vh - 78px); padding: 4px 18px 18px; }
     .rewards-order-title { flex-direction: column; }
     .rewards-order-info { grid-template-columns: 1fr; }
+    .rewards-address-editor { grid-template-columns: 1fr 1fr; }
+    .rewards-address-editor label { grid-column: 1 / -1; }
     .rewards-dialog-actions { flex-wrap: wrap; }
 }

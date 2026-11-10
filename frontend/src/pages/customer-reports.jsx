@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faBoxArchive,
@@ -23,6 +23,7 @@ import './customer-bookings.css';
 import './customer-reports-conversation.css';
 
 const API_URL = 'http://localhost:8080/api/reports';
+const MAX_EVIDENCE_SIZE = 5 * 1024 * 1024;
 
 const CATEGORIES = [
     { value: 'SERVICE_QUALITY', label: 'Chất lượng dịch vụ' },
@@ -90,7 +91,7 @@ async function requestApi(url, options = {}) {
     const response = await fetch(url, {
         ...options,
         headers: {
-            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+            ...(options.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
             Authorization: `Bearer ${token}`,
             ...options.headers
         }
@@ -109,6 +110,8 @@ async function requestApi(url, options = {}) {
 
 export default function CustomerReports() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const linkedReportId = searchParams.get('reportId');
 
     const [form, setForm] = useState({
         subject: '',
@@ -122,12 +125,17 @@ export default function CustomerReports() {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+    const [evidenceFile, setEvidenceFile] = useState(null);
+    const [downloadingEvidenceId, setDownloadingEvidenceId] = useState(null);
 
     const [expandedReportId, setExpandedReportId] = useState(null);
     const [responses, setResponses] = useState({});
     const [responsesLoading, setResponsesLoading] = useState(false);
     const [replyContent, setReplyContent] = useState('');
     const [sendingReply, setSendingReply] = useState(false);
+    const [reopenReportId, setReopenReportId] = useState(null);
+    const [reopenReason, setReopenReason] = useState('');
+    const [reopeningReport, setReopeningReport] = useState(false);
 
     const handleLogout = () => {
         sessionStorage.removeItem('accessToken');
@@ -168,6 +176,17 @@ export default function CustomerReports() {
     useEffect(() => {
         loadReports();
     }, []);
+
+    useEffect(() => {
+        if (!linkedReportId || !reports.some(report => String(report.id) === String(linkedReportId))) return;
+        setExpandedReportId(Number(linkedReportId));
+        requestApi(`${API_URL}/${linkedReportId}/responses`)
+            .then(data => setResponses(previous => ({
+                ...previous,
+                [linkedReportId]: Array.isArray(data) ? data : []
+            })))
+            .catch(err => setError(err.message || 'Không thể mở nội dung khiếu nại từ thông báo.'));
+    }, [linkedReportId, reports]);
 
     const loadResponses = async (reportId) => {
         if (!reportId) return;
@@ -217,6 +236,48 @@ export default function CustomerReports() {
         }));
     };
 
+    const handleEvidenceChange = event => {
+        const file = event.target.files?.[0] || null;
+        if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+            setEvidenceFile(null);
+            setError('Tệp bằng chứng chỉ nhận ảnh JPG, PNG hoặc WEBP.');
+            return;
+        }
+        if (file && file.size > MAX_EVIDENCE_SIZE) {
+            setEvidenceFile(null);
+            setError('Ảnh bằng chứng không được vượt quá 5 MB.');
+            return;
+        }
+        setError('');
+        setEvidenceFile(file);
+    };
+
+    const downloadEvidence = async reportId => {
+        setDownloadingEvidenceId(reportId);
+        setError('');
+        try {
+            const response = await fetch(`${API_URL}/${reportId}/evidence`, {
+                headers: { Authorization: `Bearer ${getToken()}` }
+            });
+            if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                throw new Error(getErrorMessage(response.status, data));
+            }
+            const blobUrl = URL.createObjectURL(await response.blob());
+            const anchor = document.createElement('a');
+            anchor.href = blobUrl;
+            anchor.download = `bang-chung-khieu-nai-${reportId}`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+        } catch (err) {
+            setError(err.message || 'Không thể tải tệp bằng chứng.');
+        } finally {
+            setDownloadingEvidenceId(null);
+        }
+    };
+
     const handleSubmit = async (event) => {
         event.preventDefault();
         setError('');
@@ -256,9 +317,12 @@ export default function CustomerReports() {
                 payload.bookingCode = bookingCode;
             }
 
+            const formData = new FormData();
+            formData.append('ticket', new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+            if (evidenceFile) formData.append('evidence', evidenceFile);
             await requestApi(API_URL, {
                 method: 'POST',
-                body: JSON.stringify(payload)
+                body: formData
             });
 
             setNotice('Gửi khiếu nại thành công.');
@@ -269,6 +333,7 @@ export default function CustomerReports() {
                 bookingCode: '',
                 description: ''
             });
+            setEvidenceFile(null);
 
             await loadReports();
         } catch (err) {
@@ -309,6 +374,34 @@ export default function CustomerReports() {
             setError(err.message || 'Không thể gửi phản hồi.');
         } finally {
             setSendingReply(false);
+        }
+    };
+
+    const handleReopenReport = async (event, reportId) => {
+        event.preventDefault();
+        const reason = reopenReason.trim();
+        if (reason.length < 10) {
+            setError('Vui lòng mô tả lý do mở lại khiếu nại (ít nhất 10 ký tự).');
+            return;
+        }
+        setReopeningReport(true);
+        setError('');
+        setNotice('');
+        try {
+            const updated = await requestApi(`${API_URL}/${reportId}/reopen`, {
+                method: 'POST',
+                body: JSON.stringify({ reason })
+            });
+            setReports(current => current.map(report => report.id === updated.id ? updated : report));
+            setReopenReportId(null);
+            setReopenReason('');
+            setNotice('Khiếu nại đã được mở lại và chuyển về hàng chờ xử lý.');
+            setExpandedReportId(reportId);
+            await loadResponses(reportId);
+        } catch (err) {
+            setError(err.message || 'Không thể mở lại khiếu nại.');
+        } finally {
+            setReopeningReport(false);
         }
     };
 
@@ -459,6 +552,18 @@ export default function CustomerReports() {
                                             {form.description.trim().length}/5000 ký tự
                                         </small>
                                     </div>
+                                    <div className="customer-report-field full">
+                                        <label htmlFor="report-evidence">Ảnh bằng chứng (không bắt buộc)</label>
+                                        <input
+                                            key={evidenceFile?.name || 'no-evidence'}
+                                            id="report-evidence"
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            onChange={handleEvidenceChange}
+                                            disabled={submitting}
+                                        />
+                                        <small>{evidenceFile ? `${evidenceFile.name} · ${(evidenceFile.size / (1024 * 1024)).toFixed(2)} MB` : 'JPG, PNG hoặc WEBP; tối đa 5 MB.'}</small>
+                                    </div>
                                 </div>
 
                                 <div className="customer-report-actions">
@@ -472,6 +577,7 @@ export default function CustomerReports() {
                                                 bookingCode: '',
                                                 description: ''
                                             });
+                                            setEvidenceFile(null);
                                             setError('');
                                             setNotice('');
                                         }}
@@ -567,9 +673,53 @@ export default function CustomerReports() {
                                                     </span>
                                                 </div>
 
+                                                <p className={`customer-report-sla${report.responseOverdue ? ' overdue' : ''}`}>
+                                                    {report.firstRespondedAt
+                                                        ? `Phản hồi đầu tiên: ${formatDate(report.firstRespondedAt)}`
+                                                        : report.responseDueAt
+                                                            ? `${report.responseOverdue ? 'Đã quá hạn phản hồi' : 'Dự kiến phản hồi trước'}: ${formatDate(report.responseDueAt)} (${report.responseSlaHours || 24} giờ)`
+                                                            : 'Thời hạn phản hồi đang được cập nhật.'}
+                                                </p>
+
                                                 <p className="customer-report-description">
                                                     {report.description || 'Không có nội dung'}
                                                 </p>
+
+                                                {report.evidenceUrl && (
+                                                    <button
+                                                        type="button"
+                                                        className="customer-report-evidence-link"
+                                                        onClick={() => downloadEvidence(report.id)}
+                                                        disabled={downloadingEvidenceId === report.id}
+                                                    >
+                                                        {downloadingEvidenceId === report.id ? 'Đang tải bằng chứng...' : 'Tải ảnh bằng chứng'}
+                                                    </button>
+                                                )}
+
+                                                {report.status === 'RESOLVED' && (
+                                                    reopenReportId === report.id ? (
+                                                        <form className="customer-report-reopen-form" onSubmit={event => handleReopenReport(event, report.id)}>
+                                                            <label htmlFor={`reopen-reason-${report.id}`}>Lý do cần tiếp tục xử lý</label>
+                                                            <textarea
+                                                                id={`reopen-reason-${report.id}`}
+                                                                minLength={10}
+                                                                maxLength={10000}
+                                                                rows={3}
+                                                                value={reopenReason}
+                                                                onChange={event => setReopenReason(event.target.value)}
+                                                                required
+                                                            />
+                                                            <div>
+                                                                <button type="button" className="customer-report-reopen-cancel" disabled={reopeningReport} onClick={() => { setReopenReportId(null); setReopenReason(''); }}>Đóng</button>
+                                                                <button type="submit" disabled={reopeningReport || reopenReason.trim().length < 10}>{reopeningReport ? 'Đang mở lại...' : 'Gửi yêu cầu mở lại'}</button>
+                                                            </div>
+                                                        </form>
+                                                    ) : (
+                                                        <button type="button" className="customer-report-reopen-trigger" onClick={() => { setReopenReportId(report.id); setReopenReason(''); setError(''); }}>
+                                                            Mở lại khiếu nại
+                                                        </button>
+                                                    )
+                                                )}
 
                                                 {report.resolution && (
                                                     <div className="customer-report-resolution">

@@ -60,6 +60,12 @@ public class ReportTicket {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "response_sla_started_at")
+    private LocalDateTime responseSlaStartedAt;
+
+    @Column(name = "first_responded_at")
+    private LocalDateTime firstRespondedAt;
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) {

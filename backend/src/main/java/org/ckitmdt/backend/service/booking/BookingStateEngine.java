@@ -16,6 +16,7 @@ import org.ckitmdt.backend.repository.BookingAssignmentRepository;
 import org.ckitmdt.backend.repository.BookingItemRepository;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.BookingStatusHistoryRepository;
+import org.ckitmdt.backend.repository.CancellationRefundRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.entity.Payment;
@@ -40,6 +41,7 @@ public class BookingStateEngine {
     private final BookingRepository bookingRepository;
     private final BookingAssignmentRepository bookingAssignmentRepository;
     private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
+    private final CancellationRefundRepository cancellationRefundRepository;
     private final BookingItemRepository bookingItemRepository;
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
@@ -897,18 +899,45 @@ public class BookingStateEngine {
 
         List<Payment> payments = paymentRepository.findByBooking_Id(booking.getId());
 
+        List<BookingPaymentSummaryResponse> paymentRecords = payments.stream()
+                .map(payment -> BookingPaymentSummaryResponse.builder()
+                        .id(payment.getId())
+                        .method(payment.getPaymentMethod())
+                        .provider(payment.getPaymentProvider())
+                        .amount(payment.getAmount())
+                        .status(payment.getStatus())
+                        .createdAt(payment.getCreatedAt())
+                        .paidAt(payment.getPaidAt())
+                        .build())
+                .toList();
+
+        List<BookingRefundSummaryResponse> refundRecords = cancellationRefundRepository
+                .findByBooking_IdOrderByRequestedAtAsc(booking.getId())
+                .stream()
+                .map(refund -> BookingRefundSummaryResponse.builder()
+                        .id(refund.getId())
+                        .requestedAmount(refund.getRequestedAmount())
+                        .approvedAmount(refund.getApprovedAmount())
+                        .status(refund.getStatus())
+                        .requestedAt(refund.getRequestedAt())
+                        .reviewedAt(refund.getReviewedAt())
+                        .transferredAt(refund.getTransferredAt())
+                        .build())
+                .toList();
+
         boolean cashPayment = payments.stream()
                 .anyMatch(payment ->
                         "CASH".equalsIgnoreCase(payment.getPaymentProvider())
                 );
 
-        boolean alreadyPaid = payments.stream()
-                .anyMatch(payment ->
-                        "SUCCESS".equalsIgnoreCase(payment.getStatus())
-                );
+        boolean alreadyPaid = payments.stream().anyMatch(this::isSuccessfulPayment);
 
         String paymentMethod = cashPayment ? "CASH" : "VNPAY";
-        String paymentStatus = alreadyPaid ? "PAID" : "UNPAID";
+        String paymentStatus = alreadyPaid ? "PAID"
+                : payments.stream().anyMatch(payment -> "REVIEW".equalsIgnoreCase(payment.getStatus())) ? "REVIEW"
+                : payments.stream().anyMatch(payment -> "PENDING".equalsIgnoreCase(payment.getStatus())) ? "PENDING"
+                : payments.stream().anyMatch(payment -> "FAILED".equalsIgnoreCase(payment.getStatus())) ? "FAILED"
+                : "UNPAID";
 
         List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
         List<CleanerAssignmentResponse> assignmentResponses = assignments.stream()
@@ -1009,6 +1038,16 @@ public class BookingStateEngine {
                 .cancelledAt(booking.getCancelledAt())
                 .items(items)
                 .statusHistory(historyList)
+                .paymentRecords(paymentRecords)
+                .refundRecords(refundRecords)
                 .build();
+    }
+
+    private boolean isSuccessfulPayment(Payment payment) {
+        if (payment == null || payment.getStatus() == null) return false;
+        return switch (payment.getStatus().trim().toUpperCase(Locale.ROOT)) {
+            case "SUCCESS", "PAID", "SUCCESSFUL", "COMPLETED", "SUCCEEDED" -> true;
+            default -> false;
+        };
     }
 }

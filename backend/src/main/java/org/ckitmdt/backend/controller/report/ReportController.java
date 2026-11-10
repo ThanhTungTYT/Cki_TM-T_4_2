@@ -15,11 +15,25 @@ import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -37,7 +51,13 @@ public class ReportController {
     private final AdminStaffAssignmentRepository assignmentRepository;
     private final AdminAuditLogService auditLogService;
 
-    @PostMapping
+    @Value("${app.upload.report-evidence-dir:uploads/report-evidence}")
+    private String reportEvidenceDirectory;
+
+    @Value("${app.reports.first-response-sla-hours:24}")
+    private long firstResponseSlaHours;
+
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @Transactional
     public Map<String, Object> create(
             @RequestBody Map<String, Object> body,
@@ -89,11 +109,76 @@ public class ReportController {
                 .status("OPEN")
                 .createdAt(now)
                 .updatedAt(now)
+                .responseSlaStartedAt(now)
                 .build();
 
         ReportTicket saved = reportRepository.save(report);
 
         return row(saved);
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Transactional
+    public Map<String, Object> createWithEvidence(
+            @RequestPart("ticket") Map<String, Object> body,
+            @RequestPart(value = "evidence", required = false) MultipartFile evidence,
+            Authentication auth) {
+        Map<String, Object> created = create(body, auth);
+        if (evidence == null || evidence.isEmpty()) return created;
+
+        String extension = validateEvidence(evidence);
+        Long reportId = ((Number) created.get("id")).longValue();
+        ReportTicket report = reportRepository.findByIdForUpdate(reportId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR));
+        String storedName = UUID.randomUUID() + extension;
+        Path directory = Paths.get(reportEvidenceDirectory).toAbsolutePath().normalize();
+        Path target = directory.resolve(storedName).normalize();
+        if (!target.startsWith(directory)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tên tệp bằng chứng không hợp lệ.");
+        }
+
+        try {
+            Files.createDirectories(directory);
+            try (var input = evidence.getInputStream()) {
+                Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Không thể lưu tệp bằng chứng.", exception);
+        }
+
+        report.setEvidenceUrl(storedName);
+        return row(reportRepository.save(report));
+    }
+
+    @GetMapping("/{id}/evidence")
+    @Transactional(readOnly = true)
+    public ResponseEntity<Resource> getEvidence(@PathVariable Long id, Authentication auth) {
+        User user = currentUser(auth);
+        ReportTicket report = findReport(id);
+        requireReportAccess(user, report);
+        String storedName = text(report.getEvidenceUrl());
+        if (!storedName.matches("[a-fA-F0-9-]{36}\\.(jpg|png|webp)")) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ticket không có tệp bằng chứng.");
+        }
+
+        Path directory = Paths.get(reportEvidenceDirectory).toAbsolutePath().normalize();
+        Path file = directory.resolve(storedName).normalize();
+        if (!file.startsWith(directory) || !Files.isRegularFile(file)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy tệp bằng chứng.");
+        }
+
+        MediaType mediaType = storedName.endsWith(".png") ? MediaType.IMAGE_PNG
+                : storedName.endsWith(".webp") ? MediaType.parseMediaType("image/webp")
+                : MediaType.IMAGE_JPEG;
+        Resource resource = new FileSystemResource(file);
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline().filename("ticket-evidence" + fileExtension(storedName)).build().toString())
+                .header("X-Content-Type-Options", "nosniff")
+                .body(resource);
     }
 
     @GetMapping("/mine")
@@ -248,6 +333,74 @@ public class ReportController {
         return responseRow(saved);
     }
 
+    @PostMapping("/{id}/reopen")
+    @Transactional
+    public Map<String, Object> reopen(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
+        User customer = currentUser(auth);
+        if (!"CUSTOMER".equalsIgnoreCase(customer.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ khách hàng mới có thể mở lại khiếu nại.");
+        }
+        ReportTicket report = reportRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khiếu nại."));
+        if (!Objects.equals(report.getReporter().getId(), customer.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khiếu nại.");
+        }
+        if (!"RESOLVED".equals(upper(report.getStatus()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Chỉ khiếu nại đã giải quyết mới có thể được mở lại.");
+        }
+        String reason = text(body == null ? null : body.get("reason"));
+        if (reason.length() < 10 || reason.length() > 10000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Lý do mở lại phải có từ 10 đến 10000 ký tự.");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String authorName = text(customer.getFullName());
+        if (authorName.isBlank()) authorName = text(customer.getEmail());
+        responseRepository.save(ComplaintResponse.builder()
+                .ticket(report)
+                .author(customer)
+                .authorName(authorName)
+                .authorRole("CUSTOMER")
+                .content("Mở lại khiếu nại: " + reason)
+                .createdAt(now)
+                .build());
+        report.setStatus("OPEN");
+        report.setResolution(null);
+        report.setHandledBy(null);
+        report.setResponseSlaStartedAt(now);
+        report.setFirstRespondedAt(null);
+        report.setUpdatedAt(now);
+        ReportTicket saved = reportRepository.save(report);
+
+        List<User> recipients = new ArrayList<>();
+        assignmentRepository.findByTicket_IdAndActiveTrue(id)
+                .map(assignment -> assignment.getStaff())
+                .ifPresent(recipients::add);
+        List<User> admins = userRepository.findAll().stream().filter(this::isAdmin).toList();
+        for (User admin : admins) {
+            if (recipients.stream().noneMatch(existing -> Objects.equals(existing.getId(), admin.getId()))) {
+                recipients.add(admin);
+            }
+        }
+        for (User recipient : recipients) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(recipient)
+                    .type("COMPLAINT_REOPENED")
+                    .title("Khách hàng đã mở lại khiếu nại #" + id)
+                    .message("Khiếu nại '" + report.getSubject() + "' cần được tiếp tục xử lý.")
+                    .referenceType("REPORT_TICKET")
+                    .referenceId(id)
+                    .createdAt(now)
+                    .build());
+        }
+        return row(saved);
+    }
+
     @PutMapping("/{id}/status")
     @Transactional
     public Map<String, Object> updateReportStatus(
@@ -379,6 +532,9 @@ public class ReportController {
                     "resolution=" + oldResolution,
                     "resolutionResponseId=" + savedResponse.getId()
             );
+        }
+        if (!resolution.isBlank() && report.getFirstRespondedAt() == null) {
+            report.setFirstRespondedAt(now);
         }
 
         report.setStatus(status);
@@ -661,12 +817,23 @@ public class ReportController {
         map.put("reportedRole", report.getReportedRole());
         map.put("reportedName", report.getReportedName());
         map.put("description", report.getDescription());
-        map.put("evidenceUrl", report.getEvidenceUrl());
+        String evidence = text(report.getEvidenceUrl());
+        map.put("evidenceUrl", evidence.matches("[a-fA-F0-9-]{36}\\.(jpg|png|webp)")
+                ? "/api/reports/" + report.getId() + "/evidence"
+                : report.getEvidenceUrl());
         map.put("status", report.getStatus());
         map.put("resolution", report.getResolution());
         map.put("handledBy", report.getHandledBy());
         map.put("createdAt", report.getCreatedAt());
         map.put("updatedAt", report.getUpdatedAt());
+        LocalDateTime slaStartedAt = report.getResponseSlaStartedAt() == null
+                ? report.getCreatedAt() : report.getResponseSlaStartedAt();
+        LocalDateTime responseDueAt = slaStartedAt == null ? null : slaStartedAt.plusHours(firstResponseSlaHours);
+        map.put("responseSlaHours", firstResponseSlaHours);
+        map.put("responseDueAt", responseDueAt);
+        map.put("firstRespondedAt", report.getFirstRespondedAt());
+        map.put("responseOverdue", responseDueAt != null && report.getFirstRespondedAt() == null
+                && LocalDateTime.now().isAfter(responseDueAt));
 
         map.put(
                 "reporterName",
@@ -718,6 +885,37 @@ public class ReportController {
 
     private String text(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private String validateEvidence(MultipartFile evidence) {
+        if (evidence.getSize() > 5L * 1024 * 1024) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tệp bằng chứng không được vượt quá 5 MB.");
+        }
+        String contentType = evidence.getContentType();
+        try (var input = evidence.getInputStream()) {
+            byte[] header = input.readNBytes(12);
+            if ("image/jpeg".equalsIgnoreCase(contentType)
+                    && header.length >= 3 && (header[0] & 0xff) == 0xff
+                    && (header[1] & 0xff) == 0xd8 && (header[2] & 0xff) == 0xff) return ".jpg";
+            if ("image/png".equalsIgnoreCase(contentType)
+                    && header.length >= 8 && (header[0] & 0xff) == 0x89
+                    && header[1] == 0x50 && header[2] == 0x4e && header[3] == 0x47
+                    && header[4] == 0x0d && header[5] == 0x0a
+                    && header[6] == 0x1a && header[7] == 0x0a) return ".png";
+            if ("image/webp".equalsIgnoreCase(contentType)
+                    && header.length >= 12 && header[0] == 'R' && header[1] == 'I'
+                    && header[2] == 'F' && header[3] == 'F'
+                    && header[8] == 'W' && header[9] == 'E'
+                    && header[10] == 'B' && header[11] == 'P') return ".webp";
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không thể đọc tệp bằng chứng.");
+        }
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP hợp lệ.");
+    }
+
+    private String fileExtension(String fileName) {
+        return fileName.substring(fileName.lastIndexOf('.'));
     }
 
     private String upper(String value) {

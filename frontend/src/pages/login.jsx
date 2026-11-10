@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {FontAwesomeIcon} from "@fortawesome/react-fontawesome";
 import { GoogleLogin } from "@react-oauth/google";
 import {faEye, faEyeSlash} from "@fortawesome/free-solid-svg-icons";
@@ -9,12 +9,28 @@ import Footer from '../components/Footer';
 import './login.css'
 
 function Login() {
+    const location = useLocation();
     const [showPassword, setShowPassword] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [message, setMessage] = useState("");
+    const [message, setMessage] = useState(
+        location.state?.reason === 'expired'
+            ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+            : location.state?.reason === 'login-required'
+                ? 'Vui lòng đăng nhập để tiếp tục.'
+                : location.state?.reason === 'invalid'
+                    ? 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.'
+                : ''
+    );
     const [loading, setLoading] = useState(false);
     const [facebookReady, setFacebookReady] = useState(false);
+    const customerReturnPath = () => {
+        const requested = location.state?.from;
+        const path = requested?.pathname || '';
+        return /^\/(checkout|profile|customer\/)/.test(path)
+            ? `${path}${requested.search || ''}${requested.hash || ''}`
+            : '/';
+    };
     useEffect(() => {
         const initFacebook = () => {
             if (!window.FB) return;
@@ -82,7 +98,7 @@ function Login() {
             } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
                 window.location.href = "/provider-portal/dashboard";
             } else {
-                window.location.href = "/";
+                window.location.href = customerReturnPath();
             }
         } catch (error) {
             setMessage(error.message);
@@ -135,7 +151,7 @@ function Login() {
             } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
                 window.location.href = "/provider-portal/dashboard";
             } else {
-                window.location.href = "/";
+                window.location.href = customerReturnPath();
             }
         } catch (error) {
             console.error(error);
@@ -197,7 +213,7 @@ function Login() {
                 } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
                     window.location.href = "/provider-portal/dashboard";
                 } else {
-                    window.location.href = "/";
+                    window.location.href = customerReturnPath();
                 }
             } catch (error) {
                 console.error(error);

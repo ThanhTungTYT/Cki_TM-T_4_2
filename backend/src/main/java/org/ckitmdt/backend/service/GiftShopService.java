@@ -20,6 +20,7 @@ public class GiftShopService {
     private final RewardAccountRepository accounts;
     private final RewardTransactionRepository transactions;
     private final RewardExpiryService expiry;
+    private final CustomerNotificationService notifications;
 
     @Transactional(readOnly = true)
     public List<GiftView> catalog() {
@@ -36,7 +37,6 @@ public class GiftShopService {
     public RedemptionView redeem(String email, RedeemRequest request) {
         User user = customer(email);
         if (request.address().trim().length() < 10) throw bad("Vui lòng nhập địa chỉ nhận quà đầy đủ (tối thiểu 10 ký tự).");
-        // Serialize all spending against this wallet, including checkout and expiry.
         RewardAccount account = accounts.findByUserIdForUpdate(user.getId())
                 .orElseThrow(() -> bad("Bạn chưa có Ccoin để đổi quà."));
         var previous = redemptions.findByUser_IdAndRequestKey(user.getId(), request.requestKey());
@@ -67,7 +67,64 @@ public class GiftShopService {
         transactions.save(RewardTransaction.builder().rewardAccount(account).performedBy(user)
                 .type("GIFT_REDEEM").points(-gift.getPointsCost()).description("Đổi quà: " + gift.getName())
                 .eventKey("GIFT_REDEEM_" + redemption.getId()).createdAt(now).build());
+        notifications.notifyCustomer(user, "GIFT_ORDER_PENDING", "Đã tiếp nhận đơn đổi quà",
+                "Đơn đổi " + gift.getName() + " (#" + redemption.getId() + ") đang được xử lý.",
+                "GIFT_REDEMPTION", redemption.getId());
         return view(redemption);
+    }
+
+    @Transactional
+    public RedemptionView cancel(String email, Long redemptionId) {
+        User user = customer(email);
+        GiftRedemption redemption = redemptions.findByIdForUpdate(redemptionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn đổi quà."));
+        requireOwner(redemption, user);
+        if ("CANCELLED".equalsIgnoreCase(redemption.getStatus())) return view(redemption);
+        if (!"PENDING".equalsIgnoreCase(redemption.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Chỉ có thể hủy đơn đổi quà trước khi chuyển sang đang giao.");
+        }
+
+        RewardAccount account = accounts.findByUserIdForUpdate(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Không tìm thấy ví Ccoin."));
+        RewardGift gift = gifts.findForUpdate(redemption.getGift().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Không tìm thấy quà để hoàn tồn kho."));
+        int points = redemption.getPointsUsed() == null ? 0 : redemption.getPointsUsed();
+        LocalDateTime now = LocalDateTime.now();
+
+        account.setBalance(Math.addExact(account.getBalance() == null ? 0 : account.getBalance(), points));
+        account.setUpdatedAt(now);
+        gift.setStock(Math.addExact(gift.getStock() == null ? 0 : gift.getStock(), 1));
+        redemption.setStatus("CANCELLED");
+        redemption.setCancelledAt(now);
+        redemptions.save(redemption);
+        accounts.save(account);
+        gifts.save(gift);
+        if (points > 0) {
+            transactions.save(RewardTransaction.builder().rewardAccount(account).performedBy(user)
+                    .type("GIFT_REFUND").points(points)
+                    .description("Hoàn Ccoin do hủy đơn đổi quà #" + redemption.getId())
+                    .eventKey("GIFT_CANCEL_REFUND_" + redemption.getId()).createdAt(now).build());
+        }
+        notifications.notifyCustomer(user, "GIFT_ORDER_CANCELLED", "Đơn đổi quà đã hủy",
+                "Đơn đổi " + redemption.getGiftName() + " (#" + redemption.getId()
+                        + ") đã được hủy; " + points + " Ccoin đã được hoàn vào ví.",
+                "GIFT_REDEMPTION", redemption.getId());
+        return view(redemption);
+    }
+
+    @Transactional
+    public RedemptionView updateAddress(String email, Long redemptionId, UpdateAddressRequest request) {
+        User user = customer(email);
+        GiftRedemption redemption = redemptions.findByIdForUpdate(redemptionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn đổi quà."));
+        requireOwner(redemption, user);
+        if (!"PENDING".equalsIgnoreCase(redemption.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Chỉ có thể cập nhật địa chỉ khi đơn còn đang xử lý.");
+        }
+        redemption.setAddress(request.address().trim());
+        return view(redemptions.save(redemption));
     }
 
     @Transactional
@@ -83,7 +140,17 @@ public class GiftShopService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Đơn hàng chưa được chuyển sang trạng thái đang giao.");
         }
         redemption.setStatus("DELIVERED");
-        return view(redemptions.save(redemption));
+        RedemptionView delivered = view(redemptions.save(redemption));
+        notifications.notifyCustomer(user, "GIFT_ORDER_DELIVERED", "Đã xác nhận nhận quà",
+                "Đơn đổi " + redemption.getGiftName() + " (#" + redemption.getId() + ") đã được giao thành công.",
+                "GIFT_REDEMPTION", redemption.getId());
+        return delivered;
+    }
+
+    private void requireOwner(GiftRedemption redemption, User user) {
+        if (!Objects.equals(redemption.getUser().getId(), user.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn đổi quà.");
+        }
     }
 
     private User customer(String email) {
@@ -93,12 +160,14 @@ public class GiftShopService {
     }
     private ResponseStatusException bad(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
     private RedemptionView view(GiftRedemption r) {
-        return new RedemptionView(r.getId(), r.getGiftName(), r.getPointsUsed(), r.getRecipientName(), r.getPhone(), r.getAddress(), r.getStatus(), r.getCreatedAt());
+        return new RedemptionView(r.getId(), r.getGiftName(), r.getPointsUsed(), r.getRecipientName(),
+                r.getPhone(), r.getAddress(), r.getStatus(), r.getCreatedAt(), r.getCancelledAt());
     }
     public record RedeemRequest(@NotNull Long giftId, @NotBlank @Size(max=100) String recipientName,
             @NotBlank @Pattern(regexp="[+]?[0-9]{9,15}") String phone,
             @NotBlank @Size(min=10, max=500) String address,
             @NotBlank @Pattern(regexp="[a-zA-Z0-9-]{16,80}") String requestKey) {}
+    public record UpdateAddressRequest(@NotBlank @Size(min=10, max=500) String address) {}
     public record GiftView(Long id, String name, String description, String icon, int pointsCost, int stock) {}
-    public record RedemptionView(Long id, String giftName, int pointsUsed, String recipientName, String phone, String address, String status, LocalDateTime createdAt) {}
+    public record RedemptionView(Long id, String giftName, int pointsUsed, String recipientName, String phone, String address, String status, LocalDateTime createdAt, LocalDateTime cancelledAt) {}
 }

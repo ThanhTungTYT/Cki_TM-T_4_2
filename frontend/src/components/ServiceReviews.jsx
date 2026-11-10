@@ -57,7 +57,12 @@ export default function ServiceReviews({ serviceId }) {
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [deletingId, setDeletingId] = useState(null);
+    const [editingReview, setEditingReview] = useState(null);
+    const [editRating, setEditRating] = useState(5);
+    const [editComment, setEditComment] = useState('');
+    const [isUpdating, setIsUpdating] = useState(false);
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
 
     async function loadPage(nextPage, append = false, signal) {
         const result = await reviewApi.getServiceReviews(serviceId, nextPage, signal);
@@ -132,6 +137,35 @@ export default function ServiceReviews({ serviceId }) {
         }
     }
 
+    function beginEdit(review) {
+        setEditingReview(review);
+        setEditRating(review.rating);
+        setEditComment(review.comment || '');
+        setError('');
+        setNotice('');
+    }
+
+    async function handleUpdate(event) {
+        event.preventDefault();
+        if (!editingReview || !editComment.trim()) return;
+        setIsUpdating(true);
+        setError('');
+        setNotice('');
+        try {
+            await reviewApi.updateServiceReview(serviceId, editingReview.id, {
+                rating: editRating,
+                comment: editComment
+            });
+            setEditingReview(null);
+            setNotice('Đánh giá của bạn đã được cập nhật.');
+            await loadPage(0);
+        } catch (err) {
+            setError(err.message || 'Không thể cập nhật đánh giá.');
+        } finally {
+            setIsUpdating(false);
+        }
+    }
+
     return (
         <section className="service-reviews" aria-labelledby="service-reviews-title">
             <div className="service-reviews-heading">
@@ -188,6 +222,7 @@ export default function ServiceReviews({ serviceId }) {
             )}
 
             {error && <p className="service-review-error" role="alert">{error}</p>}
+            {notice && <p className="service-review-notice" role="status">{notice}</p>}
 
             {isLoading ? (
                 <p className="service-reviews-empty">Đang tải bình luận...</p>
@@ -208,19 +243,49 @@ export default function ServiceReviews({ serviceId }) {
                                         <time dateTime={review.createdAt}>{formatReviewDate(review.createdAt)}</time>
                                     </div>
                                     {review.mine && (
-                                        <button
-                                            type="button"
-                                            className="service-review-delete"
-                                            onClick={() => handleDelete(review.id)}
-                                            disabled={deletingId === review.id}
-                                            aria-label="Xóa bình luận của bạn"
-                                        >
-                                            {deletingId === review.id ? 'Đang xóa...' : 'Xóa'}
-                                        </button>
+                                        <div className="service-review-actions">
+                                            <button
+                                                type="button"
+                                                className="service-review-edit"
+                                                onClick={() => beginEdit(review)}
+                                                disabled={isUpdating || deletingId === review.id}
+                                            >
+                                                Sửa
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="service-review-delete"
+                                                onClick={() => handleDelete(review.id)}
+                                                disabled={deletingId === review.id || isUpdating}
+                                                aria-label="Xóa bình luận của bạn"
+                                            >
+                                                {deletingId === review.id ? 'Đang xóa...' : 'Xóa'}
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                                 <StarRating value={review.rating} />
-                                <p className="service-review-comment">{review.comment}</p>
+                                {editingReview?.id === review.id ? (
+                                    <form className="service-review-edit-form" onSubmit={handleUpdate}>
+                                        <label className="service-review-form-label">Điều chỉnh số sao</label>
+                                        <StarRating value={editRating} interactive onChange={setEditRating} />
+                                        <label className="service-review-form-label" htmlFor={`edit-review-${review.id}`}>Nội dung đánh giá</label>
+                                        <textarea
+                                            id={`edit-review-${review.id}`}
+                                            value={editComment}
+                                            onChange={event => setEditComment(event.target.value)}
+                                            maxLength={2000}
+                                            required
+                                        />
+                                        <div className="service-review-form-footer">
+                                            <span>{editComment.length}/2000 ký tự</span>
+                                            <div className="service-review-edit-actions">
+                                                <button type="button" className="service-review-edit-cancel" disabled={isUpdating} onClick={() => setEditingReview(null)}>Bỏ qua</button>
+                                                <button type="submit" disabled={isUpdating || !editComment.trim()}>{isUpdating ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                ) : <p className="service-review-comment">{review.comment}</p>}
                             </div>
                         </article>
                     ))}

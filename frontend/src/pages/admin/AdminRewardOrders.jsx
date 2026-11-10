@@ -7,7 +7,7 @@ import "./AdminRewardOrders.css";
 const API_URL = "http://localhost:8080/api/admin/reward-orders";
 const money = value => `${Number(value || 0).toLocaleString("vi-VN")} Ccoin`;
 const dateTime = value => value ? new Date(value).toLocaleString("vi-VN") : "—";
-const statusText = status => ({ PENDING: "Đang xử lý", SHIPPED: "Đang giao", DELIVERED: "Đã giao" })[status] || status;
+const statusText = status => ({ PENDING: "Đang xử lý", SHIPPED: "Đang giao", DELIVERED: "Đã giao", CANCELLED: "Đã hủy" })[status] || status;
 
 function getToken() {
     return localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken") || localStorage.getItem("token") || sessionStorage.getItem("token") || "";
@@ -54,7 +54,8 @@ export default function AdminRewardOrders() {
         ALL: orders.length,
         PENDING: orders.filter(order => order.status === "PENDING").length,
         SHIPPED: orders.filter(order => order.status === "SHIPPED").length,
-        DELIVERED: orders.filter(order => order.status === "DELIVERED").length
+        DELIVERED: orders.filter(order => order.status === "DELIVERED").length,
+        CANCELLED: orders.filter(order => order.status === "CANCELLED").length
     }), [orders]);
     const shownOrders = filter === "ALL" ? orders : orders.filter(order => order.status === filter);
 
@@ -89,7 +90,7 @@ export default function AdminRewardOrders() {
             </div>
 
             <div className="reward-orders-stats">
-                {[ ["Tất cả đơn", "ALL"], ["Đang xử lý", "PENDING"], ["Đang giao", "SHIPPED"], ["Đã giao", "DELIVERED"] ].map(([label, status]) =>
+                {[ ["Tất cả đơn", "ALL"], ["Đang xử lý", "PENDING"], ["Đang giao", "SHIPPED"], ["Đã giao", "DELIVERED"], ["Đã hủy", "CANCELLED"] ].map(([label, status]) =>
                     <button type="button" key={status} className={`reward-order-stat ${filter === status ? "selected" : ""}`} onClick={() => setFilter(status)}>
                         <span>{label}</span><strong>{counts[status]}</strong>
                     </button>
@@ -123,6 +124,7 @@ export default function AdminRewardOrders() {
                     <div className="wide"><small>Địa chỉ giao</small><strong>{selected.address}</strong></div>
                     <div><small>Điểm đã đổi</small><strong>{money(selected.pointsUsed)}</strong></div>
                     <div><small>Ngày đặt</small><strong>{dateTime(selected.createdAt)}</strong></div>
+                    {selected.cancelledAt && <div><small>Ngày hủy</small><strong>{dateTime(selected.cancelledAt)}</strong></div>}
                     <div><small>Trạng thái</small><strong><span className={`reward-order-status ${selected.status?.toLowerCase()}`}>{statusText(selected.status)}</span></strong></div>
                 </div>
                 {error && <div className="reward-order-alert" role="alert">{error}</div>}
@@ -142,7 +144,7 @@ export default function AdminRewardOrders() {
             <p><strong>Người nhận:</strong> {invoice.recipientName} · {invoice.phone}</p>
             <p><strong>Địa chỉ:</strong> {invoice.address}</p>
             <table><thead><tr><th>Sản phẩm quà tặng</th><th>Điểm Ccoin</th></tr></thead><tbody><tr><td>{invoice.giftName}</td><td>{money(invoice.pointsUsed)}</td></tr></tbody></table>
-            <p className="invoice-status">Trạng thái giao hàng: Đang giao</p>
+            <p className="invoice-status">Trạng thái đơn hàng: {statusText(invoice.status)}</p>
         </article>}
     </AdminLayout>;
 }

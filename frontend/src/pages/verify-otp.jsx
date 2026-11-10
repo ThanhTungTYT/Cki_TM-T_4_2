@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEnvelope, faArrowLeft } from "@fortawesome/free-solid-svg-icons";
@@ -10,12 +10,16 @@ function VerifyOtp() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    const email = location.state?.email || "";
+    const email = location.state?.email || sessionStorage.getItem('pendingRegistrationEmail') || "";
 
     const [otp, setOtp] = useState("");
     const [message, setMessage] = useState("");
     const [loading, setLoading] = useState(false);
     const [resending, setResending] = useState(false);
+
+    useEffect(() => {
+        if (!email) navigate('/register', { replace: true });
+    }, [email, navigate]);
 
     const handleVerifyOtp = async (e) => {
         e.preventDefault();
@@ -49,9 +53,10 @@ function VerifyOtp() {
             }
             if (!response.ok) {
                 throw new Error(
-                    data.message || `Xác thực OTP thất bại (${response.status})`
+                    data.message || data.detail || `Xác thực OTP thất bại (${response.status})`
                 );
             }
+            sessionStorage.removeItem('pendingRegistrationEmail');
             navigate("/login", {
                 replace: true,
                 state: {
@@ -86,7 +91,7 @@ function VerifyOtp() {
             }
             if (!response.ok) {
                 throw new Error(
-                    data.message || `Gửi lại OTP thất bại (${response.status})`
+                    data.message || data.detail || `Gửi lại OTP thất bại (${response.status})`
                 );
             }
             setOtp("");

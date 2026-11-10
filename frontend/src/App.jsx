@@ -50,6 +50,25 @@ import CleanerHistory from './pages/cleaner-portal/CleanerHistory';
 import CleanerNotifications from './pages/cleaner-portal/CleanerNotifications';
 import CleanerJobs from './pages/cleaner-portal/CleanerJobs';
 import CleanerProfile from './pages/cleaner-portal/CleanerProfile';
+import ProtectedRoute from './components/ProtectedRoute';
+
+function AuthSessionExpiryHandler() {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    useEffect(() => {
+        const onExpired = event => {
+            navigate('/login', {
+                replace: true,
+                state: { from: location, reason: event.detail?.reason || 'expired' }
+            });
+        };
+        window.addEventListener('cleanmate:auth-expired', onExpired);
+        return () => window.removeEventListener('cleanmate:auth-expired', onExpired);
+    }, [location, navigate]);
+
+    return null;
+}
 
 function HomeRoute() {
     let user = {};
@@ -85,6 +104,7 @@ function HomeRoute() {
 function App() {
     return (
         <BrowserRouter>
+            <AuthSessionExpiryHandler />
             <Routes>
                 <Route path="/" element={<HomeRoute />} />
                 <Route path="/login" element={<Login />} />
@@ -95,8 +115,8 @@ function App() {
                 <Route path="/providers" element={<Providers />} />
                 <Route path="/rewards" element={<Rewards />} />
                 <Route path="/cart" element={<Cart />} />
-                <Route path="/checkout" element={<Checkout />} />
-                <Route path="/profile" element={<Profile />} />
+                <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
+                <Route path="/profile" element={<ProtectedRoute roles={['*']}><Profile /></ProtectedRoute>} />
                 <Route path="/verify-otp" element={<VerifyOtp />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/payment-result" element={<PaymentResult />} />

@@ -1,6 +1,7 @@
 package org.ckitmdt.backend.controller.auth;
 
 import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.service.auth.ForgotPasswordService;
 import org.springframework.http.ResponseEntity;
@@ -24,7 +25,8 @@ public class ForgotPasswordController {
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(
             @RequestBody ForgotPasswordRequest request,
-            HttpSession session
+            HttpSession session,
+            HttpServletRequest servletRequest
     ) {
         if (request.email() == null || request.email().isBlank()) {
             return ResponseEntity.badRequest()
@@ -33,7 +35,8 @@ public class ForgotPasswordController {
 
         forgotPasswordService.forgotPassword(
                 request.email(),
-                session
+                session,
+                servletRequest.getRemoteAddr()
         );
 
         return ResponseEntity.ok(Map.of(
@@ -45,12 +48,14 @@ public class ForgotPasswordController {
     @PostMapping("/verify-reset-password")
     public ResponseEntity<?> verifyResetPassword(
             @RequestBody VerifyResetRequest request,
-            HttpSession session
+            HttpSession session,
+            HttpServletRequest servletRequest
     ) {
         try {
             forgotPasswordService.verifyTemporaryPassword(
                     request.temporaryPassword(),
-                    session
+                    session,
+                    servletRequest.getRemoteAddr()
             );
 
             return ResponseEntity.ok(Map.of(
@@ -65,12 +70,14 @@ public class ForgotPasswordController {
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(
             @RequestBody ResetPasswordRequest request,
-            HttpSession session
+            HttpSession session,
+            HttpServletRequest servletRequest
     ) {
         try {
             forgotPasswordService.resetPassword(
                     request.newPassword(),
-                    session
+                    session,
+                    servletRequest.getRemoteAddr()
             );
 
             return ResponseEntity.ok(Map.of(
