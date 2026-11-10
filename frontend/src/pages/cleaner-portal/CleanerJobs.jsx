@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bookingApi } from '../../services/api';
 import './CleanerJobs.css';
@@ -107,15 +108,16 @@ function CleanerJobs() {
         message: '',
         type: ''
     });
+
     // CN3: Quản lý nhật ký công việc
     const [workLogs, setWorkLogs] = useState({});
     const [logType, setLogType] = useState({});
     const [logNote, setLogNote] = useState({});
     const [logLoading, setLogLoading] = useState({});
     const [logFeedback, setLogFeedback] = useState({});
+    const [selectedImages, setSelectedImages] = useState({});
 
     // Lấy Assignment của Cleaner đang đăng nhập.
-    // Mỗi Booking được gắn với Assignment tương ứng của Cleaner.
     const fetchBookings = useCallback(async () => {
         const assignments = await bookingApi.getCleanerAssignments();
 
@@ -175,71 +177,103 @@ function CleanerJobs() {
             cancelled = true;
         };
     }, [fetchBookings]);
-    // CN3: Gửi nhật ký tiến độ hoặc báo sự cố
-    async function handleSubmitWorkLog(assignmentId) {
-        if (!assignmentId) return;
 
-        const note = (logNote[assignmentId] || '').trim();
-        const type = logType[assignmentId] || 'PROGRESS';
+    // CN3: Đọc ảnh thành Data URL để hiển thị xem trước.
+    function readImagePreview(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
 
-        if (!note) {
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(
+                new Error('Không thể đọc ảnh.')
+            );
+
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // CN3: Chọn tối đa 5 ảnh minh chứng.
+    async function handleSelectWorkLogImages(assignmentId, fileList) {
+        const files = Array.from(fileList || []);
+
+        if (!assignmentId || files.length === 0) return;
+
+        const currentImages = selectedImages[assignmentId] || [];
+        const remainingSlots = 5 - currentImages.length;
+
+        if (remainingSlots <= 0) {
             setLogFeedback((prev) => ({
                 ...prev,
                 [assignmentId]: {
                     type: 'error',
-                    message: 'Vui lòng nhập nội dung nhật ký.'
+                    message: 'Mỗi nhật ký chỉ được đính kèm tối đa 5 ảnh.'
                 }
             }));
             return;
         }
 
-        setLogLoading((prev) => ({
-            ...prev,
-            [assignmentId]: true
-        }));
+        const acceptedFiles = files.slice(0, remainingSlots);
+        const newImages = [];
 
-        setLogFeedback((prev) => ({
-            ...prev,
-            [assignmentId]: null
-        }));
+        for (const file of acceptedFiles) {
+            if (
+                !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+            ) {
+                setLogFeedback((prev) => ({
+                    ...prev,
+                    [assignmentId]: {
+                        type: 'error',
+                        message: 'Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP.'
+                    }
+                }));
+                continue;
+            }
 
-        try {
-            await bookingApi.createCleanerWorkLog(assignmentId, {
-                logType: type,
-                note,
-                imageUrls: []
-            });
+            if (file.size > 5 * 1024 * 1024) {
+                setLogFeedback((prev) => ({
+                    ...prev,
+                    [assignmentId]: {
+                        type: 'error',
+                        message: `Ảnh "${file.name}" vượt quá 5 MB.`
+                    }
+                }));
+                continue;
+            }
 
-            setLogNote((prev) => ({
-                ...prev,
-                [assignmentId]: ''
-            }));
-
-            setLogFeedback((prev) => ({
-                ...prev,
-                [assignmentId]: {
-                    type: 'success',
-                    message: 'Đã gửi nhật ký công việc.'
-                }
-            }));
-
-            await loadWorkLogs(assignmentId);
-        } catch (err) {
-            setLogFeedback((prev) => ({
-                ...prev,
-                [assignmentId]: {
-                    type: 'error',
-                    message: err.message || 'Không thể gửi nhật ký.'
-                }
-            }));
-        } finally {
-            setLogLoading((prev) => ({
-                ...prev,
-                [assignmentId]: false
-            }));
+            try {
+                const preview = await readImagePreview(file);
+                newImages.push({ file, preview });
+            } catch {
+                setLogFeedback((prev) => ({
+                    ...prev,
+                    [assignmentId]: {
+                        type: 'error',
+                        message: 'Không thể đọc một ảnh đã chọn.'
+                    }
+                }));
+            }
         }
+
+        setSelectedImages((prev) => ({
+            ...prev,
+            [assignmentId]: [
+                ...(prev[assignmentId] || []),
+                ...newImages
+            ].slice(0, 5)
+        }));
     }
-    // CN3: Tải lịch sử nhật ký của một phân công
+
+    // CN3: Xóa ảnh khỏi danh sách ảnh chờ gửi.
+    function handleRemoveWorkLogImage(assignmentId, imageIndex) {
+        setSelectedImages((prev) => ({
+            ...prev,
+            [assignmentId]: (prev[assignmentId] || []).filter(
+                (_, index) => index !== imageIndex
+            )
+        }));
+    }
+
+    // CN3: Tải lịch sử nhật ký của một phân công.
     async function loadWorkLogs(assignmentId) {
         if (!assignmentId) return;
 
@@ -270,6 +304,102 @@ function CleanerJobs() {
             }));
         }
     }
+
+    // CN3: Gửi nhật ký tiến độ hoặc báo sự cố.
+    async function handleSubmitWorkLog(assignmentId) {
+        if (!assignmentId || logLoading[assignmentId]) return;
+
+        const note = (logNote[assignmentId] || '').trim();
+        const type = logType[assignmentId] || 'PROGRESS';
+
+        if (!note) {
+            setLogFeedback((prev) => ({
+                ...prev,
+                [assignmentId]: {
+                    type: 'error',
+                    message: 'Vui lòng nhập nội dung nhật ký.'
+                }
+            }));
+            return;
+        }
+
+        setLogLoading((prev) => ({
+            ...prev,
+            [assignmentId]: true
+        }));
+
+        setLogFeedback((prev) => ({
+            ...prev,
+            [assignmentId]: null
+        }));
+
+        try {
+            const images = selectedImages[assignmentId] || [];
+            const imageUrls = [];
+
+            // Tải từng ảnh lên Backend trước khi tạo nhật ký.
+            for (const image of images) {
+                const uploaded = await bookingApi.uploadCleanerWorkLogImage(
+                    image.file
+                );
+
+                if (!uploaded?.imageUrl) {
+                    throw new Error(
+                        'Máy chủ không trả về đường dẫn ảnh.'
+                    );
+                }
+
+                imageUrls.push(uploaded.imageUrl);
+            }
+
+            // Tạo nhật ký kèm các URL ảnh vừa tải lên.
+            await bookingApi.createCleanerWorkLog(assignmentId, {
+                logType: type,
+                note,
+                imageUrls
+            });
+
+            setSelectedImages((prev) => ({
+                ...prev,
+                [assignmentId]: []
+            }));
+
+            setLogNote((prev) => ({
+                ...prev,
+                [assignmentId]: ''
+            }));
+
+            setLogFeedback((prev) => ({
+                ...prev,
+                [assignmentId]: {
+                    type: 'success',
+                    message: 'Đã gửi nhật ký công việc.'
+                }
+            }));
+
+            // Tải lại lịch sử sau khi gửi thành công.
+            const data = await bookingApi.getCleanerWorkLogs(assignmentId);
+
+            setWorkLogs((prev) => ({
+                ...prev,
+                [assignmentId]: Array.isArray(data) ? data : []
+            }));
+        } catch (err) {
+            setLogFeedback((prev) => ({
+                ...prev,
+                [assignmentId]: {
+                    type: 'error',
+                    message: err.message || 'Không thể gửi nhật ký.'
+                }
+            }));
+        } finally {
+            setLogLoading((prev) => ({
+                ...prev,
+                [assignmentId]: false
+            }));
+        }
+    }
+
     // Xử lý các thao tác trên Assignment của Cleaner.
     async function handleBookingAction(booking, action) {
         if (processingId !== null) return;
@@ -604,6 +734,10 @@ function CleanerJobs() {
                             booking.status ||
                             ''
                         ).toUpperCase();
+
+                        const assignmentId =
+                            booking.cleanerAssignment?.assignmentId ||
+                            booking.cleanerAssignment?.id;
 
                         const status = getStatus(assignmentStatus);
                         const expanded = expandedId === booking.id;
@@ -978,30 +1112,41 @@ function CleanerJobs() {
                                                 </p>
                                             </>
                                         )}
+
                                         {/* CN3: NHẬT KÝ CÔNG VIỆC */}
-                                        {['ACCEPTED', 'IN_PROGRESS'].includes(assignmentStatus) && (
+                                        {['ACCEPTED', 'IN_PROGRESS'].includes(
+                                            assignmentStatus
+                                        ) && (
                                             <div className="cj-work-log">
                                                 <h4>Nhật ký công việc</h4>
 
                                                 <p>
-                                                    Cập nhật tiến độ hoặc báo cáo sự cố trong quá trình làm việc.
+                                                    Cập nhật tiến độ hoặc báo cáo
+                                                    sự cố trong quá trình làm việc.
                                                 </p>
 
                                                 <div className="cj-log-form">
                                                     <label>Loại nhật ký</label>
 
                                                     <select
-                                                        value={logType[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id] || 'PROGRESS'}
+                                                        value={
+                                                            logType[assignmentId] ||
+                                                            'PROGRESS'
+                                                        }
                                                         onChange={(e) => {
-                                                            const id = booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id;
                                                             setLogType((prev) => ({
                                                                 ...prev,
-                                                                [id]: e.target.value
+                                                                [assignmentId]:
+                                                                e.target.value
                                                             }));
                                                         }}
                                                     >
-                                                        <option value="PROGRESS">Cập nhật tiến độ</option>
-                                                        <option value="INCIDENT">Báo cáo sự cố</option>
+                                                        <option value="PROGRESS">
+                                                            Cập nhật tiến độ
+                                                        </option>
+                                                        <option value="INCIDENT">
+                                                            Báo cáo sự cố
+                                                        </option>
                                                     </select>
 
                                                     <label>Nội dung</label>
@@ -1009,64 +1154,177 @@ function CleanerJobs() {
                                                     <textarea
                                                         rows="4"
                                                         placeholder="Nhập nội dung tiến độ hoặc mô tả sự cố..."
-                                                        value={logNote[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id] || ''}
+                                                        value={
+                                                            logNote[assignmentId] ||
+                                                            ''
+                                                        }
                                                         onChange={(e) => {
-                                                            const id = booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id;
                                                             setLogNote((prev) => ({
                                                                 ...prev,
-                                                                [id]: e.target.value
+                                                                [assignmentId]:
+                                                                e.target.value
                                                             }));
                                                         }}
                                                     />
 
+                                                    <label>
+                                                        Ảnh minh chứng (tối đa 5
+                                                        ảnh, mỗi ảnh không quá 5 MB)
+                                                    </label>
+
+                                                    <input
+                                                        type="file"
+                                                        accept="image/jpeg,image/png,image/webp"
+                                                        multiple
+                                                        onChange={(e) => {
+                                                            handleSelectWorkLogImages(
+                                                                assignmentId,
+                                                                e.target.files
+                                                            );
+
+                                                            e.target.value = '';
+                                                        }}
+                                                    />
+
+                                                    {(selectedImages[assignmentId] ||
+                                                        []).length > 0 && (
+                                                        <div className="cj-log-image-preview">
+                                                            {selectedImages[
+                                                                assignmentId
+                                                                ].map((image, index) => (
+                                                                <div
+                                                                    className="cj-log-image-preview-item"
+                                                                    key={index}
+                                                                >
+                                                                    <img
+                                                                        src={image.preview}
+                                                                        alt={`Ảnh minh chứng ${index + 1}`}
+                                                                    />
+
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            handleRemoveWorkLogImage(
+                                                                                assignmentId,
+                                                                                index
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Xóa
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
                                                     <button
                                                         type="button"
-                                                        disabled={!!logLoading[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id]}
-                                                        onClick={() => handleSubmitWorkLog(
-                                                            booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id
-                                                        )}
+                                                        disabled={
+                                                            !!logLoading[assignmentId]
+                                                        }
+                                                        onClick={() =>
+                                                            handleSubmitWorkLog(
+                                                                assignmentId
+                                                            )
+                                                        }
                                                     >
-                                                        {logLoading[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id]
+                                                        {logLoading[assignmentId]
                                                             ? 'Đang gửi...'
                                                             : 'Gửi nhật ký'}
                                                     </button>
 
-                                                    {logFeedback[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id] && (
-                                                        <p className={`cj-log-feedback ${logFeedback[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id].type}`}>
-                                                            {logFeedback[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id].message}
+                                                    {logFeedback[assignmentId] && (
+                                                        <p
+                                                            className={`cj-log-feedback ${logFeedback[assignmentId].type}`}
+                                                        >
+                                                            {
+                                                                logFeedback[
+                                                                    assignmentId
+                                                                    ].message
+                                                            }
                                                         </p>
                                                     )}
                                                 </div>
 
                                                 <div className="cj-log-history">
                                                     <div className="cj-log-history-header">
-                                                        <strong>Lịch sử cập nhật</strong>
+                                                        <strong>
+                                                            Lịch sử cập nhật
+                                                        </strong>
 
                                                         <button
                                                             type="button"
-                                                            onClick={() => loadWorkLogs(
-                                                                booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id
-                                                            )}
+                                                            disabled={
+                                                                !!logLoading[assignmentId]
+                                                            }
+                                                            onClick={() =>
+                                                                loadWorkLogs(
+                                                                    assignmentId
+                                                                )
+                                                            }
                                                         >
                                                             Tải lịch sử
                                                         </button>
                                                     </div>
 
-                                                    {(workLogs[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id] || []).length === 0 ? (
-                                                        <p>Chưa có nhật ký công việc.</p>
+                                                    {(workLogs[assignmentId] ||
+                                                        []).length === 0 ? (
+                                                        <p>
+                                                            Chưa có nhật ký công việc.
+                                                        </p>
                                                     ) : (
-                                                        workLogs[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id].map((log) => (
-                                                            <div className="cj-log-item" key={log.id}>
+                                                        workLogs[
+                                                            assignmentId
+                                                            ].map((log) => (
+                                                            <div
+                                                                className="cj-log-item"
+                                                                key={log.id}
+                                                            >
                                                                 <strong>
-                                                                    {log.logType === 'INCIDENT'
+                                                                    {log.logType ===
+                                                                    'INCIDENT'
                                                                         ? '⚠ Báo cáo sự cố'
                                                                         : '✓ Cập nhật tiến độ'}
                                                                 </strong>
 
                                                                 <p>{log.note}</p>
 
+                                                                {Array.isArray(
+                                                                        log.imageUrls
+                                                                    ) &&
+                                                                    log.imageUrls
+                                                                        .length >
+                                                                    0 && (
+                                                                        <div className="cj-log-history-images">
+                                                                            {log.imageUrls.map(
+                                                                                (
+                                                                                    url,
+                                                                                    index
+                                                                                ) => (
+                                                                                    <a
+                                                                                        href={
+                                                                                            url
+                                                                                        }
+                                                                                        target="_blank"
+                                                                                        rel="noreferrer"
+                                                                                        key={`${log.id}-${index}`}
+                                                                                    >
+                                                                                        <img
+                                                                                            src={
+                                                                                                url
+                                                                                            }
+                                                                                            alt={`Ảnh nhật ký ${index + 1}`}
+                                                                                        />
+                                                                                    </a>
+                                                                                )
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+
                                                                 <small>
-                                                                    {formatDate(log.createdAt)}
+                                                                    {formatDate(
+                                                                        log.createdAt
+                                                                    )}
                                                                 </small>
                                                             </div>
                                                         ))
