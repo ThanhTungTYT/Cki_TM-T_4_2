@@ -107,6 +107,12 @@ function CleanerJobs() {
         message: '',
         type: ''
     });
+    // CN3: Quản lý nhật ký công việc
+    const [workLogs, setWorkLogs] = useState({});
+    const [logType, setLogType] = useState({});
+    const [logNote, setLogNote] = useState({});
+    const [logLoading, setLogLoading] = useState({});
+    const [logFeedback, setLogFeedback] = useState({});
 
     // Lấy Assignment của Cleaner đang đăng nhập.
     // Mỗi Booking được gắn với Assignment tương ứng của Cleaner.
@@ -169,7 +175,101 @@ function CleanerJobs() {
             cancelled = true;
         };
     }, [fetchBookings]);
+    // CN3: Gửi nhật ký tiến độ hoặc báo sự cố
+    async function handleSubmitWorkLog(assignmentId) {
+        if (!assignmentId) return;
 
+        const note = (logNote[assignmentId] || '').trim();
+        const type = logType[assignmentId] || 'PROGRESS';
+
+        if (!note) {
+            setLogFeedback((prev) => ({
+                ...prev,
+                [assignmentId]: {
+                    type: 'error',
+                    message: 'Vui lòng nhập nội dung nhật ký.'
+                }
+            }));
+            return;
+        }
+
+        setLogLoading((prev) => ({
+            ...prev,
+            [assignmentId]: true
+        }));
+
+        setLogFeedback((prev) => ({
+            ...prev,
+            [assignmentId]: null
+        }));
+
+        try {
+            await bookingApi.createCleanerWorkLog(assignmentId, {
+                logType: type,
+                note,
+                imageUrls: []
+            });
+
+            setLogNote((prev) => ({
+                ...prev,
+                [assignmentId]: ''
+            }));
+
+            setLogFeedback((prev) => ({
+                ...prev,
+                [assignmentId]: {
+                    type: 'success',
+                    message: 'Đã gửi nhật ký công việc.'
+                }
+            }));
+
+            await loadWorkLogs(assignmentId);
+        } catch (err) {
+            setLogFeedback((prev) => ({
+                ...prev,
+                [assignmentId]: {
+                    type: 'error',
+                    message: err.message || 'Không thể gửi nhật ký.'
+                }
+            }));
+        } finally {
+            setLogLoading((prev) => ({
+                ...prev,
+                [assignmentId]: false
+            }));
+        }
+    }
+    // CN3: Tải lịch sử nhật ký của một phân công
+    async function loadWorkLogs(assignmentId) {
+        if (!assignmentId) return;
+
+        setLogLoading((prev) => ({
+            ...prev,
+            [assignmentId]: true
+        }));
+
+        try {
+            const data = await bookingApi.getCleanerWorkLogs(assignmentId);
+
+            setWorkLogs((prev) => ({
+                ...prev,
+                [assignmentId]: Array.isArray(data) ? data : []
+            }));
+        } catch (err) {
+            setLogFeedback((prev) => ({
+                ...prev,
+                [assignmentId]: {
+                    type: 'error',
+                    message: err.message || 'Không thể tải nhật ký.'
+                }
+            }));
+        } finally {
+            setLogLoading((prev) => ({
+                ...prev,
+                [assignmentId]: false
+            }));
+        }
+    }
     // Xử lý các thao tác trên Assignment của Cleaner.
     async function handleBookingAction(booking, action) {
         if (processingId !== null) return;
@@ -877,6 +977,102 @@ function CleanerJobs() {
                                                     {booking.customerNote}
                                                 </p>
                                             </>
+                                        )}
+                                        {/* CN3: NHẬT KÝ CÔNG VIỆC */}
+                                        {['ACCEPTED', 'IN_PROGRESS'].includes(assignmentStatus) && (
+                                            <div className="cj-work-log">
+                                                <h4>Nhật ký công việc</h4>
+
+                                                <p>
+                                                    Cập nhật tiến độ hoặc báo cáo sự cố trong quá trình làm việc.
+                                                </p>
+
+                                                <div className="cj-log-form">
+                                                    <label>Loại nhật ký</label>
+
+                                                    <select
+                                                        value={logType[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id] || 'PROGRESS'}
+                                                        onChange={(e) => {
+                                                            const id = booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id;
+                                                            setLogType((prev) => ({
+                                                                ...prev,
+                                                                [id]: e.target.value
+                                                            }));
+                                                        }}
+                                                    >
+                                                        <option value="PROGRESS">Cập nhật tiến độ</option>
+                                                        <option value="INCIDENT">Báo cáo sự cố</option>
+                                                    </select>
+
+                                                    <label>Nội dung</label>
+
+                                                    <textarea
+                                                        rows="4"
+                                                        placeholder="Nhập nội dung tiến độ hoặc mô tả sự cố..."
+                                                        value={logNote[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id] || ''}
+                                                        onChange={(e) => {
+                                                            const id = booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id;
+                                                            setLogNote((prev) => ({
+                                                                ...prev,
+                                                                [id]: e.target.value
+                                                            }));
+                                                        }}
+                                                    />
+
+                                                    <button
+                                                        type="button"
+                                                        disabled={!!logLoading[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id]}
+                                                        onClick={() => handleSubmitWorkLog(
+                                                            booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id
+                                                        )}
+                                                    >
+                                                        {logLoading[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id]
+                                                            ? 'Đang gửi...'
+                                                            : 'Gửi nhật ký'}
+                                                    </button>
+
+                                                    {logFeedback[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id] && (
+                                                        <p className={`cj-log-feedback ${logFeedback[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id].type}`}>
+                                                            {logFeedback[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id].message}
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                <div className="cj-log-history">
+                                                    <div className="cj-log-history-header">
+                                                        <strong>Lịch sử cập nhật</strong>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => loadWorkLogs(
+                                                                booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id
+                                                            )}
+                                                        >
+                                                            Tải lịch sử
+                                                        </button>
+                                                    </div>
+
+                                                    {(workLogs[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id] || []).length === 0 ? (
+                                                        <p>Chưa có nhật ký công việc.</p>
+                                                    ) : (
+                                                        workLogs[booking.cleanerAssignment?.assignmentId || booking.cleanerAssignment?.id].map((log) => (
+                                                            <div className="cj-log-item" key={log.id}>
+                                                                <strong>
+                                                                    {log.logType === 'INCIDENT'
+                                                                        ? '⚠ Báo cáo sự cố'
+                                                                        : '✓ Cập nhật tiến độ'}
+                                                                </strong>
+
+                                                                <p>{log.note}</p>
+
+                                                                <small>
+                                                                    {formatDate(log.createdAt)}
+                                                                </small>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 )}

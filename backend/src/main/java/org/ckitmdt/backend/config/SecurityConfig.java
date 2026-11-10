@@ -36,6 +36,10 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/uploads/cleaner-logs/**"
+                        ).permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/customer/notifications").hasRole("CUSTOMER")
                         .requestMatchers(HttpMethod.PATCH, "/api/customer/notifications/*/read").hasRole("CUSTOMER")

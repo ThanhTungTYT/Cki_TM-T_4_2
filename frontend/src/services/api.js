@@ -128,6 +128,30 @@ export const cartApi = {
 // BOOKING API
 // =========================
 export const bookingApi = {
+    async uploadCleanerWorkLogImage(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const headers = getAuthHeaders();
+
+        // Không tự đặt Content-Type.
+        // Trình duyệt cần tự tạo multipart boundary.
+        delete headers['Content-Type'];
+
+        const res = await fetch(
+            `${BASE_URL}/bookings/cleaner/work-log-images`,
+            {
+                method: 'POST',
+                headers,
+                body: formData
+            }
+        );
+
+        return handleResponse(
+            res,
+            'Không thể tải ảnh minh chứng lên.'
+        );
+    },
     async getAvailability(payload, signal) {
         const res = await fetch(`${BASE_URL}/bookings/availability`, {
             method: 'POST',
@@ -247,8 +271,41 @@ export const bookingApi = {
             res,
             'Không thể cập nhật trạng thái phân công của nhân viên.'
         );
+    },
+    // CN3: Tạo nhật ký tiến độ hoặc báo sự cố
+    async createCleanerWorkLog(assignmentId, payload) {
+        const res = await fetch(
+            `${BASE_URL}/bookings/cleaner/assignments/${assignmentId}/logs`,
+            {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload)
+            }
+        );
+
+        return handleResponse(
+            res,
+            'Không thể gửi nhật ký công việc.'
+        );
+    },
+
+    // CN3: Lấy lịch sử nhật ký công việc
+    async getCleanerWorkLogs(assignmentId) {
+        const res = await fetch(
+            `${BASE_URL}/bookings/cleaner/assignments/${assignmentId}/logs`,
+            {
+                method: 'GET',
+                headers: getAuthHeaders()
+            }
+        );
+
+        return handleResponse(
+            res,
+            'Không thể tải nhật ký công việc.'
+        );
     }
 };
+
 
 // =========================
 // CLEANER NOTIFICATION API
@@ -270,6 +327,7 @@ export const cleanerNotificationApi = {
         return handleResponse(res, 'Không thể đánh dấu thông báo đã đọc.');
     }
 };
+
 
 // =========================
 // REFUND API - CN18
