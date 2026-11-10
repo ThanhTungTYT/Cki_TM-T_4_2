@@ -7,7 +7,7 @@
 .reward-orders-refresh { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid #dbe4ef; border-radius: 10px; background: #fff; color: #2563eb; cursor: pointer; }
 .reward-orders-refresh:hover { border-color: #93c5fd; background: #eff6ff; }
 .reward-orders-refresh:disabled { opacity: .6; cursor: wait; }
-.reward-orders-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 22px; }
+.reward-orders-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 22px; }
 .reward-order-stat { display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 17px 18px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; color: #64748b; cursor: pointer; text-align: left; }
 .reward-order-stat strong { color: #1e385c; font-size: 23px; }
 .reward-order-stat.selected { border-color: #93c5fd; background: #eff6ff; box-shadow: 0 0 0 2px rgba(37, 99, 235, .06); }
@@ -27,6 +27,7 @@
 .reward-order-status.pending { background: #fff7ed; color: #c2410c; }
 .reward-order-status.shipped { background: #eff6ff; color: #1d4ed8; }
 .reward-order-status.delivered { background: #ecfdf5; color: #15803d; }
+.reward-order-status.cancelled { background: #f1f5f9; color: #475569; }
 .reward-order-view { padding: 7px 10px; border: 1px solid #bfdbfe; border-radius: 7px; background: #eff6ff; color: #1d4ed8; font: inherit; font-weight: 700; cursor: pointer; }
 .reward-order-view:hover { background: #dbeafe; }
 .reward-order-empty { padding: 30px !important; color: #64748b !important; text-align: center; }
@@ -65,7 +66,7 @@
 
 @media (max-width: 980px) {
     .reward-orders-page { padding: 22px; }
-    .reward-orders-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .reward-orders-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
     .reward-orders-page { padding: 16px; }

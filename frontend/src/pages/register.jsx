@@ -52,9 +52,10 @@ function Register() {
             }
             if (!response.ok) {
                 throw new Error(
-                    data.message || `Đăng ký thất bại (${response.status})`
+                    data.message || data.detail || `Đăng ký thất bại (${response.status})`
                 );
             }
+            sessionStorage.setItem('pendingRegistrationEmail', email.trim());
             navigate("/verify-otp", {
                 state: {email: email}
             });

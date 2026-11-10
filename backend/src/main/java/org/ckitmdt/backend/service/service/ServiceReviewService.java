@@ -115,6 +115,30 @@ public class ServiceReviewService {
         reviewRepository.delete(review);
     }
 
+    @Transactional
+    public ReviewResponseDto updateReview(Long serviceId, Long reviewId, String email, ReviewCreateRequest request) {
+        User customer = getCustomer(email);
+        Service service = getService(serviceId);
+        if (request == null || request.getRating() == null || request.getRating() < 1
+                || request.getRating() > 5 || request.getComment() == null
+                || request.getComment().isBlank() || request.getComment().length() > 2000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Đánh giá cần có số sao từ 1 đến 5 và nội dung tối đa 2000 ký tự.");
+        }
+
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đánh giá."));
+        if (!Objects.equals(review.getService().getId(), service.getId())
+                || !Objects.equals(review.getCustomer().getId(), customer.getId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đánh giá của bạn.");
+        }
+
+        review.setRating(request.getRating());
+        review.setComment(request.getComment().trim());
+        review.setUpdatedAt(LocalDateTime.now());
+        return toDto(reviewRepository.save(review), customer.getId());
+    }
+
     private Service getService(Long serviceId) {
         return serviceRepository.findByIdAndStatusNot(serviceId, "DELETED")
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dịch vụ."));

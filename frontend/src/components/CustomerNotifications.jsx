@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Client } from '@stomp/stompjs';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBell, faCheck } from '@fortawesome/free-solid-svg-icons';
@@ -13,6 +13,7 @@ function getToken() {
 }
 
 export default function CustomerNotifications() {
+    const navigate = useNavigate();
     const [items, setItems] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
@@ -75,6 +76,25 @@ export default function CustomerNotifications() {
         }
     };
 
+    const openNotification = async notification => {
+        await markRead(notification);
+        setIsOpen(false);
+        const type = String(notification.referenceType || '').toUpperCase();
+        if (['COMPLAINT', 'REPORT_TICKET'].includes(type) && notification.referenceId) {
+            navigate(`/customer/reports?reportId=${encodeURIComponent(notification.referenceId)}`);
+            return;
+        }
+        if (type === 'BOOKING' && notification.referenceId) {
+            navigate(`/customer/bookings?id=${encodeURIComponent(notification.referenceId)}`);
+            return;
+        }
+        if (type === 'GIFT_REDEMPTION') {
+            navigate('/rewards');
+            return;
+        }
+        navigate('/customer/bookings');
+    };
+
     return (
         <div className="customer-notifications-wrap">
             <button
@@ -97,11 +117,11 @@ export default function CustomerNotifications() {
                     <div className="customer-notifications-list">
                         {items.length ? items.map(item => (
                             <article className={`customer-notification-item${item.read ? '' : ' unread'}`} key={item.id}>
-                                <div>
+                                <button type="button" className="customer-notification-open" onClick={() => openNotification(item)}>
                                     <strong>{item.title}</strong>
                                     <p>{item.message}</p>
                                     <small>{item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : ''}</small>
-                                </div>
+                                </button>
                                 {!item.read && (
                                     <button type="button" title="Đánh dấu đã đọc" onClick={() => markRead(item)}>
                                         <FontAwesomeIcon icon={faCheck} />

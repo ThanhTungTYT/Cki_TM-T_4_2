@@ -16,8 +16,11 @@ import "./forgot-password.css";
 function ForgotPassword() {
     const navigate = useNavigate();
 
-    const [step, setStep] = useState(1);
-    const [email, setEmail] = useState("");
+    const [step, setStep] = useState(() => {
+        const savedStep = Number(sessionStorage.getItem('passwordResetStep'));
+        return savedStep >= 1 && savedStep <= 3 ? savedStep : 1;
+    });
+    const [email, setEmail] = useState(() => sessionStorage.getItem('passwordResetEmail') || "");
     const [temporaryPassword, setTemporaryPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
@@ -51,7 +54,7 @@ function ForgotPassword() {
 
         if (!response.ok) {
             throw new Error(
-                data.message || `Yêu cầu thất bại (${response.status})`
+                data.message || data.detail || `Yêu cầu thất bại (${response.status})`
             );
         }
 
@@ -65,6 +68,8 @@ function ForgotPassword() {
 
         try {
             await callApi("forgot-password", { email });
+            sessionStorage.setItem('passwordResetEmail', email.trim());
+            sessionStorage.setItem('passwordResetStep', '2');
             setStep(2);
         } catch (error) {
             setMessage(error.message);
@@ -89,6 +94,7 @@ function ForgotPassword() {
                 temporaryPassword
             });
 
+            sessionStorage.setItem('passwordResetStep', '3');
             setStep(3);
         } catch (error) {
             setMessage(error.message);
@@ -114,6 +120,8 @@ function ForgotPassword() {
             await callApi("reset-password", {
                 newPassword
             });
+            sessionStorage.removeItem('passwordResetEmail');
+            sessionStorage.removeItem('passwordResetStep');
             const response = await fetch(
                 "http://localhost:8080/api/auth/login",
                 {
@@ -346,7 +354,9 @@ function ForgotPassword() {
                                 className="forgot-back-button"
                                 onClick={() => {
                                     setMessage("");
-                                    setStep(step - 1);
+                                    const previousStep = step - 1;
+                                    sessionStorage.setItem('passwordResetStep', String(previousStep));
+                                    setStep(previousStep);
                                 }}
                                 disabled={loading}
                             >

@@ -18,6 +18,7 @@ public class ForgotPasswordService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final AuthRateLimitService rateLimitService;
 
     private static final String SESSION_KEY = "FORGOT_PASSWORD";
     private static final int EXPIRE_MINUTES = 10;
@@ -67,8 +68,14 @@ public class ForgotPasswordService {
         return new String(chars);
     }
 
-    public void forgotPassword(String email, HttpSession session) {
+    public void forgotPassword(String email, HttpSession session, String remoteAddress) {
         String normalizedEmail = email.trim().toLowerCase();
+        rateLimitService.consume("password-reset-ip:" + remoteAddress,
+                20, 60 * 60 * 1000L,
+                "Từ địa chỉ mạng này đã có quá nhiều yêu cầu khôi phục mật khẩu. Vui lòng thử lại sau.");
+        rateLimitService.consume("password-reset-send:" + remoteAddress + ":" + normalizedEmail,
+                3, 60 * 60 * 1000L,
+                "Bạn đã yêu cầu khôi phục mật khẩu quá nhiều lần. Vui lòng thử lại sau một giờ.");
 
         session.removeAttribute(SESSION_KEY);
 
@@ -99,8 +106,12 @@ public class ForgotPasswordService {
 
     public void verifyTemporaryPassword(
             String temporaryPassword,
-            HttpSession session
+            HttpSession session,
+            String remoteAddress
     ) {
+        rateLimitService.consume("password-reset-verify:" + remoteAddress + ":" + session.getId(),
+                10, 10 * 60 * 1000L,
+                "Bạn đã thử xác thực quá nhiều lần. Vui lòng yêu cầu khôi phục lại mật khẩu.");
         ResetSession data = getResetSession(session);
 
         if (data.attempts() >= MAX_ATTEMPTS) {
@@ -155,8 +166,12 @@ public class ForgotPasswordService {
 
     public void resetPassword(
             String newPassword,
-            HttpSession session
+            HttpSession session,
+            String remoteAddress
     ) {
+        rateLimitService.consume("password-reset-submit:" + remoteAddress + ":" + session.getId(),
+                3, 10 * 60 * 1000L,
+                "Bạn đã gửi quá nhiều yêu cầu đặt lại mật khẩu. Vui lòng thử lại sau.");
         ResetSession data = getResetSession(session);
 
         if (!data.verified()) {

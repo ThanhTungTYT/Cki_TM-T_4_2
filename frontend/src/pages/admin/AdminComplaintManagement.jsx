@@ -15,6 +15,7 @@ import {
     faComments
 } from "@fortawesome/free-solid-svg-icons";
 import AdminLayout from "./AdminLayout";
+import { downloadReportEvidence } from "../../services/api";
 import "./AdminComplaintManagement.css";
 
 const API_URL = "http://localhost:8080/api/reports";
@@ -153,6 +154,14 @@ function AdminComplaintManagement() {
     const [sendingResponse, setSendingResponse] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+
+    const handleEvidenceDownload = async reportId => {
+        try {
+            await downloadReportEvidence(`/api/reports/${reportId}/evidence`, `bang-chung-khieu-nai-${reportId}`);
+        } catch (downloadError) {
+            setError(downloadError.message || "Không thể tải tệp bằng chứng.");
+        }
+    };
 
     const loadReports = useCallback(async (showLoading = true) => {
         if (showLoading) setLoading(true);
@@ -704,6 +713,14 @@ function AdminComplaintManagement() {
                                     label="Người phụ trách"
                                     value={selectedReport.handledBy}
                                 />
+                                <Detail
+                                    label="SLA phản hồi đầu tiên"
+                                    value={selectedReport.firstRespondedAt
+                                        ? `Đã phản hồi lúc ${formatDate(selectedReport.firstRespondedAt)}`
+                                        : selectedReport.responseDueAt
+                                            ? `${selectedReport.responseOverdue ? "Quá hạn" : "Hạn phản hồi"}: ${formatDate(selectedReport.responseDueAt)} (${selectedReport.responseSlaHours || 24} giờ)`
+                                            : "Chưa có dữ liệu"}
+                                />
                             </div>
 
                             <div className="complaint-description-section">
@@ -722,15 +739,15 @@ function AdminComplaintManagement() {
                                             Mở liên kết để xem minh chứng người gửi cung cấp.
                                         </p>
                                     </div>
-                                    <a
-                                        href={selectedReport.evidenceUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="complaint-evidence-link"
-                                    >
-                                        Xem minh chứng
-                                        <FontAwesomeIcon icon={faArrowRight} />
-                                    </a>
+                                    {selectedReport.evidenceUrl.startsWith("/api/reports/") ? (
+                                        <button type="button" onClick={() => handleEvidenceDownload(selectedReport.id)} className="complaint-evidence-link">
+                                            Tải minh chứng <FontAwesomeIcon icon={faArrowRight} />
+                                        </button>
+                                    ) : (
+                                        <a href={selectedReport.evidenceUrl} target="_blank" rel="noreferrer" className="complaint-evidence-link">
+                                            Xem minh chứng <FontAwesomeIcon icon={faArrowRight} />
+                                        </a>
+                                    )}
                                 </div>
                             )}
 

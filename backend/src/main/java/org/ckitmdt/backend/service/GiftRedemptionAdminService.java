@@ -3,6 +3,7 @@ package org.ckitmdt.backend.service;
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.entity.GiftRedemption;
 import org.ckitmdt.backend.repository.GiftRedemptionRepository;
+import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class GiftRedemptionAdminService {
     private final GiftRedemptionRepository redemptions;
+    private final CustomerNotificationService notifications;
 
     @Transactional(readOnly = true)
     public List<AdminRedemptionView> list() {
@@ -32,7 +34,11 @@ public class GiftRedemptionAdminService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ đơn đang xử lý mới có thể xuất hóa đơn và chuyển sang đang giao.");
         }
         redemption.setStatus("SHIPPED");
-        return view(redemptions.save(redemption));
+        AdminRedemptionView shipped = view(redemptions.save(redemption));
+        notifications.notifyCustomer(redemption.getUser(), "GIFT_ORDER_SHIPPED", "Quà tặng đang được giao",
+                "Đơn đổi " + redemption.getGiftName() + " (#" + redemption.getId() + ") đã được bàn giao vận chuyển.",
+                "GIFT_REDEMPTION", redemption.getId());
+        return shipped;
     }
 
     private AdminRedemptionView view(GiftRedemption redemption) {
@@ -47,7 +53,8 @@ public class GiftRedemptionAdminService {
                 redemption.getPhone(),
                 redemption.getAddress(),
                 redemption.getStatus(),
-                redemption.getCreatedAt()
+                redemption.getCreatedAt(),
+                redemption.getCancelledAt()
         );
     }
 
@@ -62,6 +69,7 @@ public class GiftRedemptionAdminService {
             String phone,
             String address,
             String status,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            LocalDateTime cancelledAt
     ) {}
 }

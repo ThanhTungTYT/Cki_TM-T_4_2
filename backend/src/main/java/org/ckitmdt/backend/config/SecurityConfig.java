@@ -1,6 +1,7 @@
 package org.ckitmdt.backend.config;
 
 import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.HttpServletResponse;
 import org.ckitmdt.backend.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +35,20 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint((request, response, exception) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setCharacterEncoding("UTF-8");
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write("{\"message\":\"Phiên đăng nhập không hợp lệ hoặc đã hết hạn.\"}");
+                        })
+                        .accessDeniedHandler((request, response, exception) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setCharacterEncoding("UTF-8");
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write("{\"message\":\"Bạn không có quyền thực hiện thao tác này.\"}");
+                        })
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(

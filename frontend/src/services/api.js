@@ -1,3 +1,5 @@
+import { expireStoredAuth } from '../utils/authSession';
+
 const BASE_URL = 'http://localhost:8080/api';
 
 export const publicServicesApi = {
@@ -50,6 +52,26 @@ function getAuthHeaders(extraHeaders = {}) {
     };
 }
 
+export async function downloadReportEvidence(url, fileName = 'bang-chung-khieu-nai') {
+    const endpoint = /^https?:\/\//i.test(url)
+        ? url
+        : `${BASE_URL.replace(/\/api$/, '')}${url}`;
+    const response = await fetch(endpoint, { headers: getAuthHeaders() });
+    if (!response.ok) {
+        await handleResponse(response, 'Không thể tải tệp bằng chứng.');
+    }
+    const extension = response.headers.get('Content-Type')?.includes('png') ? '.png'
+        : response.headers.get('Content-Type')?.includes('webp') ? '.webp' : '.jpg';
+    const blobUrl = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement('a');
+    anchor.href = blobUrl;
+    anchor.download = `${fileName}${extension}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+}
+
 // =========================
 // HANDLE API RESPONSE
 // =========================
@@ -57,12 +79,15 @@ async function handleResponse(res, defaultMessage = 'Có lỗi xảy ra.') {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        throw new Error(
+        if (res.status === 401) expireStoredAuth('expired');
+        const error = new Error(
             data.message ||
             data.detail ||
             data.error ||
             defaultMessage
         );
+        error.status = res.status;
+        throw error;
     }
 
     return data;
@@ -206,8 +231,9 @@ export const bookingApi = {
         return handleResponse(res, 'Không thể tạo đơn đặt dịch vụ.');
     },
 
-    async getMyBookings() {
-        const res = await fetch(`${BASE_URL}/bookings/me`, {
+    async getMyBookings(status) {
+        const query = status ? `?status=${encodeURIComponent(status)}` : '';
+        const res = await fetch(`${BASE_URL}/bookings/me${query}`, {
             method: 'GET',
             headers: getAuthHeaders()
         });
@@ -422,6 +448,18 @@ export const reviewApi = {
             body: JSON.stringify(payload)
         });
         return handleResponse(res, 'Không thể gửi đánh giá.');
+    },
+
+    async updateServiceReview(serviceId, reviewId, payload) {
+        const res = await fetch(
+            `${BASE_URL}/v1/services/${serviceId}/reviews/${reviewId}`,
+            {
+                method: 'PUT',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload)
+            }
+        );
+        return handleResponse(res, 'Không thể cập nhật đánh giá.');
     },
 
     async deleteServiceReview(serviceId, reviewId) {

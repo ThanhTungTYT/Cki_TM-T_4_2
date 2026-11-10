@@ -227,3 +227,85 @@
         justify-content: center;
     }
 }
+.customer-report-evidence-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    margin: 4px 0 12px;
+    padding: 7px 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    color: #1d4ed8;
+    background: #eff6ff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.customer-report-evidence-link:hover:not(:disabled) { background: #dbeafe; }
+.customer-report-evidence-link:disabled { opacity: .65; cursor: wait; }
+.customer-report-field input[type="file"] {
+    display: block;
+    width: 100%;
+    min-height: 54px;
+    margin-top: 7px;
+    padding: 8px;
+    border: 1px dashed #93c5fd;
+    border-radius: 11px;
+    background: linear-gradient(135deg, #f8fbff, #f1f7ff);
+    color: #475569;
+    font: inherit;
+    font-size: 12px;
+    transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.customer-report-field input[type="file"]:hover:not(:disabled) {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+.customer-report-field input[type="file"]:focus-visible {
+    outline: 3px solid rgba(59, 130, 246, .18);
+    outline-offset: 2px;
+}
+.customer-report-field input[type="file"]::file-selector-button {
+    min-height: 34px;
+    margin-right: 12px;
+    padding: 7px 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    color: #1d4ed8;
+    background: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background .18s ease, border-color .18s ease;
+}
+.customer-report-field input[type="file"]::file-selector-button:hover {
+    border-color: #93c5fd;
+    background: #eff6ff;
+}
+.customer-report-field input[type="file"]:disabled { opacity: .65; cursor: wait; }
+.customer-report-sla { margin: 8px 0 14px; color: #475569; font-size: 12px; }
+.customer-report-sla.overdue { color: #b91c1c; font-weight: 700; }
+.customer-report-reopen-trigger,
+.customer-report-reopen-form button {
+    min-height: 36px;
+    padding: 7px 12px;
+    border: 1px solid #2563eb;
+    border-radius: 8px;
+    color: #fff;
+    background: #2563eb;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+}
+.customer-report-reopen-trigger:hover,
+.customer-report-reopen-form button:hover:not(:disabled) { background: #1d4ed8; }
+.customer-report-reopen-form { display: grid; gap: 9px; max-width: 620px; margin: 12px 0 16px; padding: 14px; border: 1px solid #bfdbfe; border-radius: 10px; background: #f8fbff; }
+.customer-report-reopen-form label { color: #334155; font-size: 13px; font-weight: 700; }
+.customer-report-reopen-form textarea { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; color: #1e293b; font: inherit; resize: vertical; }
+.customer-report-reopen-form > div { display: flex; justify-content: flex-end; gap: 8px; }
+.customer-report-reopen-form button.customer-report-reopen-cancel { border-color: #cbd5e1; color: #475569; background: #fff; }
+.customer-report-reopen-form button:disabled { opacity: .6; cursor: wait; }
