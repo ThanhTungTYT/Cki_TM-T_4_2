@@ -8,6 +8,8 @@ import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.security.SecureRandom;
+
 @Service
 @RequiredArgsConstructor
 public class RegistrationOtpService {
@@ -16,6 +18,7 @@ public class RegistrationOtpService {
     private final AuthService authService;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
+    private final AuthRateLimitService rateLimitService;
 
     private static final String REGISTER_DATA = "REGISTER_DATA";
     private static final String REGISTER_OTP = "REGISTER_OTP";
@@ -26,9 +29,11 @@ public class RegistrationOtpService {
     private static final long OTP_DURATION = 5 * 60 * 1000L;
     private static final long RESEND_COOLDOWN = 60 * 1000L;
     private static final int MAX_ATTEMPTS = 5;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    public void requestOtp(RegisterRequest request, HttpSession session) {
+    public void requestOtp(RegisterRequest request, HttpSession session, String remoteAddress) {
         String email = request.getEmail().trim().toLowerCase();
+        consumeSendLimit(email, remoteAddress);
         if (userRepository.existsByEmail(email)) {throw new IllegalArgumentException(
                     "Email đã được sử dụng"
             );
@@ -36,7 +41,7 @@ public class RegistrationOtpService {
         sendAndSaveOtp(request, session);
     }
 
-    public void resendOtp(HttpSession session) {
+    public void resendOtp(HttpSession session, String remoteAddress) {
         RegisterRequest request =
                 (RegisterRequest) session.getAttribute(REGISTER_DATA);
         if (request == null) {
@@ -44,7 +49,17 @@ public class RegistrationOtpService {
                     "Không tìm thấy thông tin đăng ký"
             );
         }
+        consumeSendLimit(request.getEmail().trim().toLowerCase(), remoteAddress);
         sendAndSaveOtp(request, session);
+    }
+
+    private void consumeSendLimit(String email, String remoteAddress) {
+        rateLimitService.consume("register-send-ip:" + remoteAddress,
+                30, 60 * 60 * 1000L,
+                "Từ địa chỉ mạng này đã có quá nhiều yêu cầu OTP. Vui lòng thử lại sau một giờ.");
+        rateLimitService.consume("register-send:" + remoteAddress + ":" + email,
+                5, 60 * 60 * 1000L,
+                "Bạn đã yêu cầu quá nhiều mã OTP. Vui lòng thử lại sau một giờ.");
     }
 
     private void sendAndSaveOtp(RegisterRequest request, HttpSession session) {
@@ -57,7 +72,7 @@ public class RegistrationOtpService {
                     "Vui lòng đợi 60 giây trước khi gửi lại OTP"
             );
         }
-        int otpNumber = (int) (Math.random() * 900000) + 100000;
+        int otpNumber = SECURE_RANDOM.nextInt(900000) + 100000;
         String otp = String.valueOf(otpNumber);
         String otpHash = passwordEncoder.encode(otp);
 
@@ -70,6 +85,9 @@ public class RegistrationOtpService {
     }
 
     public void verifyOtp(String otp, HttpSession session) {
+        rateLimitService.consume("register-verify:" + session.getId(),
+                10, 10 * 60 * 1000L,
+                "Bạn đã gửi quá nhiều lần xác thực OTP. Vui lòng thử lại sau.");
         String savedOtpHash = (String) session.getAttribute(REGISTER_OTP);
         Long expiresAt = (Long) session.getAttribute(OTP_EXPIRES_AT);
         RegisterRequest registerData = (RegisterRequest) session.getAttribute(REGISTER_DATA);

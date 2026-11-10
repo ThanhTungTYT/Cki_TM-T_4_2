@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { providerComplaintsApi } from '../../services/providerApi';
+import { downloadReportEvidence } from '../../services/api';
 
 function ProviderComplaints() {
     const [complaints, setComplaints] = useState([]);
@@ -16,6 +17,14 @@ function ProviderComplaints() {
     const [evidenceUrl, setEvidenceUrl] = useState('');
     const [submittingResp, setSubmittingResp] = useState(false);
     const [respError, setRespError] = useState('');
+
+    async function downloadEvidence(reportId) {
+        try {
+            await downloadReportEvidence(`/api/reports/${reportId}/evidence`, `bang-chung-khieu-nai-${reportId}`);
+        } catch (downloadError) {
+            setError(downloadError.message || 'Không thể tải tệp bằng chứng.');
+        }
+    }
 
     function loadComplaints() {
         setLoading(true);
@@ -216,14 +225,15 @@ function ProviderComplaints() {
                                         </div>
                                         {ticketDetail.evidenceUrl && (
                                             <div style={{ marginTop: 8 }}>
-                                                <a
-                                                    href={ticketDetail.evidenceUrl}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    style={{ fontSize: 12, color: 'var(--pp-primary)', textDecoration: 'underline' }}
-                                                >
-                                                    📎 Xem tệp bằng chứng đính kèm
-                                                </a>
+                                                {ticketDetail.evidenceUrl.startsWith('/api/reports/') ? (
+                                                    <button type="button" onClick={() => downloadEvidence(ticketDetail.id)} style={{ fontSize: 12, color: 'var(--pp-primary)', textDecoration: 'underline', border: 0, padding: 0, background: 'transparent', cursor: 'pointer' }}>
+                                                        📎 Tải tệp bằng chứng đính kèm
+                                                    </button>
+                                                ) : (
+                                                    <a href={ticketDetail.evidenceUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--pp-primary)', textDecoration: 'underline' }}>
+                                                        📎 Xem tệp bằng chứng đính kèm
+                                                    </a>
+                                                )}
                                             </div>
                                         )}
                                     </div>

@@ -1,6 +1,7 @@
 package org.ckitmdt.backend.controller.auth;
 
 import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.dto.auth.*;
@@ -10,6 +11,7 @@ import org.ckitmdt.backend.service.auth.AuthService;
 import org.ckitmdt.backend.service.auth.RegistrationOtpService;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
 
@@ -68,8 +70,9 @@ public class AuthController {
     }
 
     @PostMapping("/register/request-otp")
-    public ResponseEntity<?> requestRegisterOtp(@Valid @RequestBody RegisterRequest request, HttpSession session) {
-        registrationOtpService.requestOtp(request, session);
+    public ResponseEntity<?> requestRegisterOtp(@Valid @RequestBody RegisterRequest request, HttpSession session,
+            HttpServletRequest servletRequest) {
+        registrationOtpService.requestOtp(request, session, servletRequest.getRemoteAddr());
         return ResponseEntity.ok(Map.of("success", true, "message", "Đã gửi OTP đến email"));
     }
 
@@ -80,12 +83,20 @@ public class AuthController {
     }
 
     @PostMapping("/register/resend-otp")
-    public ResponseEntity<?> resendRegisterOtp(HttpSession session) {
-        registrationOtpService.resendOtp(session);
+    public ResponseEntity<?> resendRegisterOtp(HttpSession session, HttpServletRequest servletRequest) {
+        registrationOtpService.resendOtp(session, servletRequest.getRemoteAddr());
         return ResponseEntity.ok(
                 Map.of("success", true, "message", "Đã gửi lại OTP")
         );
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleAuthValidation(IllegalArgumentException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("message", exception.getMessage() == null
+                        ? "Yêu cầu xác thực không hợp lệ." : exception.getMessage()));
+    }
+
     @PostMapping("/facebook")
     public ResponseEntity<AuthResponse> facebookLogin(
             @Valid @RequestBody FacebookLoginRequest request

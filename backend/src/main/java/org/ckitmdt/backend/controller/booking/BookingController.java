@@ -79,8 +79,11 @@ public class BookingController {
      * Lấy danh sách đơn hàng của khách hàng hiện tại (CN17)
      */
     @GetMapping("/me")
-    public ResponseEntity<List<BookingResponse>> getMyBookings(Authentication authentication) {
-        return ResponseEntity.ok(bookingService.getMyBookings(authentication.getName()));
+    public ResponseEntity<List<BookingResponse>> getMyBookings(
+            Authentication authentication,
+            @RequestParam(required = false) String status
+    ) {
+        return ResponseEntity.ok(bookingService.getMyBookings(authentication.getName(), status));
     }
 
     /**

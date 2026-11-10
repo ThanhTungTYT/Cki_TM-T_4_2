@@ -787,6 +787,11 @@
     font-size: 12px;
     font-weight: 700;
     text-decoration: none;
+    padding: 6px 0;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
 }
 
 .complaint-evidence-link:hover {

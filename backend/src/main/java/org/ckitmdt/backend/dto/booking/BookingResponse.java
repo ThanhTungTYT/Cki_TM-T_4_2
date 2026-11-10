@@ -44,6 +44,8 @@ public class BookingResponse {
     private LocalDateTime cancelledAt;
     private List<BookingItemResponse> items;
     private List<BookingStatusHistoryResponse> statusHistory;
+    private List<BookingPaymentSummaryResponse> paymentRecords;
+    private List<BookingRefundSummaryResponse> refundRecords;
     private String cleanerName;
     private String cleanerPhone;
     private String cleanerAvatar;

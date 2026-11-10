@@ -1115,6 +1115,56 @@
 }
 
 .btn-action-cancel:hover { background: #fef2f2; }
+.btn-action-pay {
+    min-height: 40px;
+    padding: 9px 15px;
+    border: 1px solid #2563eb;
+    border-radius: 9px;
+    color: #fff;
+    background: #2563eb;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 3px 9px rgba(37, 99, 235, .16);
+    transition: background .2s, border-color .2s, box-shadow .2s, transform .2s, opacity .2s;
+}
+.btn-action-pay:hover:not(:disabled) { background: #1d4ed8; border-color: #1d4ed8; box-shadow: 0 5px 12px rgba(37, 99, 235, .22); transform: translateY(-1px); }
+.btn-action-pay:focus-visible { outline: 3px solid rgba(59, 130, 246, .25); outline-offset: 2px; }
+.btn-action-pay:disabled { opacity: .65; cursor: wait; transform: none; }
+.customer-payment-action {
+    align-items: flex-start;
+    gap: 7px;
+    min-width: 220px;
+    padding: 12px 14px;
+    border: 1px solid #dbeafe;
+    border-radius: 12px;
+    background: #f8fbff;
+}
+.customer-payment-action .btn-action-pay { margin: 0; }
+.customer-payment-action small { max-width: 260px; color: #64748b; font-size: 11px; line-height: 1.45; }
+@media (max-width: 1034px) {
+    .customer-payment-action { width: 100%; min-width: 0; }
+    .customer-payment-action .btn-action-pay { width: 100%; }
+}
+.cancel-confirm-modal .cancel-confirm-icon { color: #dc2626; }
+.cancel-confirm-modal .modal-top p { margin: 8px auto 0; max-width: 390px; line-height: 1.6; }
+.btn-confirm-cancel {
+    border: 1px solid #dc2626;
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: #fff;
+    background: #dc2626;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.btn-confirm-cancel:hover:not(:disabled) { border-color: #b91c1c; background: #b91c1c; }
+.btn-confirm-cancel:disabled { opacity: .65; cursor: wait; }
 .customer-action-container.reschedule-panel {
     display: grid;
     grid-template-columns: minmax(0, 270px) auto;

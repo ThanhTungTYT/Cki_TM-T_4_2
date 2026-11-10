@@ -21,6 +21,8 @@ public class GiftRedemption {
     @Column(length = 500)
     private String address;
     private String status;
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
     @Column(name = "request_key", nullable = false, length = 80)
     private String requestKey;
     private LocalDateTime createdAt;

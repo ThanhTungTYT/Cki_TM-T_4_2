@@ -641,10 +641,22 @@ public class BookingService {
 
     @Transactional(readOnly = true)
     public List<BookingResponse> getMyBookings(String userEmail) {
+        return getMyBookings(userEmail, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<BookingResponse> getMyBookings(String userEmail, String status) {
         User customer = getUserByEmail(userEmail);
+        String role = customer.getRole() == null ? "" : customer.getRole().replace("ROLE_", "");
+        if (!"CUSTOMER".equalsIgnoreCase(role)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Chỉ khách hàng mới được xem danh sách đơn hàng của mình.");
+        }
 
         return bookingRepository.findByCustomerIdOrderByCreatedAtDesc(customer.getId())
                 .stream()
+                .filter(booking -> status == null || status.isBlank()
+                        || (booking.getStatus() != null && booking.getStatus().equalsIgnoreCase(status.trim())))
                 .map(bookingStateEngine::mapToBookingResponse)
                 .collect(Collectors.toList());
     }

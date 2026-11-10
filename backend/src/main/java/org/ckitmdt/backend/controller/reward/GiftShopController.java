@@ -27,6 +27,17 @@ public class GiftShopController {
         return shop.confirmReceived(auth.getName(), id);
     }
 
+    @PostMapping("/redemptions/{id}/cancel")
+    public GiftShopService.RedemptionView cancel(Authentication auth, @PathVariable Long id) {
+        return shop.cancel(auth.getName(), id);
+    }
+
+    @PatchMapping("/redemptions/{id}/address")
+    public GiftShopService.RedemptionView updateAddress(Authentication auth, @PathVariable Long id,
+            @Valid @RequestBody GiftShopService.UpdateAddressRequest request) {
+        return shop.updateAddress(auth.getName(), id, request);
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, String>> handleBusinessError(ResponseStatusException exception) {
         return ResponseEntity.status(exception.getStatusCode())

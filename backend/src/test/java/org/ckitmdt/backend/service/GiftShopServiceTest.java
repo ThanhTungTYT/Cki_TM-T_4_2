@@ -15,7 +15,9 @@ class GiftShopServiceTest {
     private final UserRepository users = mock(UserRepository.class);
     private final RewardAccountRepository accounts = mock(RewardAccountRepository.class);
     private final RewardTransactionRepository transactions = mock(RewardTransactionRepository.class);
-    private final GiftShopService shop = new GiftShopService(gifts, redemptions, users, accounts, transactions, mock(RewardExpiryService.class));
+    private final GiftShopService shop = new GiftShopService(
+            gifts, redemptions, users, accounts, transactions,
+            mock(RewardExpiryService.class), mock(CustomerNotificationService.class));
     private final GiftShopService.RedeemRequest request = new GiftShopService.RedeemRequest(1L, "Nguyen Van A", "0901234567", "12 Nguyen Trai, TP HCM", "12345678-12345678");
     private RewardAccount wallet;
     private RewardGift gift;

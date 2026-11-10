@@ -19,5 +19,9 @@ export const rewardApi = {
     gifts: () => request('/gifts'),
     history: () => request('/redemptions'),
     redeem: body => request('/redemptions', { method: 'POST', body: JSON.stringify(body) }),
-    confirmReceived: id => request(`/redemptions/${id}/received`, { method: 'POST' })
+    confirmReceived: id => request(`/redemptions/${id}/received`, { method: 'POST' }),
+    cancelRedemption: id => request(`/redemptions/${id}/cancel`, { method: 'POST' }),
+    updateRedemptionAddress: (id, address) => request(`/redemptions/${id}/address`, {
+        method: 'PATCH', body: JSON.stringify({ address })
+    })
 };

@@ -88,10 +88,11 @@ public class CancellationRefundService {
         String bookingStatus = upper(booking.getStatus());
 
         if (!"CANCELLED".equals(bookingStatus)
-                && !"REJECTED".equals(bookingStatus)) {
+                && !"REJECTED".equals(bookingStatus)
+                && !"EXPIRED".equals(bookingStatus)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Chỉ đơn đã hủy hoặc bị từ chối mới được yêu cầu hoàn tiền."
+                    "Chỉ đơn đã hủy, bị từ chối hoặc hết hạn mới được yêu cầu hoàn tiền."
             );
         }
 
