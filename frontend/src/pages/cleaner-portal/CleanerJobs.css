@@ -601,3 +601,100 @@
     color: #b45309;
     font-size: 13px;
 }
+/* CN3 - Nhật ký công việc */
+.cj-work-log {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.cj-work-log > p {
+    color: #64748b;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.cj-log-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 650px;
+}
+
+.cj-log-form label {
+    font-weight: 600;
+    font-size: 14px;
+    color: #334155;
+}
+
+.cj-log-form select,
+.cj-log-form textarea {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font: inherit;
+    box-sizing: border-box;
+}
+
+.cj-log-form textarea {
+    resize: vertical;
+}
+
+.cj-log-form button,
+.cj-log-history-header button {
+    width: fit-content;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 7px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.cj-log-form button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.cj-log-feedback.success {
+    color: #15803d;
+}
+
+.cj-log-feedback.error {
+    color: #dc2626;
+}
+
+.cj-log-history {
+    margin-top: 24px;
+}
+
+.cj-log-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.cj-log-history-header button {
+    background: #475569;
+    font-size: 13px;
+}
+
+.cj-log-item {
+    padding: 14px;
+    margin-bottom: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.cj-log-item p {
+    margin: 8px 0;
+    white-space: pre-wrap;
+}
+
+.cj-log-item small {
+    color: #64748b;
+}
