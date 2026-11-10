@@ -124,6 +124,10 @@ function formatDate(value) {
     return date.toLocaleString('vi-VN');
 }
 
+function toDateKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function formatDateOnly(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -148,6 +152,7 @@ function mapBooking(booking) {
     return {
         id: booking.bookingCode || String(booking.id),
         dbId: booking.id,
+        scheduledStartIso: booking.scheduledStart || '',
         version: booking.version,
         providerId: booking.partnerId ?? null,
         providerName: booking.partnerName || '',
@@ -184,7 +189,9 @@ function mapBooking(booking) {
         },
         items: Array.isArray(booking.items)
             ? booking.items.map(item => ({
+                serviceId: item.serviceId,
                 serviceName: item.serviceName || '',
+                packageId: item.packageId ?? null,
                 packageName: item.packageName || '',
                 quantity: item.quantity ?? null,
                 unitPrice: item.unitPrice ?? null,
@@ -221,7 +228,12 @@ export default function CustomerBookingsView() {
     const [showRefundModal, setShowRefundModal] = useState(false);
     const [refundReason, setRefundReason] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
-    const [rescheduleValue, setRescheduleValue] = useState('');
+    const [rescheduleDate, setRescheduleDate] = useState('');
+    const [rescheduleTime, setRescheduleTime] = useState('');
+    const [rescheduleSlots, setRescheduleSlots] = useState([]);
+    const [rescheduleCalendar, setRescheduleCalendar] = useState({});
+    const [rescheduleMonth, setRescheduleMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+    const [rescheduleAvailabilityLoading, setRescheduleAvailabilityLoading] = useState(false);
     const [rescheduleLoading, setRescheduleLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
@@ -291,6 +303,69 @@ export default function CustomerBookingsView() {
     const selectedRefund = myRefunds.find(
         refund => String(refund.bookingId) === String(selectedBooking?.dbId)
     ) || null;
+
+    const rescheduleCalendarDays = useMemo(() => {
+        const first = new Date(rescheduleMonth.getFullYear(), rescheduleMonth.getMonth(), 1);
+        const start = new Date(first);
+        start.setDate(first.getDate() - ((first.getDay() + 6) % 7));
+        return Array.from({ length: 42 }, (_, index) => {
+            const date = new Date(start);
+            date.setDate(start.getDate() + index);
+            return date;
+        });
+    }, [rescheduleMonth]);
+
+    useEffect(() => {
+        if (!selectedBooking?.dbId || selectedBooking.status !== 'PENDING_PROVIDER') return;
+        const start = selectedBooking.scheduledStartIso;
+        setRescheduleDate(start?.slice(0, 10) || '');
+        setRescheduleTime(start?.slice(11, 16) || '');
+        const parsed = start ? new Date(start) : new Date();
+        if (!Number.isNaN(parsed.getTime())) setRescheduleMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+    }, [selectedBooking?.dbId, selectedBooking?.scheduledStartIso, selectedBooking?.status]);
+
+    useEffect(() => {
+        if (!selectedBooking?.dbId || selectedBooking.status !== 'PENDING_PROVIDER'
+            || !selectedBooking.providerId || !selectedBooking.items?.length) return undefined;
+        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+        if (!token) return undefined;
+        const controller = new AbortController();
+        const items = selectedBooking.items.map(item => ({
+            serviceId: Number(item.serviceId),
+            packageId: item.packageId ? Number(item.packageId) : null,
+            quantity: Number(item.quantity) || 1
+        }));
+        setRescheduleAvailabilityLoading(true);
+        bookingApi.getCalendarAvailability({
+            partnerId: selectedBooking.providerId,
+            dates: rescheduleCalendarDays.map(toDateKey),
+            items,
+            excludeBookingId: selectedBooking.dbId
+        }, controller.signal).then(result => {
+            if (!controller.signal.aborted) setRescheduleCalendar(result || {});
+        }).catch(() => {
+            if (!controller.signal.aborted) setRescheduleCalendar({});
+        });
+        if (rescheduleDate) {
+            bookingApi.rescheduleAvailability({
+                partnerId: selectedBooking.providerId,
+                date: rescheduleDate,
+                items,
+                excludeBookingId: selectedBooking.dbId
+            }, controller.signal).then(result => {
+                if (!controller.signal.aborted) setRescheduleSlots(Array.isArray(result) ? result : []);
+            }).catch(() => {
+                if (!controller.signal.aborted) setRescheduleSlots([]);
+            }).finally(() => {
+                if (!controller.signal.aborted) setRescheduleAvailabilityLoading(false);
+            });
+        } else {
+            setRescheduleSlots([]);
+            setRescheduleAvailabilityLoading(false);
+        }
+        return () => controller.abort();
+    }, [selectedBooking?.dbId, selectedBooking?.status, selectedBooking?.providerId,
+        selectedBooking?.items, rescheduleDate, rescheduleCalendarDays]);
 
     useEffect(() => {
         if (
@@ -447,11 +522,14 @@ export default function CustomerBookingsView() {
     };
 
     const handleReschedule = async () => {
-        if (!selectedBooking?.dbId || !rescheduleValue || rescheduleLoading) return;
+        const scheduledStart = rescheduleDate && rescheduleTime
+            ? `${rescheduleDate}T${rescheduleTime}:00`
+            : '';
+        if (!selectedBooking?.dbId || !scheduledStart || rescheduleLoading) return;
         try {
             setRescheduleLoading(true);
             const updated = await bookingApi.reschedulePendingBooking(
-                selectedBooking.dbId, rescheduleValue
+                selectedBooking.dbId, scheduledStart
             );
             setBookings(current => current.map(item => String(item.dbId) === String(updated.id)
                 ? mapBooking(updated) : item));
@@ -740,18 +818,42 @@ export default function CustomerBookingsView() {
                                     )}
 
                                     {selectedBooking.status === 'PENDING_PROVIDER' && selectedBooking.dbId && (
-                                        <div className="customer-action-container reschedule-panel">
-                                            <label htmlFor="customer-reschedule">Đổi lịch hẹn khi đơn đang chờ nhà cung cấp xác nhận</label>
-                                            <input id="customer-reschedule" type="datetime-local"
-                                                value={rescheduleValue || selectedBooking.scheduledStart?.slice(0, 16) || ''}
-                                                onChange={event => setRescheduleValue(event.target.value)}
-                                                disabled={rescheduleLoading} />
-                                            <button type="button" className="btn-action-accept"
-                                                onClick={handleReschedule} disabled={rescheduleLoading || !rescheduleValue}>
+                                        <section className="customer-action-container reschedule-panel">
+                                            <div className="reschedule-heading">
+                                                <span className="reschedule-icon"><FontAwesomeIcon icon={faCalendarDays} /></span>
+                                                <div><strong>Đổi lịch hẹn</strong><small>Chọn ngày và giờ còn đủ nhân viên</small></div>
+                                            </div>
+                                            <div className="reschedule-calendar">
+                                                <div className="reschedule-calendar-heading">
+                                                    <button type="button" aria-label="Tháng trước" disabled={rescheduleMonth.getFullYear() === new Date().getFullYear() && rescheduleMonth.getMonth() <= new Date().getMonth()} onClick={() => setRescheduleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>‹</button>
+                                                    <strong>{rescheduleMonth.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}</strong>
+                                                    <button type="button" aria-label="Tháng sau" onClick={() => setRescheduleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>›</button>
+                                                </div>
+                                                <div className="reschedule-calendar-grid reschedule-weekdays" aria-hidden="true">
+                                                    {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(day => <span key={day}>{day}</span>)}
+                                                </div>
+                                                <div className="reschedule-calendar-grid">
+                                                    {rescheduleCalendarDays.map(date => {
+                                                        const key = toDateKey(date);
+                                                        const inMonth = date.getMonth() === rescheduleMonth.getMonth();
+                                                        const past = key < toDateKey(new Date());
+                                                        const available = rescheduleCalendar[key] === true;
+                                                        return <button key={key} type="button" className={`${inMonth ? '' : 'outside-month'} ${key === rescheduleDate ? 'selected' : ''} ${!available && !past && inMonth ? 'unavailable' : ''}`} disabled={!inMonth || past || !available || rescheduleAvailabilityLoading} onClick={() => { setRescheduleDate(key); setRescheduleTime(''); }}>{date.getDate()}</button>;
+                                                    })}
+                                                </div>
+                                                <div className="reschedule-legend"><span><i /> Còn lịch</span><span className="unavailable"><i /> Hết lịch</span></div>
+                                            </div>
+                                            <div className="reschedule-time-area">
+                                                <span className="reschedule-time-title">Giờ bắt đầu</span>
+                                                <div className="reschedule-time-grid">
+                                                    {rescheduleAvailabilityLoading ? <small>Đang kiểm tra lịch...</small> : rescheduleSlots.length ? rescheduleSlots.map(slot => <button key={slot.time} type="button" className={`${slot.available ? '' : 'unavailable'} ${rescheduleTime === slot.time ? 'selected' : ''}`} disabled={!slot.available || rescheduleLoading} title={slot.message} onClick={() => setRescheduleTime(slot.time)}><FontAwesomeIcon icon={faClock} /> {slot.time}</button>) : <small>Chọn ngày còn lịch để xem khung giờ.</small>}
+                                                </div>
+                                            </div>
+                                            <button type="button" className="btn-action-accept reschedule-submit" onClick={handleReschedule} disabled={rescheduleLoading || !rescheduleDate || !rescheduleTime || (rescheduleDate === selectedBooking.scheduledStartIso?.slice(0, 10) && rescheduleTime === selectedBooking.scheduledStartIso?.slice(11, 16))}>
                                                 {rescheduleLoading ? 'Đang cập nhật...' : 'Cập nhật lịch hẹn'}
                                             </button>
-                                            <small>Khung giờ mới chỉ được lưu khi còn đủ nhân viên.</small>
-                                        </div>
+                                            <small className="reschedule-note">Lịch của đơn hàng này được tính là có thể giữ chỗ khi kiểm tra giờ mới.</small>
+                                        </section>
                                     )}
 
                                     {selectedBooking.status === 'COMPLETED' && (

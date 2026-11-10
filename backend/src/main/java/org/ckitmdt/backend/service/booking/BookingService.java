@@ -64,7 +64,7 @@ public class BookingService {
     @Transactional(readOnly = true)
     public List<BookingAvailabilitySlotResponse> getAvailability(
             BookingAvailabilityRequest request, String userEmail) {
-        getUserByEmail(userEmail);
+        User customer = getUserByEmail(userEmail);
         if (request == null || request.getDate() == null || request.getItems() == null
                 || request.getItems().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -78,6 +78,8 @@ public class BookingService {
         Partner partner = partnerRepository.findById(request.getPartnerId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Không tìm thấy nhà cung cấp."));
+        Booking excludedBooking = validateAvailabilityExclusion(
+                request.getExcludeBookingId(), partner.getId(), customer);
         if (!isActive(partner.getStatus()) || partner.getUser() == null
                 || !isActive(partner.getUser().getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -157,7 +159,8 @@ public class BookingService {
         return slots.stream().map(time -> {
             LocalDateTime start = LocalDateTime.of(request.getDate(), time);
             LocalDateTime end = start.plusMinutes(totalDurationMinutes);
-            boolean meetsNotice = !start.isBefore(now.plusMinutes(effectiveMinimumNoticeMinutes()));
+            boolean meetsNotice = !start.isBefore(now.plusMinutes(effectiveMinimumNoticeMinutes()))
+                    || (excludedBooking != null && start.equals(excludedBooking.getScheduledStart()));
             boolean withinWorkingHours = isWithinWorkingHours(start, end);
             long reservedEmployees = meetsNotice && withinWorkingHours
                     ? bookingItemRepository.countReservedEmployees(
@@ -200,10 +203,25 @@ public class BookingService {
             dailyRequest.setPartnerId(request.getPartnerId());
             dailyRequest.setDate(date);
             dailyRequest.setItems(request.getItems());
+            dailyRequest.setExcludeBookingId(request.getExcludeBookingId());
             result.put(date, getAvailability(dailyRequest, userEmail).stream()
                     .anyMatch(BookingAvailabilitySlotResponse::isAvailable));
         }
         return result;
+    }
+
+    private Booking validateAvailabilityExclusion(Long bookingId, Long partnerId, User customer) {
+        if (bookingId == null) return null;
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Booking not found."));
+        if (booking.getCustomer() == null || !Objects.equals(booking.getCustomer().getId(), customer.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot check this booking.");
+        }
+        if (booking.getPartner() == null || !Objects.equals(booking.getPartner().getId(), partnerId)
+                || !BookingStatusEnum.PENDING_PROVIDER.name().equals(booking.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This booking is no longer eligible for rescheduling.");
+        }
+        return booking;
     }
 
     private QuoteCalculation calculateQuoteInternal(
