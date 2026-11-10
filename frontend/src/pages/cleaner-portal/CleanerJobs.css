@@ -747,3 +747,56 @@
     display: block;
     line-height: 0;
 }
+
+/* Tiến độ công việc Cleaner */
+.cj-progress-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 12px 0 24px;
+}
+
+.cj-progress-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    color: #94a3b8;
+}
+
+.cj-progress-dot {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.cj-progress-step.done {
+    color: #15803d;
+}
+
+.cj-progress-step.done .cj-progress-dot {
+    color: white;
+    background: #16a34a;
+    border-color: #16a34a;
+}
+
+.cj-progress-step div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cj-progress-step strong {
+    font-size: 14px;
+}
+
+.cj-progress-step span:not(.cj-progress-dot) {
+    font-size: 12px;
+    color: #64748b;
+}

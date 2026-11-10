@@ -46,6 +46,13 @@ public class CleanerWorkLogService {
                         "Không tìm thấy hồ sơ nhân viên."
                 ));
 
+        if (!isActive(employee.getStatus()) || employee.getPartner() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Hồ sơ nhân viên không hoạt động hoặc chưa thuộc nhà cung cấp."
+            );
+        }
+
         BookingAssignment assignment =
                 assignmentRepository.findByIdForUpdate(assignmentId)
                         .orElseThrow(() -> new ResponseStatusException(
@@ -54,11 +61,7 @@ public class CleanerWorkLogService {
                         ));
 
         // Chỉ Cleaner được phân công mới có quyền tạo nhật ký.
-        if (assignment.getEmployee() == null
-                || !Objects.equals(
-                assignment.getEmployee().getId(),
-                employee.getId()
-        )) {
+        if (!isValidAssignmentForEmployee(assignment, employee)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Bạn không có quyền cập nhật công việc này."
@@ -72,6 +75,9 @@ public class CleanerWorkLogService {
                 || assignment.getPartner() == null
                 || employee.getPartner() == null
                 || booking.getPartner() == null
+                || !isActive(assignment.getPartner().getStatus())
+                || assignment.getPartner().getUser() == null
+                || !isActive(assignment.getPartner().getUser().getStatus())
                 || !Objects.equals(
                 assignment.getPartner().getId(),
                 employee.getPartner().getId()
@@ -159,6 +165,13 @@ public class CleanerWorkLogService {
                         "Không tìm thấy hồ sơ nhân viên."
                 ));
 
+        if (!isActive(employee.getStatus()) || employee.getPartner() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Hồ sơ nhân viên không hoạt động hoặc chưa thuộc nhà cung cấp."
+            );
+        }
+
         BookingAssignment assignment =
                 assignmentRepository.findById(assignmentId)
                         .orElseThrow(() -> new ResponseStatusException(
@@ -182,6 +195,25 @@ public class CleanerWorkLogService {
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    private boolean isValidAssignmentForEmployee(BookingAssignment assignment, Employee employee) {
+        if (assignment == null || employee == null || assignment.getEmployee() == null
+                || assignment.getPartner() == null || assignment.getBooking() == null
+                || employee.getPartner() == null || assignment.getBooking().getPartner() == null
+                || assignment.getPartner().getUser() == null) {
+            return false;
+        }
+
+        return Objects.equals(assignment.getEmployee().getId(), employee.getId())
+                && Objects.equals(employee.getPartner().getId(), assignment.getPartner().getId())
+                && Objects.equals(assignment.getPartner().getId(), assignment.getBooking().getPartner().getId())
+                && isActive(assignment.getPartner().getStatus())
+                && isActive(assignment.getPartner().getUser().getStatus());
+    }
+
+    private boolean isActive(String status) {
+        return status != null && "ACTIVE".equalsIgnoreCase(status.trim());
     }
 
     private User getCurrentCleaner(String email) {
