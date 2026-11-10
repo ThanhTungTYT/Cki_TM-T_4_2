@@ -9,6 +9,7 @@ import {
     faRotateLeft,
     faStore,
     faArrowsRotate,
+    faMessage,
 } from "@fortawesome/free-solid-svg-icons";
 import "./AdminProviders.css";
 
@@ -145,6 +146,7 @@ function AdminProviders() {
 
     const loadHistory = async (providerId) => {
         setHistoryLoading(true);
+
         try {
             const history = await apiRequest(`${API_URL}/${providerId}/history`);
             setSelectedProvider((current) => current?.id === providerId
@@ -159,9 +161,11 @@ function AdminProviders() {
 
     const openProvider = async (provider) => {
         setSelectedProvider({ ...provider, history: [] });
+
         try {
             const detail = await apiRequest(`${API_URL}/${provider.id}`);
             setSelectedProvider({ ...normalizeProvider(detail), history: [] });
+
             const history = await apiRequest(`${API_URL}/${provider.id}/history`);
             setSelectedProvider((current) => current?.id === provider.id
                 ? { ...current, history: Array.isArray(history) ? history : [] }
@@ -199,7 +203,9 @@ function AdminProviders() {
             const updated = normalizeProvider(result);
 
             setProviders((current) => current.map((item) => item.id === provider.id ? updated : item));
-            setSelectedProvider((current) => current?.id === provider.id ? { ...updated, history: current.history || [] } : current);
+            setSelectedProvider((current) => current?.id === provider.id
+                ? { ...updated, history: current.history || [] }
+                : current);
             setNotice(result?.message || "Cập nhật nhà cung cấp thành công.");
 
             if (selectedProvider?.id === provider.id) await loadHistory(provider.id);
@@ -237,12 +243,54 @@ function AdminProviders() {
             const updated = normalizeProvider(result);
 
             setProviders((current) => current.map((item) => item.id === provider.id ? updated : item));
-            setSelectedProvider((current) => current?.id === provider.id ? { ...updated, history: current.history || [] } : current);
+            setSelectedProvider((current) => current?.id === provider.id
+                ? { ...updated, history: current.history || [] }
+                : current);
             setNotice(result?.message || "Đã phê duyệt hồ sơ nhà cung cấp.");
 
             if (selectedProvider?.id === provider.id) await loadHistory(provider.id);
         } catch (err) {
             setError(err.message || "Không thể phê duyệt hồ sơ nhà cung cấp.");
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    const requestProviderInformation = async (provider) => {
+        if (busyId !== null) return;
+
+        const reason = window.prompt(`Nhập nội dung cần nhà cung cấp bổ sung cho hồ sơ "${provider.name}":`);
+
+        if (reason === null) return;
+
+        if (!reason.trim()) {
+            setError("Vui lòng nhập nội dung thông tin cần bổ sung.");
+            return;
+        }
+
+        if (!window.confirm(`Gửi yêu cầu bổ sung thông tin cho "${provider.name}"?`)) return;
+
+        setBusyId(provider.id);
+        setError("");
+        setNotice("");
+
+        try {
+            const result = await apiRequest(`${API_URL}/${provider.id}/request-info`, {
+                method: "POST",
+                body: JSON.stringify({ reason: reason.trim() }),
+            });
+
+            const updated = normalizeProvider(result);
+
+            setProviders((current) => current.map((item) => item.id === provider.id ? updated : item));
+            setSelectedProvider((current) => current?.id === provider.id
+                ? { ...updated, history: current.history || [] }
+                : current);
+            setNotice(result?.message || "Đã gửi yêu cầu bổ sung thông tin.");
+
+            if (selectedProvider?.id === provider.id) await loadHistory(provider.id);
+        } catch (err) {
+            setError(err.message || "Không thể gửi yêu cầu bổ sung thông tin.");
         } finally {
             setBusyId(null);
         }
@@ -275,7 +323,9 @@ function AdminProviders() {
             const updated = normalizeProvider(result);
 
             setProviders((current) => current.map((item) => item.id === provider.id ? updated : item));
-            setSelectedProvider((current) => current?.id === provider.id ? { ...updated, history: current.history || [] } : current);
+            setSelectedProvider((current) => current?.id === provider.id
+                ? { ...updated, history: current.history || [] }
+                : current);
             setNotice(result?.message || "Đã từ chối hồ sơ nhà cung cấp.");
 
             if (selectedProvider?.id === provider.id) await loadHistory(provider.id);
@@ -300,6 +350,7 @@ function AdminProviders() {
 
     const formatRating = (rating) => {
         if (rating === null || rating === undefined || rating === "") return "Chưa có đánh giá";
+
         const number = Number(rating);
         return Number.isFinite(number) ? `${number.toFixed(1)}/5` : "—";
     };
@@ -318,25 +369,51 @@ function AdminProviders() {
                         <h1>Quản lý nhà cung cấp</h1>
                         <p>Theo dõi, xét duyệt và giám sát năng lực hoạt động của các đơn vị vệ sinh.</p>
                     </div>
-                    <div className="providers-heading-icon"><FontAwesomeIcon icon={faStore} /></div>
+                    <div className="providers-heading-icon">
+                        <FontAwesomeIcon icon={faStore} />
+                    </div>
                 </div>
 
-                {error && <div role="alert" style={{ padding: 14, marginBottom: 16, borderRadius: 8, background: "#ffe7e9", color: "#b42332" }}>{error}</div>}
-                {notice && <div role="status" style={{ padding: 14, marginBottom: 16, borderRadius: 8, background: "#e3f8ed", color: "#168654" }}>{notice}</div>}
+                {error && (
+                    <div role="alert" style={{ padding: 14, marginBottom: 16, borderRadius: 8, background: "#ffe7e9", color: "#b42332" }}>
+                        {error}
+                    </div>
+                )}
+
+                {notice && (
+                    <div role="status" style={{ padding: 14, marginBottom: 16, borderRadius: 8, background: "#e3f8ed", color: "#168654" }}>
+                        {notice}
+                    </div>
+                )}
 
                 <div className="providers-stats">
-                    <div className="provider-stat-card"><span>Tổng nhà cung cấp</span><strong>{providers.length}</strong></div>
-                    <div className="provider-stat-card"><span>Đang hoạt động</span><strong className="provider-green">{activeCount}</strong></div>
-                    <div className="provider-stat-card"><span>Chờ duyệt</span><strong className="provider-orange">{pendingCount}</strong></div>
-                    <div className="provider-stat-card"><span>Đình chỉ / Từ chối</span><strong className="provider-red">{lockedCount + rejectedCount}</strong></div>
+                    <div className="provider-stat-card">
+                        <span>Tổng nhà cung cấp</span>
+                        <strong>{providers.length}</strong>
+                    </div>
+                    <div className="provider-stat-card">
+                        <span>Đang hoạt động</span>
+                        <strong className="provider-green">{activeCount}</strong>
+                    </div>
+                    <div className="provider-stat-card">
+                        <span>Chờ duyệt</span>
+                        <strong className="provider-orange">{pendingCount}</strong>
+                    </div>
+                    <div className="provider-stat-card">
+                        <span>Đình chỉ / Từ chối</span>
+                        <strong className="provider-red">{lockedCount + rejectedCount}</strong>
+                    </div>
                 </div>
 
                 <div className="providers-content">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
                         <div>
                             <h2 style={{ margin: 0 }}>Danh sách nhà cung cấp</h2>
-                            <p style={{ margin: "7px 0 0", color: "#718096", fontSize: 13 }}>Trạng thái doanh nghiệp và trạng thái tài khoản được quản lý độc lập.</p>
+                            <p style={{ margin: "7px 0 0", color: "#718096", fontSize: 13 }}>
+                                Trạng thái doanh nghiệp và trạng thái tài khoản được quản lý độc lập.
+                            </p>
                         </div>
+
                         <button className="provider-reset-btn" type="button" onClick={loadProviders} disabled={loading}>
                             <FontAwesomeIcon icon={faArrowsRotate} /> Tải lại
                         </button>
@@ -345,8 +422,14 @@ function AdminProviders() {
                     <div className="providers-filters">
                         <div className="provider-search">
                             <FontAwesomeIcon icon={faMagnifyingGlass} />
-                            <input type="text" placeholder="Tìm tên, email, số điện thoại hoặc mã NCC..." value={keyword} onChange={(event) => setKeyword(event.target.value)} />
+                            <input
+                                type="text"
+                                placeholder="Tìm tên, email, số điện thoại hoặc mã NCC..."
+                                value={keyword}
+                                onChange={(event) => setKeyword(event.target.value)}
+                            />
                         </div>
+
                         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                             <option value="Tất cả">Tất cả trạng thái</option>
                             <option value="Đang hoạt động">Đang hoạt động</option>
@@ -354,7 +437,10 @@ function AdminProviders() {
                             <option value="Đã đình chỉ">Đã đình chỉ</option>
                             <option value="Đã từ chối">Đã từ chối</option>
                         </select>
-                        <button className="provider-reset-btn" type="button" onClick={resetFilters}><FontAwesomeIcon icon={faRotateLeft} /> Đặt lại</button>
+
+                        <button className="provider-reset-btn" type="button" onClick={resetFilters}>
+                            <FontAwesomeIcon icon={faRotateLeft} /> Đặt lại
+                        </button>
                     </div>
 
                     <div className="providers-table-wrapper">
@@ -369,8 +455,15 @@ function AdminProviders() {
                                 <th>Thao tác</th>
                             </tr>
                             </thead>
+
                             <tbody>
-                            {loading && <tr><td colSpan="6" className="provider-empty">Đang tải dữ liệu nhà cung cấp...</td></tr>}
+                            {loading && (
+                                <tr>
+                                    <td colSpan="6" className="provider-empty">
+                                        Đang tải dữ liệu nhà cung cấp...
+                                    </td>
+                                </tr>
+                            )}
 
                             {!loading && filteredProviders.map((provider) => (
                                 <tr key={provider.id}>
@@ -378,44 +471,107 @@ function AdminProviders() {
                                         <strong>{provider.name}</strong>
                                         <small>Mã NCC: NCC{String(provider.id).padStart(3, "0")}</small>
                                     </td>
+
                                     <td>
                                         <span>{provider.email}</span>
                                         <small>{provider.phone || "Chưa có số điện thoại"}</small>
                                     </td>
+
                                     <td>{provider.address || "Chưa cập nhật địa chỉ"}</td>
                                     <td>{provider.services}</td>
+
                                     <td>
-                                        <span className={`provider-status ${statusClass(provider.partnerStatus)}`}>{provider.status}</span>
-                                        {provider.accountStatus !== "ACTIVE" && <small style={{ color: "#b42332", display: "block", marginTop: 5 }}>Tài khoản: {provider.accountStatus === "LOCKED" ? "Đã khóa" : "Chưa xác định"}</small>}
+                                            <span className={`provider-status ${statusClass(provider.partnerStatus)}`}>
+                                                {provider.status}
+                                            </span>
+
+                                        {provider.accountStatus !== "ACTIVE" && (
+                                            <small style={{ color: "#b42332", display: "block", marginTop: 5 }}>
+                                                Tài khoản: {provider.accountStatus === "LOCKED" ? "Đã khóa" : "Chưa xác định"}
+                                            </small>
+                                        )}
                                     </td>
+
                                     <td>
                                         <div className="provider-actions">
-                                            <button className="provider-view-btn" title="Xem chi tiết" type="button" onClick={() => openProvider(provider)}>
+                                            <button
+                                                className="provider-view-btn"
+                                                title="Xem chi tiết"
+                                                type="button"
+                                                onClick={() => openProvider(provider)}
+                                            >
                                                 <FontAwesomeIcon icon={faEye} />
                                             </button>
 
-                                            {provider.partnerStatus === "PENDING" && <>
-                                                <button className="provider-approve-btn" title="Duyệt nhà cung cấp" type="button" disabled={busyId !== null} onClick={() => approveProvider(provider)}>
-                                                    <FontAwesomeIcon icon={faCheck} />
-                                                </button>
-                                                <button className="provider-reject-btn" title="Từ chối hồ sơ" type="button" disabled={busyId !== null} onClick={() => rejectProvider(provider)}>
+                                            {provider.partnerStatus === "PENDING" && (
+                                                <>
+                                                    <button
+                                                        className="provider-approve-btn"
+                                                        title="Duyệt nhà cung cấp"
+                                                        type="button"
+                                                        disabled={busyId !== null}
+                                                        onClick={() => approveProvider(provider)}
+                                                    >
+                                                        <FontAwesomeIcon icon={faCheck} />
+                                                    </button>
+
+                                                    <button
+                                                        className="provider-view-btn"
+                                                        title="Yêu cầu bổ sung thông tin"
+                                                        type="button"
+                                                        disabled={busyId !== null}
+                                                        onClick={() => requestProviderInformation(provider)}
+                                                    >
+                                                        <FontAwesomeIcon icon={faMessage} />
+                                                    </button>
+
+                                                    <button
+                                                        className="provider-reject-btn"
+                                                        title="Từ chối hồ sơ"
+                                                        type="button"
+                                                        disabled={busyId !== null}
+                                                        onClick={() => rejectProvider(provider)}
+                                                    >
+                                                        <FontAwesomeIcon icon={faXmark} />
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {provider.partnerStatus === "ACTIVE" && (
+                                                <button
+                                                    className="provider-reject-btn"
+                                                    title="Đình chỉ nhà cung cấp"
+                                                    type="button"
+                                                    disabled={busyId !== null}
+                                                    onClick={() => toggleStatus(provider)}
+                                                >
                                                     <FontAwesomeIcon icon={faXmark} />
                                                 </button>
-                                            </>}
+                                            )}
 
-                                            {provider.partnerStatus === "ACTIVE" && <button className="provider-reject-btn" title="Đình chỉ nhà cung cấp" type="button" disabled={busyId !== null} onClick={() => toggleStatus(provider)}>
-                                                <FontAwesomeIcon icon={faXmark} />
-                                            </button>}
-
-                                            {provider.partnerStatus === "LOCKED" && <button className="provider-approve-btn" title="Kích hoạt lại nhà cung cấp" type="button" disabled={busyId !== null} onClick={() => toggleStatus(provider)}>
-                                                <FontAwesomeIcon icon={faCheck} />
-                                            </button>}
+                                            {provider.partnerStatus === "LOCKED" && (
+                                                <button
+                                                    className="provider-approve-btn"
+                                                    title="Kích hoạt lại nhà cung cấp"
+                                                    type="button"
+                                                    disabled={busyId !== null}
+                                                    onClick={() => toggleStatus(provider)}
+                                                >
+                                                    <FontAwesomeIcon icon={faCheck} />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
                             ))}
 
-                            {!loading && filteredProviders.length === 0 && <tr><td colSpan="6" className="provider-empty">{error ? "Không tải được dữ liệu nhà cung cấp." : "Không tìm thấy nhà cung cấp phù hợp."}</td></tr>}
+                            {!loading && filteredProviders.length === 0 && (
+                                <tr>
+                                    <td colSpan="6" className="provider-empty">
+                                        {error ? "Không tải được dữ liệu nhà cung cấp." : "Không tìm thấy nhà cung cấp phù hợp."}
+                                    </td>
+                                </tr>
+                            )}
                             </tbody>
                         </table>
                     </div>
@@ -447,13 +603,30 @@ function AdminProviders() {
                                 <p><strong>Đánh giá trung bình:</strong> {formatRating(selectedProvider.ratingAverage)}</p>
                                 <p><strong>Đơn hoàn thành:</strong> {selectedProvider.totalCompletedJobs ?? 0}</p>
                                 <p><strong>Trạng thái doanh nghiệp:</strong> {STATUS_LABELS[selectedProvider.partnerStatus] || "Chưa xác định"}</p>
-                                <p><strong>Trạng thái tài khoản:</strong> {selectedProvider.accountStatus === "ACTIVE" ? "Đang hoạt động" : selectedProvider.accountStatus === "LOCKED" ? "Đã khóa" : "Chưa xác định"}</p>
-                                <p><strong>Khả năng hoạt động thực tế:</strong> {selectedProvider.effectiveStatus === "ACTIVE" ? "Được phép hoạt động" : "Không nhận đơn mới"}</p>
+                                <p>
+                                    <strong>Trạng thái tài khoản:</strong>{" "}
+                                    {selectedProvider.accountStatus === "ACTIVE"
+                                        ? "Đang hoạt động"
+                                        : selectedProvider.accountStatus === "LOCKED"
+                                            ? "Đã khóa"
+                                            : "Chưa xác định"}
+                                </p>
+                                <p>
+                                    <strong>Khả năng hoạt động thực tế:</strong>{" "}
+                                    {selectedProvider.effectiveStatus === "ACTIVE"
+                                        ? "Được phép hoạt động"
+                                        : "Không nhận đơn mới"}
+                                </p>
                             </div>
 
                             <div style={{ marginTop: 22 }}>
-                                <h3 style={{ margin: "0 0 12px", color: "#1e293b", fontSize: 16 }}>Lịch sử xét duyệt và trạng thái</h3>
-                                {historyLoading ? <p>Đang tải lịch sử...</p> : selectedProvider.history?.length ? (
+                                <h3 style={{ margin: "0 0 12px", color: "#1e293b", fontSize: 16 }}>
+                                    Lịch sử xét duyệt và trạng thái
+                                </h3>
+
+                                {historyLoading ? (
+                                    <p>Đang tải lịch sử...</p>
+                                ) : selectedProvider.history?.length ? (
                                     <div style={{ display: "grid", gap: 10, maxHeight: 260, overflowY: "auto" }}>
                                         {selectedProvider.history.map((item) => (
                                             <div key={item.id} style={{ border: "1px solid #e8edf5", borderRadius: 10, padding: 12 }}>
@@ -463,10 +636,14 @@ function AdminProviders() {
                                             </div>
                                         ))}
                                     </div>
-                                ) : <p>Chưa có lịch sử thay đổi trạng thái.</p>}
+                                ) : (
+                                    <p>Chưa có lịch sử thay đổi trạng thái.</p>
+                                )}
                             </div>
 
-                            <button className="provider-close-btn" type="button" onClick={() => setSelectedProvider(null)}>Đóng</button>
+                            <button className="provider-close-btn" type="button" onClick={() => setSelectedProvider(null)}>
+                                Đóng
+                            </button>
                         </div>
                     </div>
                 )}

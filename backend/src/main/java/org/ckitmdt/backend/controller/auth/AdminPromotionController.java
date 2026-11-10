@@ -33,6 +33,20 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 public class AdminPromotionController {
+
+    private static final Long REWARD_POLICY_ID = 1L;
+
+    private static final BigDecimal DEFAULT_EARN_AMOUNT_STEP =
+            BigDecimal.valueOf(10000);
+    private static final int DEFAULT_EARN_POINTS = 1;
+    private static final BigDecimal DEFAULT_POINT_VALUE =
+            BigDecimal.valueOf(100);
+    private static final BigDecimal DEFAULT_MAX_REDEEM_PERCENT =
+            BigDecimal.valueOf(20);
+    private static final int DEFAULT_MIN_REDEEM_POINTS = 100;
+    private static final int DEFAULT_MAX_REDEEM_POINTS = 5000;
+    private static final int DEFAULT_EXPIRY_MONTHS = 12;
+
     private final PromotionRepository promotionRepository;
     private final PromotionServiceRepository promotionServiceRepository;
     private final ServiceRepository serviceRepository;
@@ -44,18 +58,24 @@ public class AdminPromotionController {
     @GetMapping("/api/admin/promotions")
     @Transactional(readOnly = true)
     public List<PromotionResponse> getPromotions() {
-        return promotionRepository.findAllByOrderByCreatedAtDesc().stream()
+        return promotionRepository.findAllByOrderByCreatedAtDesc()
+                .stream()
                 .map(this::toPromotionResponse)
                 .toList();
     }
 
     @PostMapping("/api/admin/promotions")
     @Transactional
-    public PromotionResponse createPromotion(@Valid @RequestBody PromotionRequest request) {
+    public PromotionResponse createPromotion(
+            @Valid @RequestBody PromotionRequest request
+    ) {
         String code = normalizeCode(request.code());
 
         if (promotionRepository.existsByCodeIgnoreCase(code)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Mã khuyến mãi đã tồn tại.");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Mã khuyến mãi đã tồn tại."
+            );
         }
 
         validatePromotion(request);
@@ -123,7 +143,10 @@ public class AdminPromotionController {
         }
 
         if ("ACTIVE".equals(status)) {
-            validatePromotionDates(promotion.getStartAt(), promotion.getEndAt());
+            validatePromotionDates(
+                    promotion.getStartAt(),
+                    promotion.getEndAt()
+            );
         }
 
         promotion.setStatus(status);
@@ -134,7 +157,11 @@ public class AdminPromotionController {
     @GetMapping("/api/admin/rewards/policy")
     @Transactional(readOnly = true)
     public RewardPolicyResponse getRewardPolicy() {
-        return toRewardPolicyResponse(rewardPolicyRepository.findById(1L).orElse(null));
+        RewardPolicy policy = rewardPolicyRepository
+                .findById(REWARD_POLICY_ID)
+                .orElse(null);
+
+        return toRewardPolicyResponse(policy);
     }
 
     @PutMapping("/api/admin/rewards/policy")
@@ -147,31 +174,40 @@ public class AdminPromotionController {
 
         User actor = getActor(authentication);
 
-        RewardPolicy policy = rewardPolicyRepository.findById(1L).orElseGet(() -> {
-            RewardPolicy created = new RewardPolicy();
-            created.setId(1L);
-            return created;
-        });
+        RewardPolicy policy = rewardPolicyRepository
+                .findById(REWARD_POLICY_ID)
+                .orElseGet(() -> {
+                    RewardPolicy created = new RewardPolicy();
+                    created.setId(REWARD_POLICY_ID);
+                    return created;
+                });
 
-        policy.setEarnAmountStep(BigDecimal.valueOf(1000));
-        policy.setEarnPoints(1);
-        policy.setPointValue(BigDecimal.ONE);
-        policy.setMaxRedeemPercent(BigDecimal.valueOf(100));
-        policy.setMinRedeemPoints(1000);
-        policy.setMaxRedeemPoints(Integer.MAX_VALUE);
+        policy.setEarnAmountStep(request.earnAmountStep());
+        policy.setEarnPoints(request.earnPoints());
+        policy.setPointValue(request.pointValue());
+        policy.setMaxRedeemPercent(request.maxRedeemPercent());
+        policy.setMinRedeemPoints(request.minRedeemPoints());
+        policy.setMaxRedeemPoints(request.maxRedeemPoints());
         policy.setExpiryMonths(request.expiryMonths());
-        policy.setEnabled(true);
-        policy.setAllowCombineWithPromotion(request.allowCombineWithPromotion());
+        policy.setEnabled(
+                request.enabled() == null || request.enabled()
+        );
+        policy.setAllowCombineWithPromotion(
+                Boolean.TRUE.equals(request.allowCombineWithPromotion())
+        );
         policy.setUpdatedAt(LocalDateTime.now());
         policy.setUpdatedBy(actor.getId());
 
-        return toRewardPolicyResponse(rewardPolicyRepository.save(policy));
+        RewardPolicy saved = rewardPolicyRepository.save(policy);
+
+        return toRewardPolicyResponse(saved);
     }
 
     @GetMapping("/api/admin/rewards/accounts")
     @Transactional(readOnly = true)
     public List<RewardAccountResponse> getRewardAccounts() {
-        return rewardAccountRepository.findAllByOrderByUpdatedAtDesc().stream()
+        return rewardAccountRepository.findAllByOrderByUpdatedAtDesc()
+                .stream()
                 .map(account -> new RewardAccountResponse(
                         account.getId(),
                         account.getUser().getId(),
@@ -181,7 +217,8 @@ public class AdminPromotionController {
                         zero(account.getTotalEarned()),
                         zero(account.getTotalRedeemed()),
                         account.getUpdatedAt()
-                )).toList();
+                ))
+                .toList();
     }
 
     @PostMapping("/api/admin/rewards/accounts/{userId}/adjustments")
@@ -206,7 +243,8 @@ public class AdminPromotionController {
             );
         }
 
-        RewardAccount account = rewardAccountRepository.findByUserIdForUpdate(userId)
+        RewardAccount account = rewardAccountRepository
+                .findByUserIdForUpdate(userId)
                 .orElseGet(() -> RewardAccount.builder()
                         .user(target)
                         .balance(0)
@@ -227,16 +265,26 @@ public class AdminPromotionController {
             );
         }
 
-        account.setBalance((int) nextBalance);
+        long nextTotalEarned = zero(account.getTotalEarned());
+        long nextTotalRedeemed = zero(account.getTotalRedeemed());
 
         if (request.points() > 0) {
-            account.setTotalEarned(zero(account.getTotalEarned()) + request.points());
+            nextTotalEarned += request.points();
         } else {
-            account.setTotalRedeemed(
-                    zero(account.getTotalRedeemed()) + Math.abs(request.points())
+            nextTotalRedeemed += Math.abs((long) request.points());
+        }
+
+        if (nextTotalEarned > Integer.MAX_VALUE
+                || nextTotalRedeemed > Integer.MAX_VALUE) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Tổng điểm tích lũy hoặc điểm đã đổi vượt giới hạn."
             );
         }
 
+        account.setBalance((int) nextBalance);
+        account.setTotalEarned((int) nextTotalEarned);
+        account.setTotalRedeemed((int) nextTotalRedeemed);
         account.setUpdatedAt(LocalDateTime.now());
 
         RewardAccount saved = rewardAccountRepository.save(account);
@@ -271,7 +319,9 @@ public class AdminPromotionController {
         promotion.setCode(code);
         promotion.setName(request.name().trim());
         promotion.setDescription(request.description());
-        promotion.setDiscountType(request.discountType().trim().toUpperCase(Locale.ROOT));
+        promotion.setDiscountType(
+                request.discountType().trim().toUpperCase(Locale.ROOT)
+        );
         promotion.setDiscountValue(request.discountValue());
         promotion.setMaxDiscount(request.maxDiscount());
         promotion.setMinBookingValue(
@@ -282,8 +332,12 @@ public class AdminPromotionController {
         promotion.setStartAt(request.startAt());
         promotion.setEndAt(request.endAt());
         promotion.setUsageLimit(request.usageLimit());
-        promotion.setSponsor(request.sponsor().trim().toUpperCase(Locale.ROOT));
-        promotion.setCombinableWithPoints(Boolean.TRUE.equals(request.combinableWithPoints()));
+        promotion.setSponsor(
+                request.sponsor().trim().toUpperCase(Locale.ROOT)
+        );
+        promotion.setCombinableWithPoints(
+                Boolean.TRUE.equals(request.combinableWithPoints())
+        );
 
         if (promotion.getUsageCount() == null) {
             promotion.setUsageCount(0);
@@ -295,8 +349,13 @@ public class AdminPromotionController {
     }
 
     private void validatePromotion(PromotionRequest request) {
-        String type = request.discountType().trim().toUpperCase(Locale.ROOT);
-        String sponsor = request.sponsor().trim().toUpperCase(Locale.ROOT);
+        String type = request.discountType()
+                .trim()
+                .toUpperCase(Locale.ROOT);
+
+        String sponsor = request.sponsor()
+                .trim()
+                .toUpperCase(Locale.ROOT);
 
         if (!List.of("PERCENT", "FIXED").contains(type)) {
             throw new ResponseStatusException(
@@ -306,7 +365,8 @@ public class AdminPromotionController {
         }
 
         if ("PERCENT".equals(type)
-                && request.discountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+                && request.discountValue()
+                .compareTo(BigDecimal.valueOf(100)) > 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Mức giảm phần trăm không được vượt quá 100%."
@@ -320,7 +380,8 @@ public class AdminPromotionController {
             );
         }
 
-        if (request.maxDiscount() != null && request.maxDiscount().signum() < 0) {
+        if (request.maxDiscount() != null
+                && request.maxDiscount().signum() < 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Mức giảm tối đa không được âm."
@@ -342,14 +403,19 @@ public class AdminPromotionController {
             );
         }
 
-        validatePromotionDates(request.startAt(), request.endAt());
+        validatePromotionDates(
+                request.startAt(),
+                request.endAt()
+        );
     }
 
     private void validatePromotionDates(
             LocalDateTime startAt,
             LocalDateTime endAt
     ) {
-        if (startAt == null || endAt == null || !endAt.isAfter(startAt)) {
+        if (startAt == null
+                || endAt == null
+                || !endAt.isAfter(startAt)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Thời gian kết thúc phải sau thời gian bắt đầu."
@@ -379,9 +445,13 @@ public class AdminPromotionController {
 
         for (org.ckitmdt.backend.entity.Service service : services) {
             PromotionService link = new PromotionService();
-            link.setId(new PromotionServiceId(promotion.getId(), service.getId()));
+            link.setId(new PromotionServiceId(
+                    promotion.getId(),
+                    service.getId()
+            ));
             link.setPromotion(promotion);
             link.setService(service);
+
             promotionServiceRepository.save(link);
         }
     }
@@ -416,29 +486,37 @@ public class AdminPromotionController {
     }
 
     private void validateRewardPolicy(RewardPolicyRequest request) {
-        if (request.earnAmountStep().signum() <= 0 || request.earnPoints() < 1) {
+        if (request.earnAmountStep() == null
+                || request.earnAmountStep().signum() <= 0
+                || request.earnPoints() == null
+                || request.earnPoints() < 1) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Quy tắc tích điểm phải lớn hơn 0."
             );
         }
 
-        if (request.pointValue().signum() <= 0) {
+        if (request.pointValue() == null
+                || request.pointValue().signum() <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Giá trị quy đổi mỗi điểm phải lớn hơn 0."
             );
         }
 
-        if (request.maxRedeemPercent().signum() < 0
-                || request.maxRedeemPercent().compareTo(BigDecimal.valueOf(100)) > 0) {
+        if (request.maxRedeemPercent() == null
+                || request.maxRedeemPercent().signum() < 0
+                || request.maxRedeemPercent()
+                .compareTo(BigDecimal.valueOf(100)) > 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Tỷ lệ dùng điểm phải nằm trong khoảng 0 đến 100%."
             );
         }
 
-        if (request.minRedeemPoints() < 0
+        if (request.minRedeemPoints() == null
+                || request.maxRedeemPoints() == null
+                || request.minRedeemPoints() < 0
                 || request.maxRedeemPoints() < request.minRedeemPoints()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -446,7 +524,9 @@ public class AdminPromotionController {
             );
         }
 
-        if (request.expiryMonths() < 0 || request.expiryMonths() > 120) {
+        if (request.expiryMonths() == null
+                || request.expiryMonths() < 0
+                || request.expiryMonths() > 120) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Thời hạn điểm phải từ 0 đến 120 tháng."
@@ -455,16 +535,39 @@ public class AdminPromotionController {
     }
 
     private RewardPolicyResponse toRewardPolicyResponse(RewardPolicy policy) {
+        if (policy == null) {
+            return new RewardPolicyResponse(
+                    DEFAULT_EARN_AMOUNT_STEP,
+                    DEFAULT_EARN_POINTS,
+                    DEFAULT_POINT_VALUE,
+                    DEFAULT_MAX_REDEEM_PERCENT,
+                    DEFAULT_MIN_REDEEM_POINTS,
+                    DEFAULT_MAX_REDEEM_POINTS,
+                    DEFAULT_EXPIRY_MONTHS,
+                    true,
+                    false,
+                    null
+            );
+        }
+
         return new RewardPolicyResponse(
-                BigDecimal.valueOf(1000), 1, BigDecimal.ONE, BigDecimal.valueOf(100),
-                1000, Integer.MAX_VALUE, policy == null ? 0 : policy.getExpiryMonths(),
-                true, policy == null || Boolean.TRUE.equals(policy.getAllowCombineWithPromotion()),
-                policy == null ? null : policy.getUpdatedAt()
+                policy.getEarnAmountStep(),
+                policy.getEarnPoints(),
+                policy.getPointValue(),
+                policy.getMaxRedeemPercent(),
+                policy.getMinRedeemPoints(),
+                policy.getMaxRedeemPoints(),
+                policy.getExpiryMonths(),
+                Boolean.TRUE.equals(policy.getEnabled()),
+                Boolean.TRUE.equals(policy.getAllowCombineWithPromotion()),
+                policy.getUpdatedAt()
         );
     }
 
     private User getActor(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
+        if (authentication == null
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
                     "Không xác định được người thực hiện."
@@ -509,11 +612,13 @@ public class AdminPromotionController {
             @NotBlank String sponsor,
             Boolean combinableWithPoints,
             List<Long> serviceIds
-    ) {}
+    ) {
+    }
 
     public record PromotionStatusRequest(
             @NotBlank String status
-    ) {}
+    ) {
+    }
 
     public record PromotionResponse(
             Long id,
@@ -534,7 +639,8 @@ public class AdminPromotionController {
             List<Long> serviceIds,
             LocalDateTime createdAt,
             LocalDateTime updatedAt
-    ) {}
+    ) {
+    }
 
     public record RewardPolicyRequest(
             @NotNull @DecimalMin("0.01") BigDecimal earnAmountStep,
@@ -546,7 +652,8 @@ public class AdminPromotionController {
             @NotNull @Min(0) Integer expiryMonths,
             Boolean enabled,
             Boolean allowCombineWithPromotion
-    ) {}
+    ) {
+    }
 
     public record RewardPolicyResponse(
             BigDecimal earnAmountStep,
@@ -559,12 +666,14 @@ public class AdminPromotionController {
             boolean enabled,
             boolean allowCombineWithPromotion,
             LocalDateTime updatedAt
-    ) {}
+    ) {
+    }
 
     public record RewardAdjustmentRequest(
             @NotNull @Min(-1000000) @Max(1000000) Integer points,
             @NotBlank @Size(max = 500) String reason
-    ) {}
+    ) {
+    }
 
     public record RewardAccountResponse(
             Long id,
@@ -575,5 +684,6 @@ public class AdminPromotionController {
             Integer totalEarned,
             Integer totalRedeemed,
             LocalDateTime updatedAt
-    ) {}
+    ) {
+    }
 }

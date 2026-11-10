@@ -1,3 +1,4 @@
+
 package org.ckitmdt.backend.service;
 
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class BookingRewardLifecycleService {
+
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
     private final RewardPolicyRepository rewardPolicyRepository;
@@ -27,7 +29,8 @@ public class BookingRewardLifecycleService {
 
     @Transactional
     public void processBooking(Long bookingId) {
-        Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElse(null);
 
         if (booking == null || booking.getStatus() == null) {
             return;
@@ -44,7 +47,10 @@ public class BookingRewardLifecycleService {
             return;
         }
 
-        if (paymentRepository.existsByBooking_IdAndStatus(booking.getId(), "SUCCESS")) {
+        if (paymentRepository.existsByBooking_IdAndStatus(
+                booking.getId(),
+                "SUCCESS"
+        )) {
             consumeHeldVouchers(booking);
         }
 
@@ -55,7 +61,11 @@ public class BookingRewardLifecycleService {
 
     private void consumeHeldVouchers(Booking booking) {
         List<RewardRedemption> held = rewardRedemptionRepository
-                .findByBookingAndStatusForUpdate(booking.getId(), "HELD");
+                .findByBookingAndStatusForUpdate(
+                        booking.getId(),
+                        "HELD"
+                );
+
         for (RewardRedemption voucher : held) {
             voucher.setStatus("USED");
             rewardRedemptionRepository.save(voucher);
@@ -64,17 +74,29 @@ public class BookingRewardLifecycleService {
 
     private void releaseHeldVouchers(Booking booking) {
         LocalDateTime now = LocalDateTime.now();
-        for (String status : List.of("HELD", "USED")) {
+
+        for (String voucherStatus : List.of("HELD", "USED")) {
             List<RewardRedemption> vouchers = rewardRedemptionRepository
-                    .findByBookingAndStatusForUpdate(booking.getId(), status);
+                    .findByBookingAndStatusForUpdate(
+                            booking.getId(),
+                            voucherStatus
+                    );
+
             for (RewardRedemption voucher : vouchers) {
-                boolean expired = voucher.getExpiresAt() != null && !now.isBefore(voucher.getExpiresAt());
-                if (!expired && voucher.getPromotion() != null
+                boolean expired = voucher.getExpiresAt() != null
+                        && !now.isBefore(voucher.getExpiresAt());
+
+                if (!expired
+                        && voucher.getPromotion() != null
                         && voucher.getPromotion().getEndAt() != null) {
-                    expired = !now.isBefore(voucher.getPromotion().getEndAt());
+                    expired = !now.isBefore(
+                            voucher.getPromotion().getEndAt()
+                    );
                 }
+
                 voucher.setStatus(expired ? "EXPIRED" : "AVAILABLE");
                 voucher.setBooking(null);
+
                 rewardRedemptionRepository.save(voucher);
             }
         }
@@ -94,19 +116,70 @@ public class BookingRewardLifecycleService {
             return;
         }
 
-        RewardPolicy policy = rewardPolicyRepository.findById(1L).orElse(null);
-
-        if (booking.getCustomer() == null) return;
-        long earnedLong = CcoinRules.earned(booking.getTotalAmount());
-
-        if (earnedLong <= 0 || earnedLong > Integer.MAX_VALUE) {
+        if (booking.getCustomer() == null) {
             return;
         }
 
-        int earnedPoints = (int) earnedLong;
+        RewardPolicy policy = rewardPolicyRepository.findById(1L)
+                .orElse(null);
+
+        BigDecimal earnAmountStep = policy == null
+                ? BigDecimal.valueOf(1000)
+                : policy.getEarnAmountStep();
+
+        Integer earnPoints = policy == null
+                ? 1
+                : policy.getEarnPoints();
+
+        Integer expiryMonths = policy == null
+                ? 12
+                : policy.getExpiryMonths();
+
+        if (policy != null && !Boolean.TRUE.equals(policy.getEnabled())) {
+            log.info(
+                    "Không cộng Ccoin cho booking {} vì chính sách đang tắt.",
+                    booking.getBookingCode()
+            );
+            return;
+        }
+
+        if (earnAmountStep == null
+                || earnAmountStep.signum() <= 0
+                || earnPoints == null
+                || earnPoints <= 0) {
+            log.error(
+                    "Chính sách tích điểm không hợp lệ cho booking {}.",
+                    booking.getBookingCode()
+            );
+            return;
+        }
+
+        int earnedPoints;
+
+        try {
+            earnedPoints = CcoinRules.earned(
+                    booking.getTotalAmount(),
+                    earnAmountStep,
+                    earnPoints
+            );
+        } catch (IllegalArgumentException exception) {
+            log.error(
+                    "Không thể tính điểm cho booking {}: {}",
+                    booking.getBookingCode(),
+                    exception.getMessage()
+            );
+            return;
+        }
+
+        if (earnedPoints <= 0) {
+            return;
+        }
+
         LocalDateTime now = LocalDateTime.now();
 
-        userRepository.findByIdForUpdate(booking.getCustomer().getId()).orElseThrow();
+        userRepository.findByIdForUpdate(booking.getCustomer().getId())
+                .orElseThrow();
+
         RewardAccount account = rewardAccountRepository
                 .findByUserIdForUpdate(booking.getCustomer().getId())
                 .orElseGet(() -> rewardAccountRepository.save(
@@ -121,7 +194,8 @@ public class BookingRewardLifecycleService {
                 ));
 
         long nextBalance = (long) zero(account.getBalance()) + earnedPoints;
-        long nextTotalEarned = (long) zero(account.getTotalEarned()) + earnedPoints;
+        long nextTotalEarned =
+                (long) zero(account.getTotalEarned()) + earnedPoints;
 
         if (nextBalance > Integer.MAX_VALUE
                 || nextTotalEarned > Integer.MAX_VALUE) {
@@ -131,8 +205,6 @@ public class BookingRewardLifecycleService {
             );
             return;
         }
-
-        Integer expiryMonths = policy == null ? null : policy.getExpiryMonths();
 
         LocalDateTime expiresAt = expiryMonths != null && expiryMonths > 0
                 ? now.plusMonths(expiryMonths)
@@ -149,7 +221,10 @@ public class BookingRewardLifecycleService {
                 .booking(booking)
                 .type("EARN")
                 .points(earnedPoints)
-                .description("Tích điểm từ đơn hàng hoàn thành " + booking.getBookingCode())
+                .description(
+                        "Tích điểm từ đơn hàng hoàn thành "
+                                + booking.getBookingCode()
+                )
                 .eventKey(eventKey)
                 .createdAt(now)
                 .expiresAt(expiresAt)
@@ -207,7 +282,8 @@ public class BookingRewardLifecycleService {
             return;
         }
 
-        long nextBalance = (long) zero(account.getBalance()) + pointsToRefund;
+        long nextBalance = (long) zero(account.getBalance())
+                + pointsToRefund;
 
         if (nextBalance > Integer.MAX_VALUE) {
             log.error(
@@ -218,9 +294,13 @@ public class BookingRewardLifecycleService {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        RewardPolicy policy = rewardPolicyRepository.findById(1L).orElse(null);
 
-        Integer expiryMonths = policy == null ? null : policy.getExpiryMonths();
+        RewardPolicy policy = rewardPolicyRepository.findById(1L)
+                .orElse(null);
+
+        Integer expiryMonths = policy == null
+                ? 12
+                : policy.getExpiryMonths();
 
         LocalDateTime expiresAt = expiryMonths != null && expiryMonths > 0
                 ? now.plusMonths(expiryMonths)
@@ -240,8 +320,11 @@ public class BookingRewardLifecycleService {
                 .booking(booking)
                 .type("REDEEM_REFUND")
                 .points(pointsToRefund)
-                .description("Hoàn điểm do đơn hàng " + booking.getBookingCode()
-                        + " bị " + booking.getStatus())
+                .description(
+                        "Hoàn điểm do đơn hàng "
+                                + booking.getBookingCode()
+                                + " bị " + booking.getStatus()
+                )
                 .eventKey(eventKey)
                 .createdAt(now)
                 .expiresAt(expiresAt)
@@ -256,7 +339,9 @@ public class BookingRewardLifecycleService {
 
     private void releasePromotionUsage(Booking booking) {
         List<BookingPromotion> bookingPromotions =
-                bookingPromotionRepository.findByBooking_Id(booking.getId());
+                bookingPromotionRepository.findByBooking_Id(
+                        booking.getId()
+                );
 
         for (BookingPromotion bookingPromotion : bookingPromotions) {
             if (Boolean.TRUE.equals(bookingPromotion.getReleased())) {
@@ -270,11 +355,14 @@ public class BookingRewardLifecycleService {
             }
 
             Promotion promotion = promotionRepository
-                    .findByIdForUpdate(bookingPromotion.getPromotion().getId())
+                    .findByIdForUpdate(
+                            bookingPromotion.getPromotion().getId()
+                    )
                     .orElse(null);
 
             if (promotion != null) {
                 int usageCount = zero(promotion.getUsageCount());
+
                 promotion.setUsageCount(Math.max(0, usageCount - 1));
                 promotionRepository.save(promotion);
             }

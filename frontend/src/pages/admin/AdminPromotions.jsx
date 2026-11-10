@@ -713,7 +713,6 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="1"
-                                        readOnly
                                         value={policy.earnAmountStep}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -729,7 +728,6 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="1"
-                                        readOnly
                                         value={policy.earnPoints}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -745,7 +743,6 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="1"
-                                        readOnly
                                         value={policy.pointValue}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -762,7 +759,6 @@ export default function AdminPromotions() {
                                         type="number"
                                         min="0"
                                         max="100"
-                                        readOnly
                                         value={policy.maxRedeemPercent}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -778,7 +774,6 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="0"
-                                        readOnly
                                         value={policy.minRedeemPoints}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -794,7 +789,6 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="0"
-                                        readOnly
                                         value={policy.maxRedeemPoints}
                                         onChange={(event) =>
                                             setPolicy((current) => ({

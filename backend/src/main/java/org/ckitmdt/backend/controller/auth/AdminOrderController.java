@@ -41,7 +41,10 @@ public class AdminOrderController {
             @RequestParam(required = false) Long partnerId,
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String fromDate,
-            @RequestParam(required = false) String toDate) {
+            @RequestParam(required = false) String toDate,
+            Authentication authentication) {
+
+        validateAdmin(authentication);
 
         String search = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
         String statusFilter = normalize(status);
@@ -99,7 +102,11 @@ public class AdminOrderController {
 
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
-    public ResponseEntity<Map<String, Object>> getOrderDetail(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getOrderDetail(
+            @PathVariable Long id,
+            Authentication authentication) {
+        validateAdmin(authentication);
+
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -119,7 +126,7 @@ public class AdminOrderController {
             @PathVariable String action,
             @RequestBody(required = false) Map<String, Object> body) {
 
-        validateAdminOrStaff(authentication);
+        validateAdmin(authentication);
 
         String normalizedAction = action
                 .replace("-", "_")
@@ -128,7 +135,7 @@ public class AdminOrderController {
         if (!"CANCEL".equals(normalizedAction)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Admin/Staff hiện chỉ được can thiệp hủy đơn qua chức năng này. Các nghiệp vụ điều phối khác phải dùng workflow riêng."
+                    "Admin hiện chỉ được can thiệp hủy đơn qua chức năng này. Các nghiệp vụ điều phối khác phải dùng workflow riêng."
             );
         }
 
@@ -183,7 +190,7 @@ public class AdminOrderController {
         if (reason.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Admin/Staff phải nhập lý do hủy đơn."
+                    "Admin phải nhập lý do hủy đơn."
             );
         }
 
@@ -213,10 +220,10 @@ public class AdminOrderController {
             );
         }
 
-        String auditNote = "Admin/Staff hủy đơn. Lý do: " + reason;
+        String auditNote = "Admin hủy đơn. Lý do: " + reason;
 
         if (alreadyPaid) {
-            auditNote += " | Kế hoạch Customer/refund: " + refundPlan;
+            auditNote += " | Kế hoạch xử lý Customer/refund: " + refundPlan;
         }
 
         BookingActionRequest request = new BookingActionRequest();
@@ -305,18 +312,17 @@ public class AdminOrderController {
                 || "PAID".equalsIgnoreCase(payment.getStatus()));
     }
 
-    private void validateAdminOrStaff(Authentication authentication) {
+    private void validateAdmin(Authentication authentication) {
         if (authentication == null || authentication.getName() == null
                 || authentication.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Bạn cần đăng nhập lại.");
         }
 
         boolean allowed = authentication.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority())
-                        || "ROLE_STAFF".equals(authority.getAuthority()));
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
 
         if (!allowed) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền can thiệp đơn hàng.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ Admin mới có quyền xem và can thiệp đơn hàng toàn sàn.");
         }
     }
 

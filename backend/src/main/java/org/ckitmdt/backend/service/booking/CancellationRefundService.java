@@ -164,6 +164,7 @@ public class CancellationRefundService {
                 .stream().map(this::row).toList();
     }
 
+
     @Transactional
     public Map<String, Object> recordTransfer(
             Long id, Map<String, Object> body, Authentication auth) {
@@ -200,17 +201,41 @@ public class CancellationRefundService {
         String reference = text(body.get("transferReference"));
         String evidenceUrl = text(body.get("evidenceUrl"));
 
-        if (reference.isBlank() || reference.length() > 150 || evidenceUrl.length() > 1000) {
+        if (reference.isBlank() || reference.length() > 150) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Mã giao dịch là bắt buộc (tối đa 150 ký tự); liên kết chứng từ tối đa 1000 ký tự."
+                    "Mã giao dịch chuyển tiền là bắt buộc và không vượt quá 150 ký tự."
+            );
+        }
+
+        if (evidenceUrl.isBlank() || evidenceUrl.length() > 1000) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Phải cung cấp liên kết chứng từ chuyển tiền hợp lệ."
+            );
+        }
+
+        try {
+            java.net.URI evidenceUri = java.net.URI.create(evidenceUrl);
+            String scheme = evidenceUri.getScheme();
+
+            if (scheme == null
+                    || !(scheme.equalsIgnoreCase("http")
+                    || scheme.equalsIgnoreCase("https"))
+                    || evidenceUri.getHost() == null) {
+                throw new IllegalArgumentException();
+            }
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Liên kết chứng từ phải là URL HTTP hoặc HTTPS hợp lệ."
             );
         }
 
         LocalDateTime now = LocalDateTime.now();
 
         refund.setTransferReference(reference);
-        refund.setTransferEvidenceUrl(evidenceUrl.isBlank() ? null : evidenceUrl);
+        refund.setTransferEvidenceUrl(evidenceUrl);
         refund.setTransferredBy(operator.getEmail());
         refund.setTransferredAt(now);
 
@@ -221,19 +246,22 @@ public class CancellationRefundService {
                 "REFUND_TRANSFER_RECORDED",
                 "CANCELLATION_REFUND",
                 saved.getId(),
-                "Ghi nhận chứng từ chuyển tiền hoàn cho đơn " + saved.getBooking().getBookingCode(),
+                "Ghi nhận chứng từ chuyển tiền hoàn cho đơn "
+                        + saved.getBooking().getBookingCode(),
                 "status=APPROVED;transferredAt=null",
-                "status=APPROVED;transferReference=" + reference + ";transferredAt=" + now
+                "status=APPROVED;transferReference=" + reference
+                        + ";evidenceUrl=" + evidenceUrl
+                        + ";transferredAt=" + now
         );
 
         if (saved.getRequestedBy() != null) {
             customerNotificationService.notifyCustomer(
                     saved.getRequestedBy(),
                     "REFUND_TRANSFERRED",
-                    "Đã chuyển khoản hoàn tiền",
+                    "Đã ghi nhận chuyển khoản hoàn tiền",
                     "Khoản hoàn tiền cho đơn "
                             + saved.getBooking().getBookingCode()
-                            + " đã được ghi nhận chuyển khoản.",
+                            + " đã được ghi nhận kèm chứng từ chuyển khoản.",
                     "REFUND",
                     saved.getId()
             );

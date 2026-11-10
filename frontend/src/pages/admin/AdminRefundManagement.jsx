@@ -580,17 +580,41 @@ export default function AdminRefundManagement() {
                                             onChange={e => setTransferReference(e.target.value)}
                                             maxLength={150} required disabled={submitting} />
                                     </div>
+
                                     <div className="refund-form-group">
-                                        <label htmlFor="transfer-evidence">Liên kết chứng từ (nếu có)</label>
-                                        <input id="transfer-evidence" type="url" value={transferEvidenceUrl}
+                                        <label htmlFor="transfer-evidence">
+                                            Liên kết chứng từ chuyển khoản
+                                        </label>
+                                        <input
+                                            id="transfer-evidence"
+                                            type="url"
+                                            value={transferEvidenceUrl}
                                             onChange={e => setTransferEvidenceUrl(e.target.value)}
-                                            maxLength={1000} disabled={submitting} />
+                                            placeholder="https://..."
+                                            maxLength={1000}
+                                            required
+                                            disabled={submitting}
+                                        />
+                                        <small>
+                                            Bắt buộc có chứng từ trước khi xác nhận đã chuyển tiền.
+                                        </small>
                                     </div>
+
                                     {error && <div className="refund-alert refund-alert-error">{error}</div>}
                                     <div className="refund-modal-footer">
-                                        <button className="refund-submit-btn" type="submit" disabled={submitting || !transferReference.trim()}>
-                                            {submitting ? 'Đang lưu...' : 'Ghi nhận đã chuyển tiền'}
+
+                                        <button
+                                            className="refund-submit-btn"
+                                            type="submit"
+                                            disabled={
+                                                submitting ||
+                                                !transferReference.trim() ||
+                                                !transferEvidenceUrl.trim()
+                                            }
+                                        >
+                                            {submitting ? 'Đang lưu...' : 'Xác nhận đã chuyển tiền'}
                                         </button>
+
                                     </div>
                                 </form>
                             )}

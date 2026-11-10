@@ -1,3 +1,4 @@
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Home from './pages/home';
 import Rewards from './pages/rewards';
@@ -20,6 +21,8 @@ import AdminServices from './pages/admin/AdminServices';
 import AdminProviders from './pages/admin/AdminProviders';
 import AdminOrders from './pages/admin/AdminOrders';
 import AdminTransactions from './pages/admin/AdminTransactions';
+import AdminProviderSettlements from './pages/admin/AdminProviderSettlements';
+import AdminProviderServiceApprovals from './pages/admin/AdminProviderServiceApprovals';
 import AdminComplaintManagement from './pages/admin/AdminComplaintManagement';
 import ForgotPassword from './pages/forgot-password';
 import AdminRefundManagement from './pages/admin/AdminRefundManagement';
@@ -100,6 +103,7 @@ function App() {
                 <Route path="/customer/bookings" element={<CustomerBookings />} />
                 <Route path="/customer/bookings/history" element={<CustomerBookingHistory />} />
                 <Route path="/customer/reports" element={<CustomerReports />} />
+
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/accounts" element={<AdminAccounts />} />
                 <Route path="/admin/services" element={<AdminServices />} />
@@ -107,6 +111,8 @@ function App() {
                 <Route path="/admin/provider-requests" element={<AdminProviderChangeRequests />} />
                 <Route path="/admin/orders" element={<AdminOrders />} />
                 <Route path="/admin/transactions" element={<AdminTransactions />} />
+                <Route path="/admin/provider-settlements" element={<AdminProviderSettlements />} />
+                <Route path="/admin/provider-service-approvals" element={<AdminProviderServiceApprovals />} />
                 <Route path="/admin/complaints" element={<AdminComplaintManagement />} />
                 <Route path="/admin/refunds" element={<AdminRefundManagement />} />
                 <Route path="/admin/promotions" element={<AdminPromotions />} />
