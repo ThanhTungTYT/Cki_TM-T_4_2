@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import {
     NavLink,
@@ -5,6 +6,7 @@ import {
     useNavigate,
     Outlet
 } from 'react-router-dom';
+import CleanerJobReminder from './CleanerJobReminder';
 import './CleanerPortal.css';
 
 const NAV_ITEMS = [
@@ -300,6 +302,7 @@ function CleanerLayout() {
                 </header>
 
                 <main className="cl-content">
+                    <CleanerJobReminder />
                     <Outlet />
                 </main>
             </div>

@@ -800,3 +800,85 @@
     font-size: 12px;
     color: #64748b;
 }
+
+.cj-urgent-reminder {
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.cj-urgent-reminder h3 {
+    color: #c2410c;
+    margin: 0 0 8px;
+}
+
+.cj-urgent-reminder p {
+    margin: 0 0 12px;
+}
+
+.cj-urgent-reminder > div {
+    padding: 8px 0;
+    border-top: 1px solid #fed7aa;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.cj-incident-warning {
+    padding: 11px 13px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #9a4b16;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.cj-incident-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 9px 0;
+}
+
+.cj-incident-meta span {
+    padding: 5px 9px;
+    border-radius: 20px;
+    background: #fff4e8;
+    color: #92521f;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.cj-action-feedback {
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.cj-action-feedback.success {
+    background: #eaf7f0;
+    color: #20724e;
+}
+
+.cj-action-feedback.error {
+    background: #fff0ef;
+    color: #ae3939;
+}
+
+.cj-decline-btn {
+    background: #fff0ef;
+    color: #ae3939;
+    border: 1px solid #f2d0cd;
+}
+
+.cj-log-feedback.success {
+    color: #20724e;
+}
+
+.cj-log-feedback.error {
+    color: #ae3939;
+}
+
