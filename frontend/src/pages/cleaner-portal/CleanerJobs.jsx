@@ -1,23 +1,15 @@
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bookingApi } from '../../services/api';
 import './CleanerJobs.css';
 
 const STATUS_CONFIG = {
-    PENDING_PAYMENT: { label: 'Chờ thanh toán', type: 'pending' },
-    PENDING_PROVIDER: { label: 'Chờ nhà cung cấp', type: 'pending' },
-    CONFIRMED: { label: 'Đã xác nhận', type: 'confirmed' },
     ASSIGNED: { label: 'Chờ nhận việc', type: 'assigned' },
     ACCEPTED: { label: 'Đã nhận việc', type: 'confirmed' },
-    EN_ROUTE: { label: 'Đang thực hiện', type: 'progress' },
+    EN_ROUTE: { label: 'Đang di chuyển', type: 'progress' },
     IN_PROGRESS: { label: 'Đang thực hiện', type: 'progress' },
-    WORK_SUBMITTED: {
-        label: 'Chờ xác nhận hoàn thành',
-        type: 'waiting'
-    },
-    PENDING_COMPLETION: {
-        label: 'Chờ nghiệm thu',
-        type: 'waiting'
-    },
+    WORK_SUBMITTED: { label: 'Đã gửi kết quả', type: 'waiting' },
+    PENDING_COMPLETION: { label: 'Chờ nghiệm thu', type: 'waiting' },
     COMPLETED: { label: 'Hoàn thành', type: 'completed' },
     DECLINED: { label: 'Đã từ chối', type: 'cancelled' },
     CANCELLED: { label: 'Đã hủy', type: 'cancelled' },
@@ -32,6 +24,33 @@ const FILTERS = [
     { value: 'COMPLETED', label: 'Hoàn thành' },
     { value: 'CANCELLED', label: 'Đã hủy' }
 ];
+
+const INCIDENT_CATEGORIES = [
+    { value: 'PROPERTY_DAMAGE', label: 'Hư hỏng tài sản' },
+    { value: 'MISSING_EQUIPMENT', label: 'Thiếu dụng cụ' },
+    { value: 'SAFETY', label: 'Vấn đề an toàn' },
+    { value: 'CUSTOMER_ISSUE', label: 'Vấn đề với khách hàng' },
+    { value: 'SERVICE_PROBLEM', label: 'Vấn đề dịch vụ' },
+    { value: 'OTHER', label: 'Khác' }
+];
+
+const INCIDENT_SEVERITIES = [
+    { value: 'LOW', label: 'Thấp' },
+    { value: 'MEDIUM', label: 'Trung bình' },
+    { value: 'HIGH', label: 'Cao' },
+    { value: 'CRITICAL', label: 'Nghiêm trọng' }
+];
+
+const SEVERITY_LABELS = {
+    LOW: 'Thấp',
+    MEDIUM: 'Trung bình',
+    HIGH: 'Cao',
+    CRITICAL: 'Nghiêm trọng'
+};
+
+const CATEGORY_LABELS = Object.fromEntries(
+    INCIDENT_CATEGORIES.map((item) => [item.value, item.label])
+);
 
 function formatDate(value) {
     if (!value) return 'Chưa có thời gian';
@@ -49,14 +68,8 @@ function formatDate(value) {
     });
 }
 
-function formatMoney(value) {
-    if (value == null) return '—';
-
-    return `${Number(value).toLocaleString('vi-VN')}đ`;
-}
-
 function getStatus(status) {
-    const key = (status || '').toUpperCase();
+    const key = String(status || '').toUpperCase();
 
     return STATUS_CONFIG[key] || {
         label: status || 'Chưa xác định',
@@ -65,11 +78,9 @@ function getStatus(status) {
 }
 
 function getFilterGroup(status) {
-    const key = (status || '').toUpperCase();
+    const key = String(status || '').toUpperCase();
 
-    if (key === 'COMPLETED') {
-        return 'COMPLETED';
-    }
+    if (key === 'COMPLETED') return 'COMPLETED';
 
     if (
         ['CANCELLED', 'REJECTED', 'EXPIRED', 'DECLINED'].includes(key)
@@ -80,6 +91,7 @@ function getFilterGroup(status) {
     if (
         [
             'ACCEPTED',
+            'EN_ROUTE',
             'IN_PROGRESS',
             'WORK_SUBMITTED',
             'PENDING_COMPLETION'
@@ -91,6 +103,33 @@ function getFilterGroup(status) {
     return 'UPCOMING';
 }
 
+function getServiceNames(booking) {
+    const items = Array.isArray(booking?.items)
+        ? booking.items
+        : [];
+
+    const names = items
+        .map((item) => item?.serviceName)
+        .filter(Boolean);
+
+    return names.length
+        ? [...new Set(names)].join(', ')
+        : 'Chưa có thông tin dịch vụ';
+}
+
+function getImageUrls(log) {
+    if (Array.isArray(log?.imageUrls)) return log.imageUrls;
+
+    if (typeof log?.imageUrls === 'string') {
+        return log.imageUrls
+            .split('\n')
+            .map((url) => url.trim())
+            .filter(Boolean);
+    }
+
+    return [];
+}
+
 function CleanerJobs() {
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -98,30 +137,23 @@ function CleanerJobs() {
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('ALL');
     const [expandedId, setExpandedId] = useState(null);
-
     const [processingId, setProcessingId] = useState(null);
 
-    const [actionFeedback, setActionFeedback] = useState({
-        bookingId: null,
-        message: '',
-        type: ''
-    });
+    const [actionFeedback, setActionFeedback] = useState({});
 
-    // CN3: Quản lý nhật ký công việc
     const [workLogs, setWorkLogs] = useState({});
     const [logType, setLogType] = useState({});
     const [logNote, setLogNote] = useState({});
+    const [incidentSeverity, setIncidentSeverity] = useState({});
+    const [incidentCategory, setIncidentCategory] = useState({});
     const [logLoading, setLogLoading] = useState({});
     const [logFeedback, setLogFeedback] = useState({});
     const [selectedImages, setSelectedImages] = useState({});
 
-    // Lấy Assignment của Cleaner đang đăng nhập.
     const fetchBookings = useCallback(async () => {
         const assignments = await bookingApi.getCleanerAssignments();
 
-        if (!Array.isArray(assignments)) {
-            return [];
-        }
+        if (!Array.isArray(assignments)) return [];
 
         return assignments
             .filter((assignment) => assignment?.booking)
@@ -131,7 +163,6 @@ function CleanerJobs() {
             }));
     }, []);
 
-    // Tải lại danh sách công việc.
     const loadBookings = useCallback(async () => {
         setLoading(true);
         setError('');
@@ -141,34 +172,29 @@ function CleanerJobs() {
             setBookings(data);
         } catch (err) {
             setError(
-                err.message || 'Không thể tải danh sách công việc.'
+                err?.message || 'Không thể tải danh sách công việc.'
             );
         } finally {
             setLoading(false);
         }
     }, [fetchBookings]);
 
-    // Tải dữ liệu lần đầu.
     useEffect(() => {
         let cancelled = false;
 
         fetchBookings()
             .then((data) => {
-                if (!cancelled) {
-                    setBookings(data);
-                }
+                if (!cancelled) setBookings(data);
             })
             .catch((err) => {
                 if (!cancelled) {
                     setError(
-                        err.message || 'Không thể tải danh sách công việc.'
+                        err?.message || 'Không thể tải danh sách công việc.'
                     );
                 }
             })
             .finally(() => {
-                if (!cancelled) {
-                    setLoading(false);
-                }
+                if (!cancelled) setLoading(false);
             });
 
         return () => {
@@ -176,65 +202,59 @@ function CleanerJobs() {
         };
     }, [fetchBookings]);
 
-    // CN3: Đọc ảnh thành Data URL để hiển thị xem trước.
+    function setLogMessage(assignmentId, type, message) {
+        setLogFeedback((prev) => ({
+            ...prev,
+            [assignmentId]: { type, message }
+        }));
+    }
+
     function readImagePreview(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
 
             reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(
-                new Error('Không thể đọc ảnh.')
-            );
+            reader.onerror = () => reject(new Error('Không thể đọc ảnh.'));
 
             reader.readAsDataURL(file);
         });
     }
 
-    // CN3: Chọn tối đa 5 ảnh minh chứng.
     async function handleSelectWorkLogImages(assignmentId, fileList) {
         const files = Array.from(fileList || []);
+        const current = selectedImages[assignmentId] || [];
+        const slots = 5 - current.length;
 
-        if (!assignmentId || files.length === 0) return;
-
-        const currentImages = selectedImages[assignmentId] || [];
-        const remainingSlots = 5 - currentImages.length;
-
-        if (remainingSlots <= 0) {
-            setLogFeedback((prev) => ({
-                ...prev,
-                [assignmentId]: {
-                    type: 'error',
-                    message: 'Mỗi nhật ký chỉ được đính kèm tối đa 5 ảnh.'
-                }
-            }));
+        if (slots <= 0) {
+            setLogMessage(
+                assignmentId,
+                'error',
+                'Mỗi báo cáo chỉ được đính kèm tối đa 5 ảnh.'
+            );
             return;
         }
 
-        const acceptedFiles = files.slice(0, remainingSlots);
+        const accepted = files.slice(0, slots);
         const newImages = [];
 
-        for (const file of acceptedFiles) {
+        for (const file of accepted) {
             if (
                 !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
             ) {
-                setLogFeedback((prev) => ({
-                    ...prev,
-                    [assignmentId]: {
-                        type: 'error',
-                        message: 'Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP.'
-                    }
-                }));
+                setLogMessage(
+                    assignmentId,
+                    'error',
+                    'Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP.'
+                );
                 continue;
             }
 
             if (file.size > 5 * 1024 * 1024) {
-                setLogFeedback((prev) => ({
-                    ...prev,
-                    [assignmentId]: {
-                        type: 'error',
-                        message: `Ảnh "${file.name}" vượt quá 5 MB.`
-                    }
-                }));
+                setLogMessage(
+                    assignmentId,
+                    'error',
+                    `Ảnh ${file.name} vượt quá 5 MB.`
+                );
                 continue;
             }
 
@@ -242,13 +262,11 @@ function CleanerJobs() {
                 const preview = await readImagePreview(file);
                 newImages.push({ file, preview });
             } catch {
-                setLogFeedback((prev) => ({
-                    ...prev,
-                    [assignmentId]: {
-                        type: 'error',
-                        message: 'Không thể đọc một ảnh đã chọn.'
-                    }
-                }));
+                setLogMessage(
+                    assignmentId,
+                    'error',
+                    'Không thể đọc một ảnh đã chọn.'
+                );
             }
         }
 
@@ -261,17 +279,15 @@ function CleanerJobs() {
         }));
     }
 
-    // CN3: Xóa ảnh khỏi danh sách ảnh chờ gửi.
-    function handleRemoveWorkLogImage(assignmentId, imageIndex) {
+    function handleRemoveWorkLogImage(assignmentId, indexToRemove) {
         setSelectedImages((prev) => ({
             ...prev,
             [assignmentId]: (prev[assignmentId] || []).filter(
-                (_, index) => index !== imageIndex
+                (_, index) => index !== indexToRemove
             )
         }));
     }
 
-    // CN3: Tải lịch sử nhật ký của một phân công.
     async function loadWorkLogs(assignmentId) {
         if (!assignmentId) return;
 
@@ -288,13 +304,11 @@ function CleanerJobs() {
                 [assignmentId]: Array.isArray(data) ? data : []
             }));
         } catch (err) {
-            setLogFeedback((prev) => ({
-                ...prev,
-                [assignmentId]: {
-                    type: 'error',
-                    message: err.message || 'Không thể tải nhật ký.'
-                }
-            }));
+            setLogMessage(
+                assignmentId,
+                'error',
+                err?.message || 'Không thể tải nhật ký công việc.'
+            );
         } finally {
             setLogLoading((prev) => ({
                 ...prev,
@@ -303,7 +317,6 @@ function CleanerJobs() {
         }
     }
 
-    // CN3: Gửi nhật ký tiến độ hoặc báo sự cố.
     async function handleSubmitWorkLog(assignmentId) {
         if (!assignmentId || logLoading[assignmentId]) return;
 
@@ -311,15 +324,25 @@ function CleanerJobs() {
         const type = logType[assignmentId] || 'PROGRESS';
 
         if (!note) {
-            setLogFeedback((prev) => ({
-                ...prev,
-                [assignmentId]: {
-                    type: 'error',
-                    message: 'Vui lòng nhập nội dung nhật ký.'
-                }
-            }));
+            setLogMessage(
+                assignmentId,
+                'error',
+                'Vui lòng nhập nội dung nhật ký.'
+            );
             return;
         }
+
+        if (note.length > 5000) {
+            setLogMessage(
+                assignmentId,
+                'error',
+                'Nội dung không được vượt quá 5000 ký tự.'
+            );
+            return;
+        }
+
+        const severity = incidentSeverity[assignmentId] || 'MEDIUM';
+        const category = incidentCategory[assignmentId] || 'OTHER';
 
         setLogLoading((prev) => ({
             ...prev,
@@ -335,11 +358,9 @@ function CleanerJobs() {
             const images = selectedImages[assignmentId] || [];
             const imageUrls = [];
 
-            // Tải từng ảnh lên Backend trước khi tạo nhật ký.
             for (const image of images) {
-                const uploaded = await bookingApi.uploadCleanerWorkLogImage(
-                    image.file
-                );
+                const uploaded =
+                    await bookingApi.uploadCleanerWorkLogImage(image.file);
 
                 if (!uploaded?.imageUrl) {
                     throw new Error(
@@ -350,46 +371,47 @@ function CleanerJobs() {
                 imageUrls.push(uploaded.imageUrl);
             }
 
-            // Tạo nhật ký kèm các URL ảnh vừa tải lên.
-            await bookingApi.createCleanerWorkLog(assignmentId, {
+            const payload = {
                 logType: type,
                 note,
                 imageUrls
-            });
+            };
 
-            setSelectedImages((prev) => ({
-                ...prev,
-                [assignmentId]: []
-            }));
+            if (type === 'INCIDENT') {
+                payload.severity = severity;
+                payload.category = category;
+            }
+
+            await bookingApi.createCleanerWorkLog(
+                assignmentId,
+                payload
+            );
 
             setLogNote((prev) => ({
                 ...prev,
                 [assignmentId]: ''
             }));
 
-            setLogFeedback((prev) => ({
+            setSelectedImages((prev) => ({
                 ...prev,
-                [assignmentId]: {
-                    type: 'success',
-                    message: 'Đã gửi nhật ký công việc.'
-                }
+                [assignmentId]: []
             }));
 
-            // Tải lại lịch sử sau khi gửi thành công.
-            const data = await bookingApi.getCleanerWorkLogs(assignmentId);
+            setLogMessage(
+                assignmentId,
+                'success',
+                type === 'INCIDENT'
+                    ? 'Đã gửi báo cáo sự cố. Nhà cung cấp cần tiếp nhận và xử lý.'
+                    : 'Đã gửi nhật ký tiến độ.'
+            );
 
-            setWorkLogs((prev) => ({
-                ...prev,
-                [assignmentId]: Array.isArray(data) ? data : []
-            }));
+            await loadWorkLogs(assignmentId);
         } catch (err) {
-            setLogFeedback((prev) => ({
-                ...prev,
-                [assignmentId]: {
-                    type: 'error',
-                    message: err.message || 'Không thể gửi nhật ký.'
-                }
-            }));
+            setLogMessage(
+                assignmentId,
+                'error',
+                err?.message || 'Không thể gửi nhật ký.'
+            );
         } finally {
             setLogLoading((prev) => ({
                 ...prev,
@@ -398,57 +420,56 @@ function CleanerJobs() {
         }
     }
 
-    // Xử lý các thao tác trên Assignment của Cleaner.
     async function handleBookingAction(booking, action) {
         if (processingId !== null) return;
 
         const assignment = booking.cleanerAssignment;
+        const assignmentId =
+            assignment?.assignmentId || assignment?.id;
 
-        if (!assignment?.assignmentId) {
-            setActionFeedback({
-                bookingId: booking.id,
-                message: 'Không tìm thấy phân công của bạn.',
-                type: 'error'
-            });
+        if (!assignmentId) {
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'error',
+                    message: 'Không tìm thấy phân công của bạn.'
+                }
+            }));
             return;
         }
 
-        const actionMessages = {
+        const messages = {
             ACCEPT: 'Đã nhận công việc.',
             START_JOB: 'Đã bắt đầu thực hiện công việc.',
-            SUBMIT_COMPLETION:
-                'Đã gửi yêu cầu xác nhận hoàn thành cho khách hàng.'
+            SUBMIT_COMPLETION: 'Đã gửi kết quả công việc.'
         };
 
         setProcessingId(booking.id);
 
-        setActionFeedback({
-            bookingId: booking.id,
-            message: '',
-            type: ''
-        });
-
         try {
             await bookingApi.executeCleanerAssignmentAction(
-                assignment.assignmentId,
+                assignmentId,
                 action
             );
 
-            setActionFeedback({
-                bookingId: booking.id,
-                message: actionMessages[action] || 'Cập nhật thành công.',
-                type: 'success'
-            });
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'success',
+                    message: messages[action] || 'Cập nhật thành công.'
+                }
+            }));
 
             await loadBookings();
         } catch (err) {
-            setActionFeedback({
-                bookingId: booking.id,
-                message:
-                    err.message ||
-                    'Không thể cập nhật trạng thái công việc.',
-                type: 'error'
-            });
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'error',
+                    message:
+                        err?.message || 'Không thể cập nhật công việc.'
+                }
+            }));
 
             await loadBookings();
         } finally {
@@ -456,26 +477,20 @@ function CleanerJobs() {
         }
     }
 
-    // Cleaner từ chối nhận phân công.
     async function handleDeclineAssignment(booking) {
         if (processingId !== null) return;
 
         const assignment = booking.cleanerAssignment;
+        const assignmentId =
+            assignment?.assignmentId || assignment?.id;
 
-        if (!assignment?.assignmentId) {
-            setActionFeedback({
-                bookingId: booking.id,
-                message: 'Không tìm thấy phân công của bạn.',
-                type: 'error'
-            });
-            return;
-        }
+        if (!assignmentId) return;
 
         const note = window.prompt(
-            'Nhập lý do từ chối công việc này:'
+            'Nhập lý do từ chối công việc:'
         );
 
-        if (note == null) return;
+        if (note === null) return;
 
         if (!note.trim()) {
             window.alert('Vui lòng nhập lý do từ chối.');
@@ -484,143 +499,100 @@ function CleanerJobs() {
 
         setProcessingId(booking.id);
 
-        setActionFeedback({
-            bookingId: booking.id,
-            message: '',
-            type: ''
-        });
-
         try {
             await bookingApi.executeCleanerAssignmentAction(
-                assignment.assignmentId,
+                assignmentId,
                 'DECLINE',
                 note.trim()
             );
 
-            setActionFeedback({
-                bookingId: booking.id,
-                message: 'Đã từ chối nhận phân công này.',
-                type: 'success'
-            });
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'success',
+                    message: 'Đã gửi yêu cầu từ chối phân công.'
+                }
+            }));
 
             await loadBookings();
         } catch (err) {
-            setActionFeedback({
-                bookingId: booking.id,
-                message:
-                    err.message ||
-                    'Không thể từ chối phân công.',
-                type: 'error'
-            });
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'error',
+                    message: err?.message || 'Không thể từ chối phân công.'
+                }
+            }));
 
             await loadBookings();
         } finally {
             setProcessingId(null);
         }
     }
-    // Thống kê công việc theo trạng thái Assignment.
-    const stats = useMemo(() => {
-        return {
-            total: bookings.length,
 
-            upcoming: bookings.filter(
-                (booking) =>
-                    getFilterGroup(
-                        booking.cleanerAssignment?.assignmentStatus ||
-                        booking.status
-                    ) === 'UPCOMING'
-            ).length,
+    const stats = useMemo(() => ({
+        total: bookings.length,
+        upcoming: bookings.filter((booking) =>
+            getFilterGroup(
+                booking.cleanerAssignment?.assignmentStatus || booking.status
+            ) === 'UPCOMING'
+        ).length,
+        inProgress: bookings.filter((booking) =>
+            getFilterGroup(
+                booking.cleanerAssignment?.assignmentStatus || booking.status
+            ) === 'IN_PROGRESS'
+        ).length,
+        completed: bookings.filter((booking) =>
+            getFilterGroup(
+                booking.cleanerAssignment?.assignmentStatus || booking.status
+            ) === 'COMPLETED'
+        ).length
+    }), [bookings]);
 
-            inProgress: bookings.filter(
-                (booking) =>
-                    getFilterGroup(
-                        booking.cleanerAssignment?.assignmentStatus ||
-                        booking.status
-                    ) === 'IN_PROGRESS'
-            ).length,
-
-            completed: bookings.filter(
-                (booking) =>
-                    getFilterGroup(
-                        booking.cleanerAssignment?.assignmentStatus ||
-                        booking.status
-                    ) === 'COMPLETED'
-            ).length
-        };
-    }, [bookings]);
-
-    // Tìm kiếm và lọc công việc.
     const filteredBookings = useMemo(() => {
         const keyword = search.trim().toLowerCase();
 
         return bookings.filter((booking) => {
-            const assignmentStatus =
+            const status =
                 booking.cleanerAssignment?.assignmentStatus ||
                 booking.status;
 
             const matchFilter =
                 filter === 'ALL' ||
-                getFilterGroup(assignmentStatus) === filter;
-
-            const serviceNames = (booking.items || [])
-                .map((item) => item.serviceName || '')
-                .join(' ');
+                getFilterGroup(status) === filter;
 
             const searchableText = [
                 booking.bookingCode,
                 booking.customerName,
                 booking.customerPhone,
                 booking.fullAddress,
-                booking.partnerName,
-                serviceNames
+                getServiceNames(booking)
             ]
+                .filter(Boolean)
                 .join(' ')
                 .toLowerCase();
 
-            const matchSearch =
-                !keyword || searchableText.includes(keyword);
-
-            return matchFilter && matchSearch;
+            return matchFilter &&
+                (!keyword || searchableText.includes(keyword));
         });
     }, [bookings, filter, search]);
 
-    // CN6: Nhắc Cleaner tiếp nhận công việc sắp đến giờ thực hiện.
-    // Đây là nhắc nhở hiển thị khi mở trang, không phải thông báo nền.
     const urgentPendingBookings = useMemo(() => {
         const now = Date.now();
-        const reminderWindow = 24 * 60 * 60 * 1000;
+        const windowMs = 24 * 60 * 60 * 1000;
 
-        return bookings
-            .filter((booking) => {
-                const assignmentStatus = String(
-                    booking.cleanerAssignment?.assignmentStatus || ''
-                ).toUpperCase();
+        return bookings.filter((booking) => {
+            const status = String(
+                booking.cleanerAssignment?.assignmentStatus || ''
+            ).toUpperCase();
 
-                if (assignmentStatus !== 'ASSIGNED') {
-                    return false;
-                }
+            const start = new Date(booking.scheduledStart).getTime();
 
-                if (!booking.scheduledStart) {
-                    return false;
-                }
-
-                const startTime = new Date(
-                    booking.scheduledStart
-                ).getTime();
-
-                const remainingTime = startTime - now;
-
-                return (
-                    Number.isFinite(startTime) &&
-                    remainingTime >= 0 &&
-                    remainingTime <= reminderWindow
-                );
-            })
-            .sort(
-                (a, b) =>
-                    new Date(a.scheduledStart) -
-                    new Date(b.scheduledStart)
-            );
+            return status === 'ASSIGNED' &&
+                Number.isFinite(start) &&
+                start >= now &&
+                start - now <= windowMs;
+        });
     }, [bookings]);
 
     return (
@@ -643,53 +615,25 @@ function CleanerJobs() {
                 </button>
             </div>
 
-            {/* CN6: NHẮC NHỞ CÔNG VIỆC SẮP ĐẾN GIỜ */}
             {urgentPendingBookings.length > 0 && (
-                <div
-                    style={{
-                        background: '#fff7ed',
-                        border: '1px solid #fdba74',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        marginBottom: '20px'
-                    }}
-                >
-                    <h3
-                        style={{
-                            color: '#c2410c',
-                            margin: '0 0 8px'
-                        }}
-                    >
-                        ⚠ Nhắc nhở tiếp nhận công việc
-                    </h3>
-
-                    <p style={{ margin: '0 0 12px' }}>
-                        Bạn có {urgentPendingBookings.length} công việc
-                        chưa tiếp nhận và sắp đến giờ thực hiện.
-                        Vui lòng kiểm tra và phản hồi sớm.
+                <div className="cj-urgent-reminder">
+                    <h3>⚠ Nhắc nhở tiếp nhận công việc</h3>
+                    <p>
+                        Bạn có {urgentPendingBookings.length} công việc chưa
+                        tiếp nhận và sắp đến giờ thực hiện.
                     </p>
 
                     {urgentPendingBookings.map((booking) => (
-                        <div
-                            key={booking.id}
-                            style={{
-                                padding: '8px 0',
-                                borderTop: '1px solid #fed7aa'
-                            }}
-                        >
+                        <div key={booking.id}>
                             <strong>
                                 {booking.bookingCode || `Đơn #${booking.id}`}
                             </strong>
-
-                            <span style={{ marginLeft: '10px' }}>
-                                {formatDate(booking.scheduledStart)}
-                            </span>
+                            <span>{formatDate(booking.scheduledStart)}</span>
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* THỐNG KÊ */}
             <div className="cj-stats">
                 <div className="cj-stat-card">
                     <div className="cj-stat-icon cj-icon-blue">▤</div>
@@ -724,16 +668,14 @@ function CleanerJobs() {
                 </div>
             </div>
 
-            {/* TÌM KIẾM VÀ LỌC */}
             <div className="cj-toolbar">
                 <div className="cj-search">
                     <span>⌕</span>
-
                     <input
                         type="text"
                         placeholder="Tìm mã đơn, khách hàng, địa chỉ..."
                         value={search}
-                        onChange={(e) => setSearch(e.target.value)}
+                        onChange={(event) => setSearch(event.target.value)}
                     />
                 </div>
 
@@ -742,9 +684,7 @@ function CleanerJobs() {
                         <button
                             type="button"
                             key={item.value}
-                            className={
-                                filter === item.value ? 'active' : ''
-                            }
+                            className={filter === item.value ? 'active' : ''}
                             onClick={() => setFilter(item.value)}
                         >
                             {item.label}
@@ -753,7 +693,6 @@ function CleanerJobs() {
                 </div>
             </div>
 
-            {/* LOADING */}
             {loading && (
                 <div className="cj-message">
                     <div className="cj-spinner" />
@@ -761,38 +700,29 @@ function CleanerJobs() {
                 </div>
             )}
 
-            {/* ERROR */}
             {!loading && error && (
                 <div className="cj-error">
                     <strong>Không tải được công việc</strong>
                     <p>{error}</p>
-
-                    <button
-                        type="button"
-                        onClick={loadBookings}
-                    >
+                    <button type="button" onClick={loadBookings}>
                         Thử lại
                     </button>
                 </div>
             )}
 
-            {/* EMPTY */}
             {!loading && !error && filteredBookings.length === 0 && (
                 <div className="cj-empty">
                     <div className="cj-empty-icon">▤</div>
-
                     <h3>
                         {bookings.length === 0
                             ? 'Bạn chưa có công việc nào'
                             : 'Không tìm thấy công việc phù hợp'}
                     </h3>
-
                     <p>
                         {bookings.length === 0
                             ? 'Các công việc được nhà cung cấp phân công sẽ xuất hiện tại đây.'
                             : 'Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc.'}
                     </p>
-
                     {(search || filter !== 'ALL') && (
                         <button
                             type="button"
@@ -807,27 +737,32 @@ function CleanerJobs() {
                 </div>
             )}
 
-            {/* DANH SÁCH CÔNG VIỆC */}
             {!loading && !error && filteredBookings.length > 0 && (
                 <div className="cj-booking-list">
                     {filteredBookings.map((booking) => {
+                        const assignment = booking.cleanerAssignment || {};
+                        const assignmentId =
+                            assignment.assignmentId || assignment.id;
+
                         const assignmentStatus = String(
-                            booking.cleanerAssignment?.assignmentStatus ||
+                            assignment.assignmentStatus ||
                             booking.status ||
                             ''
                         ).toUpperCase();
 
-                        const assignmentId =
-                            booking.cleanerAssignment?.assignmentId ||
-                            booking.cleanerAssignment?.id;
-
                         const status = getStatus(assignmentStatus);
                         const expanded = expandedId === booking.id;
+                        const busy = processingId === booking.id;
+
+                        const canWriteLog = [
+                            'ACCEPTED',
+                            'IN_PROGRESS'
+                        ].includes(assignmentStatus);
 
                         return (
                             <article
                                 className="cj-booking-card"
-                                key={booking.id}
+                                key={assignmentId || booking.id}
                             >
                                 <div className="cj-card-top">
                                     <div>
@@ -838,8 +773,7 @@ function CleanerJobs() {
                                         </span>
 
                                         <h3>
-                                            {booking.customerName ||
-                                                'Khách hàng'}
+                                            {booking.customerName || 'Khách hàng'}
                                         </h3>
                                     </div>
 
@@ -855,11 +789,8 @@ function CleanerJobs() {
                                         <span className="cj-info-label">
                                             Thời gian thực hiện
                                         </span>
-
                                         <strong>
-                                            {formatDate(
-                                                booking.scheduledStart
-                                            )}
+                                            {formatDate(booking.scheduledStart)}
                                         </strong>
                                     </div>
 
@@ -867,10 +798,8 @@ function CleanerJobs() {
                                         <span className="cj-info-label">
                                             Địa chỉ làm việc
                                         </span>
-
                                         <strong>
-                                            {booking.fullAddress ||
-                                                'Chưa có địa chỉ'}
+                                            {booking.fullAddress || 'Chưa có địa chỉ'}
                                         </strong>
                                     </div>
 
@@ -878,70 +807,51 @@ function CleanerJobs() {
                                         <span className="cj-info-label">
                                             Dịch vụ
                                         </span>
-
-                                        <strong>
-                                            {booking.items?.length
-                                                ? booking.items
-                                                    .map(
-                                                        (item) =>
-                                                            item.serviceName
-                                                    )
-                                                    .filter(Boolean)
-                                                    .join(', ')
-                                                : 'Chưa có thông tin dịch vụ'}
-                                        </strong>
+                                        <strong>{getServiceNames(booking)}</strong>
                                     </div>
 
                                     <div>
                                         <span className="cj-info-label">
-                                            Tổng giá trị đơn
+                                            Thời lượng
                                         </span>
-
-                                        <strong className="cj-amount">
-                                            {formatMoney(
-                                                booking.totalAmount
-                                            )}
+                                        <strong>
+                                            {booking.durationMinutes
+                                                ? `${booking.durationMinutes} phút`
+                                                : 'Theo lịch phân công'}
                                         </strong>
                                     </div>
                                 </div>
 
-                                {/* XEM THÔNG TIN */}
                                 <div className="cj-card-bottom">
                                     <span>
-                                        {booking.items?.length || 0}{' '}
-                                        hạng mục dịch vụ
+                                        {booking.items?.length || 0} hạng mục dịch vụ
                                     </span>
 
                                     <button
                                         type="button"
-                                        onClick={() =>
-                                            setExpandedId(
-                                                expanded
-                                                    ? null
-                                                    : booking.id
-                                            )
-                                        }
-                                    >
-                                        {expanded
-                                            ? 'Thu gọn'
-                                            : 'Xem thông tin'}
+                                        onClick={() => {
+                                            const next = expanded
+                                                ? null
+                                                : booking.id;
 
-                                        <span>
-                                            {expanded ? '⌃' : '⌄'}
-                                        </span>
+                                            setExpandedId(next);
+
+                                            if (next && assignmentId) {
+                                                loadWorkLogs(assignmentId);
+                                            }
+                                        }}
+                                    >
+                                        {expanded ? 'Thu gọn' : 'Xem thông tin'}
+                                        <span>{expanded ? '⌃' : '⌄'}</span>
                                     </button>
                                 </div>
 
-                                {/* CÁC NÚT THAO TÁC CỦA CLEANER */}
                                 <div className="cj-actions">
                                     {assignmentStatus === 'ASSIGNED' && (
                                         <>
                                             <button
                                                 type="button"
-                                                className="cj-action-btn cj-action-start"
-                                                disabled={
-                                                    processingId !== null
-                                                }
+                                                disabled={busy}
                                                 onClick={() =>
                                                     handleBookingAction(
                                                         booking,
@@ -949,21 +859,15 @@ function CleanerJobs() {
                                                     )
                                                 }
                                             >
-                                                {processingId === booking.id
-                                                    ? 'Đang xử lý...'
-                                                    : 'Nhận việc'}
+                                                {busy ? 'Đang xử lý...' : 'Nhận việc'}
                                             </button>
 
                                             <button
                                                 type="button"
-                                                className="cj-action-btn cj-action-decline"
-                                                disabled={
-                                                    processingId !== null
-                                                }
+                                                className="cj-decline-btn"
+                                                disabled={busy}
                                                 onClick={() =>
-                                                    handleDeclineAssignment(
-                                                        booking
-                                                    )
+                                                    handleDeclineAssignment(booking)
                                                 }
                                             >
                                                 Từ chối
@@ -974,10 +878,7 @@ function CleanerJobs() {
                                     {assignmentStatus === 'ACCEPTED' && (
                                         <button
                                             type="button"
-                                            className="cj-action-btn cj-action-start"
-                                            disabled={
-                                                processingId !== null
-                                            }
+                                            disabled={busy}
                                             onClick={() =>
                                                 handleBookingAction(
                                                     booking,
@@ -985,19 +886,14 @@ function CleanerJobs() {
                                                 )
                                             }
                                         >
-                                            {processingId === booking.id
-                                                ? 'Đang xử lý...'
-                                                : 'Bắt đầu làm việc'}
+                                            Bắt đầu công việc
                                         </button>
                                     )}
 
                                     {assignmentStatus === 'IN_PROGRESS' && (
                                         <button
                                             type="button"
-                                            className="cj-action-btn cj-action-complete"
-                                            disabled={
-                                                processingId !== null
-                                            }
+                                            disabled={busy}
                                             onClick={() =>
                                                 handleBookingAction(
                                                     booking,
@@ -1005,173 +901,41 @@ function CleanerJobs() {
                                                 )
                                             }
                                         >
-                                            {processingId === booking.id
-                                                ? 'Đang xử lý...'
-                                                : 'Báo hoàn thành'}
+                                            Gửi kết quả hoàn thành
                                         </button>
                                     )}
-
-                                    {assignmentStatus === 'WORK_SUBMITTED' && (
-                                        <p className="cj-waiting-confirmation">
-                                            Bạn đã báo hoàn thành, đang chờ
-                                            khách hàng xác nhận.
-                                        </p>
-                                    )}
-
-                                    {assignmentStatus === 'DECLINED' && (
-                                        <p className="cj-waiting-confirmation">
-                                            Bạn đã từ chối phân công này.
-                                        </p>
-                                    )}
-
-                                    {assignmentStatus === 'COMPLETED' && (
-                                        <p className="cj-waiting-confirmation">
-                                            Công việc đã hoàn thành.
-                                        </p>
-                                    )}
-
-                                    {/* THÔNG BÁO KẾT QUẢ */}
-                                    {actionFeedback.bookingId === booking.id &&
-                                        actionFeedback.message && (
-                                            <p
-                                                className={`cj-action-feedback ${actionFeedback.type}`}
-                                            >
-                                                {actionFeedback.message}
-                                            </p>
-                                        )}
                                 </div>
-                                {/* CHI TIẾT ĐƠN HÀNG */}
+
+                                {actionFeedback[booking.id] && (
+                                    <p
+                                        className={`cj-action-feedback ${actionFeedback[booking.id].type}`}
+                                    >
+                                        {actionFeedback[booking.id].message}
+                                    </p>
+                                )}
+
                                 {expanded && (
-                                    <div className="cj-expanded">
-                                        <h4>Thông tin khách hàng</h4>
-
-                                        <div className="cj-detail-grid">
-                                            <div>
-                                                <span>Người nhận</span>
-
-                                                <strong>
-                                                    {booking.receiverName ||
-                                                        booking.customerName ||
-                                                        '—'}
-                                                </strong>
-                                            </div>
-
-                                            <div>
-                                                <span>Số điện thoại</span>
-
-                                                <strong>
-                                                    {booking.receiverPhone ||
-                                                        booking.customerPhone ||
-                                                        '—'}
-                                                </strong>
-                                            </div>
-
-                                            <div>
-                                                <span>Nhà cung cấp</span>
-
-                                                <strong>
-                                                    {booking.partnerName || '—'}
-                                                </strong>
-                                            </div>
-
-                                            <div>
-                                                <span>
-                                                    Thời gian kết thúc dự kiến
-                                                </span>
-
-                                                <strong>
-                                                    {formatDate(
-                                                        booking.scheduledEnd
-                                                    )}
-                                                </strong>
-                                            </div>
-                                        </div>
-
-                                        <h4>Tiến độ công việc</h4>
-
-                                        {(() => {
-                                            const assignment =
-                                                booking.cleanerAssignment || {};
-
-                                            const steps = [
-                                                {
-                                                    label: 'Được phân công',
-                                                    time: assignment.assignedAt
-                                                },
-                                                {
-                                                    label: 'Đã nhận việc',
-                                                    time: assignment.acceptedAt
-                                                },
-                                                {
-                                                    label: 'Bắt đầu thực hiện',
-                                                    time: assignment.startedAt
-                                                },
-                                                {
-                                                    label: 'Đã gửi báo hoàn thành',
-                                                    time: assignment.completedAt
-                                                }
-                                            ];
-
-                                            return (
-                                                <div className="cj-progress-timeline">
-                                                    {steps.map((step, index) => (
-                                                        <div
-                                                            className={`cj-progress-step ${
-                                                                step.time ? 'done' : ''
-                                                            }`}
-                                                            key={step.label}
-                                                        >
-                                                            <span className="cj-progress-dot">
-                                                                {step.time ? '✓' : index + 1}
-                                                            </span>
-
-                                                            <div>
-                                                                <strong>
-                                                                    {step.label}
-                                                                </strong>
-
-                                                                <span>
-                                                                    {step.time
-                                                                        ? formatDate(step.time)
-                                                                        : 'Chưa thực hiện'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            );
-                                        })()}
-
-                                        <h4>Danh sách dịch vụ</h4>
+                                    <div className="cj-card-details">
+                                        <h4>Chi tiết dịch vụ</h4>
 
                                         {booking.items?.length > 0 ? (
                                             <div className="cj-items">
-                                                {booking.items.map((item) => (
+                                                {booking.items.map((item, index) => (
                                                     <div
                                                         className="cj-item"
-                                                        key={item.id}
+                                                        key={item.id || index}
                                                     >
                                                         <div>
                                                             <strong>
                                                                 {item.serviceName ||
                                                                     'Dịch vụ'}
                                                             </strong>
-
-                                                            {item.packageName && (
+                                                            {item.description && (
                                                                 <span>
-                                                                    Gói:{' '}
-                                                                    {item.packageName}
-                                                                </span>
-                                                            )}
-
-                                                            {item.note && (
-                                                                <span>
-                                                                    Ghi chú:{' '}
-                                                                    {item.note}
+                                                                    {item.description}
                                                                 </span>
                                                             )}
                                                         </div>
-
                                                         <span>
                                                             x{item.quantity || 1}
                                                         </span>
@@ -1180,8 +944,7 @@ function CleanerJobs() {
                                             </div>
                                         ) : (
                                             <p className="cj-no-items">
-                                                Không có thông tin chi tiết
-                                                dịch vụ.
+                                                Không có thông tin chi tiết dịch vụ.
                                             </p>
                                         )}
 
@@ -1189,137 +952,194 @@ function CleanerJobs() {
                                             <>
                                                 <h4>
                                                     Đội ngũ cùng thực hiện (
-                                                    {booking.assignments.length}{' '}
-                                                    người)
+                                                    {booking.assignments.length} người)
                                                 </h4>
 
                                                 <div className="cj-items">
-                                                    {booking.assignments.map(
-                                                        (assignment) => (
-                                                            <div
-                                                                className="cj-item"
-                                                                key={
-                                                                    assignment.assignmentId ||
-                                                                    assignment.id
-                                                                }
-                                                            >
-                                                                <div>
-                                                                    <strong>
-                                                                        {assignment.employeeName ||
-                                                                            assignment.employeeCode ||
-                                                                            'Nhân viên'}
-                                                                    </strong>
-
-                                                                    {assignment.employeePhone && (
-                                                                        <span>
-                                                                            {' '}
-                                                                            — SĐT:{' '}
-                                                                            {assignment.employeePhone}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-
-                                                                <span
-                                                                    style={{
-                                                                        fontSize: '13px',
-                                                                        fontWeight: 600
-                                                                    }}
-                                                                >
-                                                                    {assignment.assignmentStatus ||
-                                                                        assignment.status ||
-                                                                        'Đã giao'}
-                                                                </span>
+                                                    {booking.assignments.map((item) => (
+                                                        <div
+                                                            className="cj-item"
+                                                            key={
+                                                                item.assignmentId ||
+                                                                item.id
+                                                            }
+                                                        >
+                                                            <div>
+                                                                <strong>
+                                                                    {item.employeeName ||
+                                                                        item.employeeCode ||
+                                                                        'Nhân viên'}
+                                                                </strong>
                                                             </div>
-                                                        )
-                                                    )}
+                                                            <span>
+                                                                {item.assignmentStatus ||
+                                                                    item.status ||
+                                                                    'Đã giao'}
+                                                            </span>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </>
                                         )}
 
                                         {booking.customerNote && (
                                             <>
-                                                <h4>
-                                                    Ghi chú của khách hàng
-                                                </h4>
-
+                                                <h4>Ghi chú của khách hàng</h4>
                                                 <p className="cj-customer-note">
                                                     {booking.customerNote}
                                                 </p>
                                             </>
                                         )}
 
-                                        {/* CN3: NHẬT KÝ CÔNG VIỆC */}
-                                        {['ACCEPTED', 'IN_PROGRESS'].includes(
-                                            assignmentStatus
-                                        ) && (
+                                        {canWriteLog && (
                                             <div className="cj-work-log">
-                                                <h4>Nhật ký công việc</h4>
-
+                                                <h4>Nhật ký và báo cáo sự cố</h4>
                                                 <p>
-                                                    Cập nhật tiến độ hoặc báo cáo
-                                                    sự cố trong quá trình làm việc.
+                                                    Ghi nhận tiến độ hoặc báo cáo
+                                                    vấn đề phát sinh trong quá trình
+                                                    thực hiện công việc.
                                                 </p>
 
                                                 <div className="cj-log-form">
                                                     <label>Loại nhật ký</label>
-
                                                     <select
                                                         value={
                                                             logType[assignmentId] ||
                                                             'PROGRESS'
                                                         }
-                                                        onChange={(e) => {
+                                                        onChange={(event) =>
                                                             setLogType((prev) => ({
                                                                 ...prev,
                                                                 [assignmentId]:
-                                                                e.target.value
-                                                            }));
-                                                        }}
+                                                                event.target.value
+                                                            }))
+                                                        }
                                                     >
                                                         <option value="PROGRESS">
                                                             Cập nhật tiến độ
                                                         </option>
-
                                                         <option value="INCIDENT">
                                                             Báo cáo sự cố
                                                         </option>
                                                     </select>
 
+                                                    {(logType[assignmentId] ||
+                                                        'PROGRESS') === 'INCIDENT' && (
+                                                        <>
+                                                            <label>
+                                                                Nhóm sự cố
+                                                            </label>
+                                                            <select
+                                                                value={
+                                                                    incidentCategory[
+                                                                        assignmentId
+                                                                        ] || 'OTHER'
+                                                                }
+                                                                onChange={(event) =>
+                                                                    setIncidentCategory(
+                                                                        (prev) => ({
+                                                                            ...prev,
+                                                                            [assignmentId]:
+                                                                            event.target.value
+                                                                        })
+                                                                    )
+                                                                }
+                                                            >
+                                                                {INCIDENT_CATEGORIES.map(
+                                                                    (item) => (
+                                                                        <option
+                                                                            key={item.value}
+                                                                            value={item.value}
+                                                                        >
+                                                                            {item.label}
+                                                                        </option>
+                                                                    )
+                                                                )}
+                                                            </select>
+
+                                                            <label>
+                                                                Mức độ nghiêm trọng
+                                                            </label>
+                                                            <select
+                                                                value={
+                                                                    incidentSeverity[
+                                                                        assignmentId
+                                                                        ] || 'MEDIUM'
+                                                                }
+                                                                onChange={(event) =>
+                                                                    setIncidentSeverity(
+                                                                        (prev) => ({
+                                                                            ...prev,
+                                                                            [assignmentId]:
+                                                                            event.target.value
+                                                                        })
+                                                                    )
+                                                                }
+                                                            >
+                                                                {INCIDENT_SEVERITIES.map(
+                                                                    (item) => (
+                                                                        <option
+                                                                            key={item.value}
+                                                                            value={item.value}
+                                                                        >
+                                                                            {item.label}
+                                                                        </option>
+                                                                    )
+                                                                )}
+                                                            </select>
+
+                                                            <div className="cj-incident-warning">
+                                                                Báo cáo sự cố sẽ được
+                                                                ghi nhận với trạng thái
+                                                                ban đầu là OPEN để nhà
+                                                                cung cấp tiếp nhận.
+                                                            </div>
+                                                        </>
+                                                    )}
 
                                                     <label>Nội dung</label>
-
                                                     <textarea
                                                         rows="4"
-                                                        placeholder="Nhập nội dung tiến độ hoặc mô tả sự cố..."
-                                                        value={
-                                                            logNote[assignmentId] ||
-                                                            ''
+                                                        maxLength={5000}
+                                                        placeholder={
+                                                            (logType[assignmentId] ||
+                                                                'PROGRESS') ===
+                                                            'INCIDENT'
+                                                                ? 'Mô tả sự cố, thời điểm xảy ra và ảnh hưởng...'
+                                                                : 'Nhập nội dung tiến độ công việc...'
                                                         }
-                                                        onChange={(e) => {
+                                                        value={
+                                                            logNote[assignmentId] || ''
+                                                        }
+                                                        onChange={(event) =>
                                                             setLogNote((prev) => ({
                                                                 ...prev,
                                                                 [assignmentId]:
-                                                                e.target.value
-                                                            }));
-                                                        }}
+                                                                event.target.value
+                                                            }))
+                                                        }
                                                     />
 
+                                                    <small>
+                                                        {(logNote[assignmentId] || '')
+                                                            .length}/5000 ký tự
+                                                    </small>
+
                                                     <label>
-                                                        Ảnh minh chứng (tối đa 5
-                                                        ảnh, mỗi ảnh không quá 5 MB)
+                                                        Ảnh minh chứng (tối đa 5 ảnh,
+                                                        mỗi ảnh không quá 5 MB)
                                                     </label>
 
                                                     <input
                                                         type="file"
                                                         accept="image/jpeg,image/png,image/webp"
                                                         multiple
-                                                        onChange={(e) => {
+                                                        onChange={(event) => {
                                                             handleSelectWorkLogImages(
                                                                 assignmentId,
-                                                                e.target.files
+                                                                event.target.files
                                                             );
-
-                                                            e.target.value = '';
+                                                            event.target.value = '';
                                                         }}
                                                     />
 
@@ -1331,13 +1151,12 @@ function CleanerJobs() {
                                                                 ].map((image, index) => (
                                                                 <div
                                                                     className="cj-log-image-preview-item"
-                                                                    key={index}
+                                                                    key={`${index}-${image.file.name}`}
                                                                 >
                                                                     <img
                                                                         src={image.preview}
                                                                         alt={`Ảnh minh chứng ${index + 1}`}
                                                                     />
-
                                                                     <button
                                                                         type="button"
                                                                         onClick={() =>
@@ -1367,7 +1186,11 @@ function CleanerJobs() {
                                                     >
                                                         {logLoading[assignmentId]
                                                             ? 'Đang gửi...'
-                                                            : 'Gửi nhật ký'}
+                                                            : (logType[assignmentId] ||
+                                                                'PROGRESS') ===
+                                                            'INCIDENT'
+                                                                ? 'Gửi báo cáo sự cố'
+                                                                : 'Gửi nhật ký'}
                                                     </button>
 
                                                     {logFeedback[assignmentId] && (
@@ -1388,7 +1211,6 @@ function CleanerJobs() {
                                                         <strong>
                                                             Lịch sử cập nhật
                                                         </strong>
-
                                                         <button
                                                             type="button"
                                                             disabled={
@@ -1404,39 +1226,61 @@ function CleanerJobs() {
                                                         </button>
                                                     </div>
 
-                                                    {(workLogs[assignmentId] ||
-                                                        []).length === 0 ? (
+                                                    {(workLogs[assignmentId] || [])
+                                                        .length === 0 ? (
                                                         <p>
                                                             Chưa có nhật ký công việc.
                                                         </p>
                                                     ) : (
-                                                        workLogs[
-                                                            assignmentId
-                                                            ].map((log) => (
-                                                            <div
-                                                                className="cj-log-item"
-                                                                key={log.id}
-                                                            >
-                                                                <strong>
+                                                        (workLogs[assignmentId] || [])
+                                                            .map((log) => (
+                                                                <div
+                                                                    className="cj-log-item"
+                                                                    key={log.id}
+                                                                >
+                                                                    <strong>
+                                                                        {log.logType ===
+                                                                        'INCIDENT'
+                                                                            ? '⚠ Báo cáo sự cố'
+                                                                            : '✓ Cập nhật tiến độ'}
+                                                                    </strong>
+
                                                                     {log.logType ===
-                                                                    'INCIDENT'
-                                                                        ? '⚠ Báo cáo sự cố'
-                                                                        : '✓ Cập nhật tiến độ'}
-                                                                </strong>
+                                                                        'INCIDENT' && (
+                                                                            <div className="cj-incident-meta">
+                                                                            <span>
+                                                                                Nhóm:{' '}
+                                                                                {CATEGORY_LABELS[
+                                                                                        log.category
+                                                                                        ] ||
+                                                                                    log.category ||
+                                                                                    'Khác'}
+                                                                            </span>
+                                                                                <span>
+                                                                                Mức độ:{' '}
+                                                                                    {SEVERITY_LABELS[
+                                                                                            log.severity
+                                                                                            ] ||
+                                                                                        log.severity ||
+                                                                                        'Trung bình'}
+                                                                            </span>
+                                                                                <span>
+                                                                                Trạng thái:{' '}
+                                                                                    {log.incidentStatus ||
+                                                                                        'OPEN'}
+                                                                            </span>
+                                                                            </div>
+                                                                        )}
 
-                                                                <p>{log.note}</p>
+                                                                    <p>{log.note}</p>
 
-                                                                {Array.isArray(
-                                                                        log.imageUrls
-                                                                    ) &&
-                                                                    log.imageUrls.length >
-                                                                    0 && (
+                                                                    {getImageUrls(log)
+                                                                        .length > 0 && (
                                                                         <div className="cj-log-history-images">
-                                                                            {log.imageUrls.map(
-                                                                                (
-                                                                                    url,
-                                                                                    index
-                                                                                ) => (
+                                                                            {getImageUrls(
+                                                                                log
+                                                                            ).map(
+                                                                                (url, index) => (
                                                                                     <a
                                                                                         href={url}
                                                                                         target="_blank"
@@ -1445,7 +1289,7 @@ function CleanerJobs() {
                                                                                     >
                                                                                         <img
                                                                                             src={url}
-                                                                                            alt={`Ảnh nhật ký ${index + 1}`}
+                                                                                            alt={`Ảnh minh chứng ${index + 1}`}
                                                                                         />
                                                                                     </a>
                                                                                 )
@@ -1453,13 +1297,13 @@ function CleanerJobs() {
                                                                         </div>
                                                                     )}
 
-                                                                <small>
-                                                                    {formatDate(
-                                                                        log.createdAt
-                                                                    )}
-                                                                </small>
-                                                            </div>
-                                                        ))
+                                                                    <small>
+                                                                        {formatDate(
+                                                                            log.createdAt
+                                                                        )}
+                                                                    </small>
+                                                                </div>
+                                                            ))
                                                     )}
                                                 </div>
                                             </div>

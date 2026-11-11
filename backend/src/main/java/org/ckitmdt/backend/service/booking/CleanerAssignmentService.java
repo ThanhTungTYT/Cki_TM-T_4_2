@@ -1,3 +1,4 @@
+
 package org.ckitmdt.backend.service.booking;
 
 import lombok.RequiredArgsConstructor;
@@ -50,12 +51,8 @@ public class CleanerAssignmentService {
      * START_JOB
      * SUBMIT_COMPLETION
      *
-     * Luồng thực hiện:
+     * Luồng:
      * ASSIGNED -> ACCEPTED -> IN_PROGRESS -> WORK_SUBMITTED
-     *
-     * Cleaner có thể từ chối:
-     * ASSIGNED -> DECLINED
-     * ACCEPTED -> DECLINED
      */
     @Transactional
     public CleanerAssignmentResponse executeAction(
@@ -82,7 +79,7 @@ public class CleanerAssignmentService {
             );
         }
 
-        // 2. Tìm hồ sơ Employee tương ứng với tài khoản Cleaner
+        // 2. Tìm hồ sơ Employee
         Employee employee = employeeRepository.findByUser_Id(cleanerUser.getId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -113,14 +110,14 @@ public class CleanerAssignmentService {
 
         Long bookingId = initialAssignment.getBooking().getId();
 
-        // Khóa Booking trước để hạn chế cập nhật đồng thời.
+        // Khóa Booking trước để hạn chế cập nhật đồng thời
         Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy đơn hàng."
                 ));
 
-        // Sau đó khóa Assignment.
+        // Khóa Assignment
         BookingAssignment assignment =
                 assignmentRepository.findByIdForUpdate(assignmentId)
                         .orElseThrow(() -> new ResponseStatusException(
@@ -128,7 +125,7 @@ public class CleanerAssignmentService {
                                 "Phân công không còn tồn tại."
                         ));
 
-        // 4. Kiểm tra Assignment có thuộc về Cleaner đăng nhập không
+        // 4. Kiểm tra Assignment có thuộc Cleaner đăng nhập không
         if (assignment.getEmployee() == null
                 || !Objects.equals(
                 assignment.getEmployee().getId(),
@@ -141,8 +138,7 @@ public class CleanerAssignmentService {
             );
         }
 
-        // 5. Kiểm tra tính nhất quán giữa Employee, Assignment và Booking.
-        // Cleaner chỉ được thực hiện công việc thuộc đúng Provider của mình.
+        // 5. Kiểm tra tính nhất quán Employee - Assignment - Booking
         if (assignment.getPartner() == null
                 || employee.getPartner() == null
                 || booking.getPartner() == null
@@ -180,7 +176,7 @@ public class CleanerAssignmentService {
         String currentBookingStatus =
                 normalizeStatus(booking.getStatus());
 
-        // Kiểm tra trạng thái Booking có cho phép thao tác không.
+        // Kiểm tra Booking có cho phép hành động không
         validateBookingStatus(
                 currentBookingStatus,
                 normalizedAction
@@ -188,7 +184,12 @@ public class CleanerAssignmentService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 7. Xác định trạng thái Assignment tiếp theo
+        // 7. Nếu bắt đầu công việc, phải kiểm tra đủ nhân viên đã nhận việc
+        if ("START_JOB".equals(normalizedAction)) {
+            validateEnoughAcceptedEmployees(booking);
+        }
+
+        // 8. Xác định trạng thái Assignment tiếp theo
         String nextAssignmentStatus = determineNextAssignmentStatus(
                 currentAssignmentStatus,
                 normalizedAction
@@ -198,7 +199,7 @@ public class CleanerAssignmentService {
 
         assignment.setStatus(nextAssignmentStatus);
 
-        // 8. Cập nhật thời gian và ghi chú theo hành động
+        // 9. Cập nhật thời gian và ghi chú
         switch (normalizedAction) {
 
             case "ACCEPT" -> {
@@ -236,7 +237,7 @@ public class CleanerAssignmentService {
 
         assignmentRepository.saveAndFlush(assignment);
 
-        // 9. Đồng bộ trạng thái Booking từ tiến độ các Assignment
+        // 10. Đồng bộ trạng thái Booking
         synchronizeBookingStatus(
                 booking,
                 normalizedAction,
@@ -254,7 +255,7 @@ public class CleanerAssignmentService {
                 nextAssignmentStatus
         );
 
-        // 10. Trả về Assignment kèm Booking mới nhất
+        // 11. Trả về Assignment mới nhất
         return mapToResponse(assignment);
     }
 
@@ -268,7 +269,6 @@ public class CleanerAssignmentService {
 
         return switch (action) {
 
-            // Cleaner nhận công việc
             case "ACCEPT" -> {
                 if (!"ASSIGNED".equals(currentStatus)) {
                     throw invalidAssignmentTransition(
@@ -280,8 +280,9 @@ public class CleanerAssignmentService {
                 yield "ACCEPTED";
             }
 
-            // Cleaner chỉ được từ chối khi assignment đang chờ nhận.
             case "DECLINE" -> {
+                // Chỉ được từ chối trước khi nhận việc.
+                // Sau ACCEPT, Provider/Staff phải điều phối thay người.
                 if (!"ASSIGNED".equals(currentStatus)) {
                     throw invalidAssignmentTransition(
                             currentStatus,
@@ -292,8 +293,6 @@ public class CleanerAssignmentService {
                 yield "DECLINED";
             }
 
-            // Cleaner bắt đầu thực hiện công việc.
-            // Bắt buộc phải nhận việc trước.
             case "START_JOB" -> {
                 if (!"ACCEPTED".equals(currentStatus)) {
                     throw invalidAssignmentTransition(
@@ -305,7 +304,6 @@ public class CleanerAssignmentService {
                 yield "IN_PROGRESS";
             }
 
-            // Cleaner gửi yêu cầu xác nhận hoàn thành
             case "SUBMIT_COMPLETION" -> {
                 if (!"IN_PROGRESS".equals(currentStatus)) {
                     throw invalidAssignmentTransition(
@@ -322,6 +320,76 @@ public class CleanerAssignmentService {
                     "Hành động Cleaner không hợp lệ: " + action
             );
         };
+    }
+
+    /**
+     * Kiểm tra số nhân viên đã xác nhận tham gia có đáp ứng yêu cầu không.
+     *
+     * ASSIGNED chưa được tính vì Cleaner chưa chấp nhận phân công.
+     */
+    private void validateEnoughAcceptedEmployees(Booking booking) {
+
+        List<BookingItem> items =
+                bookingItemRepository.findByBookingId(booking.getId());
+
+        int requiredEmployees =
+                (items == null || items.isEmpty())
+                        ? 1
+                        : items.stream()
+                        .mapToInt(item -> {
+                            int employeeCount =
+                                    item.getEmployeeCount() != null
+                                            && item.getEmployeeCount() > 0
+                                            ? item.getEmployeeCount()
+                                            : 1;
+
+                            int quantity =
+                                    item.getQuantity() != null
+                                            && item.getQuantity() > 0
+                                            ? item.getQuantity()
+                                            : 1;
+
+                            return employeeCount * quantity;
+                        })
+                        .sum();
+
+        if (requiredEmployees <= 0) {
+            requiredEmployees = 1;
+        }
+
+        List<BookingAssignment> assignments =
+                assignmentRepository.findByBooking_IdOrderByIdAsc(
+                        booking.getId()
+                );
+
+        long acceptedEmployees = assignments.stream()
+                .filter(assignment -> assignment.getEmployee() != null)
+                .filter(assignment -> {
+                    String status = normalizeStatus(assignment.getStatus());
+
+                    return List.of(
+                            "ACCEPTED",
+                            "EN_ROUTE",
+                            "IN_PROGRESS",
+                            "WORK_SUBMITTED",
+                            "COMPLETED"
+                    ).contains(status);
+                })
+                .map(assignment -> assignment.getEmployee().getId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+
+        if (acceptedEmployees < requiredEmployees) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Chưa đủ nhân viên xác nhận nhận việc. Cần "
+                            + requiredEmployees
+                            + " người, hiện có "
+                            + acceptedEmployees
+                            + " người đã xác nhận. Vui lòng chờ đủ nhân viên trước khi bắt đầu."
+            );
+        }
     }
 
     /**
@@ -368,14 +436,11 @@ public class CleanerAssignmentService {
     }
 
     /**
-     * Đồng bộ trạng thái Booking từ tiến độ của các Assignment.
+     * Đồng bộ trạng thái Booking từ tiến độ Assignment.
      *
-     * Lưu ý:
-     * - Không còn xử lý START_TRAVEL.
-     * - Không tự động chuyển Booking sang EN_ROUTE.
-     * - Booking chỉ chuyển IN_PROGRESS khi Cleaner bắt đầu làm.
-     * - Booking chuyển PENDING_COMPLETION khi tất cả Assignment
-     *   đang hoạt động đã báo hoàn thành.
+     * Booking chuyển IN_PROGRESS khi Cleaner bắt đầu làm.
+     * Booking chuyển PENDING_COMPLETION khi tất cả Assignment
+     * đang hoạt động đã báo hoàn thành.
      */
     private void synchronizeBookingStatus(
             Booking booking,
@@ -392,7 +457,6 @@ public class CleanerAssignmentService {
 
         switch (action) {
 
-            // Cleaner bắt đầu làm việc
             case "START_JOB" -> {
                 if ("ASSIGNED".equals(oldBookingStatus)
                         || "EN_ROUTE".equals(oldBookingStatus)) {
@@ -401,7 +465,6 @@ public class CleanerAssignmentService {
                 }
             }
 
-            // Tất cả Cleaner đã báo hoàn thành
             case "SUBMIT_COMPLETION" -> {
 
                 List<BookingAssignment> assignments =
@@ -409,7 +472,6 @@ public class CleanerAssignmentService {
                                 booking.getId()
                         );
 
-                // Bỏ qua các Assignment đã từ chối hoặc bị hủy.
                 List<BookingAssignment> activeAssignments =
                         assignments.stream()
                                 .filter(assignment -> {
@@ -437,7 +499,6 @@ public class CleanerAssignmentService {
 
                     nextBookingStatus = "PENDING_COMPLETION";
 
-                    // Thông báo cho Provider khi toàn bộ Cleaner đã báo hoàn thành.
                     if (booking.getPartner() != null
                             && booking.getPartner().getUser() != null) {
 
@@ -460,7 +521,6 @@ public class CleanerAssignmentService {
                 }
             }
 
-            // Cleaner từ chối phân công
             case "DECLINE" -> {
 
                 List<BookingItem> items =
@@ -506,8 +566,6 @@ public class CleanerAssignmentService {
                                 })
                                 .count();
 
-                // Nếu thiếu nhân viên, đưa Booking về CONFIRMED
-                // để Provider có thể phân công lại.
                 if (remainingActive < requiredEmployees
                         && (
                         "ASSIGNED".equals(oldBookingStatus)
@@ -517,7 +575,6 @@ public class CleanerAssignmentService {
                     nextBookingStatus = "CONFIRMED";
                 }
 
-                // Gửi thông báo cho nhà cung cấp
                 if (booking.getPartner() != null
                         && booking.getPartner().getUser() != null) {
 
@@ -547,11 +604,10 @@ public class CleanerAssignmentService {
             }
 
             default -> {
-                // ACCEPT không làm thay đổi trạng thái Booking chung.
+                // ACCEPT không thay đổi trạng thái Booking chung.
             }
         }
 
-        // Chỉ cập nhật Booking nếu trạng thái thực sự thay đổi.
         if (!oldBookingStatus.equals(nextBookingStatus)) {
 
             org.ckitmdt.backend.dto.booking.BookingStatusEnum targetEnum =
