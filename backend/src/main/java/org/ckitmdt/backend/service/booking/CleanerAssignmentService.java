@@ -33,6 +33,9 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class CleanerAssignmentService {
 
+    private static final String UNABLE_REPORT_MARKER =
+            "BÁO KHÔNG THỂ THỰC HIỆN [";
+
     private final BookingAssignmentRepository assignmentRepository;
     private final BookingRepository bookingRepository;
     private final BookingStatusHistoryRepository bookingStatusHistoryRepository;
@@ -48,11 +51,9 @@ public class CleanerAssignmentService {
      * Các action được hỗ trợ:
      * ACCEPT
      * DECLINE
+     * REPORT_UNABLE
      * START_JOB
      * SUBMIT_COMPLETION
-     *
-     * Luồng:
-     * ASSIGNED -> ACCEPTED -> IN_PROGRESS -> WORK_SUBMITTED
      */
     @Transactional
     public CleanerAssignmentResponse executeAction(
@@ -176,7 +177,37 @@ public class CleanerAssignmentService {
         String currentBookingStatus =
                 normalizeStatus(booking.getStatus());
 
-        // Kiểm tra Booking có cho phép hành động không
+        /*
+         * 7. Chặn các hành động không hợp lệ sau khi Cleaner
+         * đã gửi báo cáo không thể thực hiện.
+         *
+         * Assignment vẫn giữ ACCEPTED để Provider/Staff điều phối.
+         * Cleaner không được gửi báo cáo lặp lại hoặc tự bắt đầu việc.
+         */
+        boolean alreadyReportedUnable = hasReportedUnable(assignment);
+
+        if ("REPORT_UNABLE".equals(normalizedAction)
+                && alreadyReportedUnable) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Bạn đã gửi báo cáo không thể thực hiện công việc trước đó. "
+                            + "Vui lòng chờ Provider/Staff điều phối nhân viên thay thế."
+            );
+        }
+
+        if ("START_JOB".equals(normalizedAction)
+                && alreadyReportedUnable) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Bạn đã báo không thể thực hiện công việc này. "
+                            + "Không thể bắt đầu công việc. "
+                            + "Vui lòng chờ Provider/Staff điều phối nhân viên thay thế."
+            );
+        }
+
+        // 8. Kiểm tra Booking có cho phép hành động không
         validateBookingStatus(
                 currentBookingStatus,
                 normalizedAction
@@ -184,12 +215,12 @@ public class CleanerAssignmentService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 7. Nếu bắt đầu công việc, phải kiểm tra đủ nhân viên đã nhận việc
+        // 9. Nếu bắt đầu công việc, phải kiểm tra đủ nhân viên đã nhận việc
         if ("START_JOB".equals(normalizedAction)) {
             validateEnoughAcceptedEmployees(booking);
         }
 
-        // 8. Xác định trạng thái Assignment tiếp theo
+        // 10. Xác định trạng thái Assignment tiếp theo
         String nextAssignmentStatus = determineNextAssignmentStatus(
                 currentAssignmentStatus,
                 normalizedAction
@@ -199,7 +230,7 @@ public class CleanerAssignmentService {
 
         assignment.setStatus(nextAssignmentStatus);
 
-        // 9. Cập nhật thời gian và ghi chú
+        // 11. Cập nhật thời gian và ghi chú
         switch (normalizedAction) {
 
             case "ACCEPT" -> {
@@ -229,6 +260,55 @@ public class CleanerAssignmentService {
                 assignment.setNote("Từ chối: " + note.trim());
             }
 
+            case "REPORT_UNABLE" -> {
+                if (note == null || note.trim().isBlank()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Vui lòng ghi rõ lý do không thể thực hiện công việc."
+                    );
+                }
+
+                String existingNote = assignment.getNote();
+
+                String report = UNABLE_REPORT_MARKER
+                        + now + "]: " + note.trim();
+
+                assignment.setNote(
+                        existingNote == null || existingNote.isBlank()
+                                ? report
+                                : existingNote + "\n" + report
+                );
+
+                if (assignment.getPartner() != null
+                        && assignment.getPartner().getUser() != null) {
+
+                    String reason = note.trim();
+
+                    if (reason.length() > 700) {
+                        reason = reason.substring(0, 700) + "...";
+                    }
+
+                    adminNotificationRepository.save(
+                            AdminNotification.builder()
+                                    .recipient(assignment.getPartner().getUser())
+                                    .type("ASSIGNMENT_UNABLE")
+                                    .title("Cleaner báo không thể thực hiện công việc")
+                                    .message(
+                                            "Nhân viên "
+                                                    + cleanerUser.getFullName()
+                                                    + " báo không thể tiếp tục/đảm nhận công việc "
+                                                    + booking.getBookingCode()
+                                                    + ". Lý do: " + reason
+                                                    + ". Vui lòng liên hệ và điều phối nhân sự thay thế nếu cần."
+                                    )
+                                    .referenceType("BOOKING")
+                                    .referenceId(booking.getId())
+                                    .createdAt(now)
+                                    .build()
+                    );
+                }
+            }
+
             default -> throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Hành động không được hỗ trợ."
@@ -237,7 +317,7 @@ public class CleanerAssignmentService {
 
         assignmentRepository.saveAndFlush(assignment);
 
-        // 10. Đồng bộ trạng thái Booking
+        // 12. Đồng bộ trạng thái Booking
         synchronizeBookingStatus(
                 booking,
                 normalizedAction,
@@ -255,8 +335,19 @@ public class CleanerAssignmentService {
                 nextAssignmentStatus
         );
 
-        // 11. Trả về Assignment mới nhất
+        // 13. Trả về Assignment mới nhất
         return mapToResponse(assignment);
+    }
+
+    /**
+     * Kiểm tra Assignment đã có báo cáo không thể thực hiện hay chưa.
+     */
+    private boolean hasReportedUnable(BookingAssignment assignment) {
+
+        String assignmentNote = assignment.getNote();
+
+        return assignmentNote != null
+                && assignmentNote.contains(UNABLE_REPORT_MARKER);
     }
 
     /**
@@ -291,6 +382,19 @@ public class CleanerAssignmentService {
                 }
 
                 yield "DECLINED";
+            }
+
+            case "REPORT_UNABLE" -> {
+                // Đây là yêu cầu điều phối, không tự hủy Assignment.
+                // Giữ ACCEPTED để Provider/Staff quyết định thay người.
+                if (!"ACCEPTED".equals(currentStatus)) {
+                    throw invalidAssignmentTransition(
+                            currentStatus,
+                            action
+                    );
+                }
+
+                yield currentStatus;
             }
 
             case "START_JOB" -> {
@@ -410,6 +514,14 @@ public class CleanerAssignmentService {
                             "IN_PROGRESS"
                     ).contains(bookingStatus);
 
+            case "REPORT_UNABLE" ->
+                    List.of(
+                            "CONFIRMED",
+                            "ASSIGNED",
+                            "EN_ROUTE",
+                            "IN_PROGRESS"
+                    ).contains(bookingStatus);
+
             case "START_JOB" ->
                     List.of(
                             "ASSIGNED",
@@ -437,10 +549,6 @@ public class CleanerAssignmentService {
 
     /**
      * Đồng bộ trạng thái Booking từ tiến độ Assignment.
-     *
-     * Booking chuyển IN_PROGRESS khi Cleaner bắt đầu làm.
-     * Booking chuyển PENDING_COMPLETION khi tất cả Assignment
-     * đang hoạt động đã báo hoàn thành.
      */
     private void synchronizeBookingStatus(
             Booking booking,
@@ -604,7 +712,7 @@ public class CleanerAssignmentService {
             }
 
             default -> {
-                // ACCEPT không thay đổi trạng thái Booking chung.
+                // ACCEPT và REPORT_UNABLE không thay đổi trạng thái Booking.
             }
         }
 
