@@ -57,8 +57,8 @@ function getStatusInfo(status) {
             className: 'assigned'
         },
         EN_ROUTE: {
-            label: 'Đang di chuyển',
-            className: 'en-route'
+            label: 'Đang thực hiện',
+            className: 'in-progress'
         },
         IN_PROGRESS: {
             label: 'Đang thực hiện',

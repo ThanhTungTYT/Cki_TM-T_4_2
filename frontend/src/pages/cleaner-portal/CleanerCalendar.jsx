@@ -31,7 +31,7 @@ const timeLabel = (value) => value
 const statusLabel = (s) => ({
     ASSIGNED: 'Đã phân công',
     ACCEPTED: 'Đã nhận',
-    EN_ROUTE: 'Đang di chuyển',
+    EN_ROUTE: 'Đang thực hiện',
     IN_PROGRESS: 'Đang thực hiện',
     WORK_SUBMITTED: 'Chờ xác nhận',
     COMPLETED: 'Hoàn thành',

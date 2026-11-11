@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bookingApi } from '../../services/api';
 import './CleanerJobs.css';
@@ -9,7 +8,7 @@ const STATUS_CONFIG = {
     CONFIRMED: { label: 'Đã xác nhận', type: 'confirmed' },
     ASSIGNED: { label: 'Chờ nhận việc', type: 'assigned' },
     ACCEPTED: { label: 'Đã nhận việc', type: 'confirmed' },
-    EN_ROUTE: { label: 'Đang di chuyển', type: 'progress' },
+    EN_ROUTE: { label: 'Đang thực hiện', type: 'progress' },
     IN_PROGRESS: { label: 'Đang thực hiện', type: 'progress' },
     WORK_SUBMITTED: {
         label: 'Chờ xác nhận hoàn thành',
@@ -81,7 +80,6 @@ function getFilterGroup(status) {
     if (
         [
             'ACCEPTED',
-            'EN_ROUTE',
             'IN_PROGRESS',
             'WORK_SUBMITTED',
             'PENDING_COMPLETION'
@@ -520,7 +518,6 @@ function CleanerJobs() {
             setProcessingId(null);
         }
     }
-
     // Thống kê công việc theo trạng thái Assignment.
     const stats = useMemo(() => {
         return {
@@ -587,6 +584,45 @@ function CleanerJobs() {
         });
     }, [bookings, filter, search]);
 
+    // CN6: Nhắc Cleaner tiếp nhận công việc sắp đến giờ thực hiện.
+    // Đây là nhắc nhở hiển thị khi mở trang, không phải thông báo nền.
+    const urgentPendingBookings = useMemo(() => {
+        const now = Date.now();
+        const reminderWindow = 24 * 60 * 60 * 1000;
+
+        return bookings
+            .filter((booking) => {
+                const assignmentStatus = String(
+                    booking.cleanerAssignment?.assignmentStatus || ''
+                ).toUpperCase();
+
+                if (assignmentStatus !== 'ASSIGNED') {
+                    return false;
+                }
+
+                if (!booking.scheduledStart) {
+                    return false;
+                }
+
+                const startTime = new Date(
+                    booking.scheduledStart
+                ).getTime();
+
+                const remainingTime = startTime - now;
+
+                return (
+                    Number.isFinite(startTime) &&
+                    remainingTime >= 0 &&
+                    remainingTime <= reminderWindow
+                );
+            })
+            .sort(
+                (a, b) =>
+                    new Date(a.scheduledStart) -
+                    new Date(b.scheduledStart)
+            );
+    }, [bookings]);
+
     return (
         <div className="cj-page">
             <div className="cj-header">
@@ -606,6 +642,52 @@ function CleanerJobs() {
                     ↻ Làm mới
                 </button>
             </div>
+
+            {/* CN6: NHẮC NHỞ CÔNG VIỆC SẮP ĐẾN GIỜ */}
+            {urgentPendingBookings.length > 0 && (
+                <div
+                    style={{
+                        background: '#fff7ed',
+                        border: '1px solid #fdba74',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        marginBottom: '20px'
+                    }}
+                >
+                    <h3
+                        style={{
+                            color: '#c2410c',
+                            margin: '0 0 8px'
+                        }}
+                    >
+                        ⚠ Nhắc nhở tiếp nhận công việc
+                    </h3>
+
+                    <p style={{ margin: '0 0 12px' }}>
+                        Bạn có {urgentPendingBookings.length} công việc
+                        chưa tiếp nhận và sắp đến giờ thực hiện.
+                        Vui lòng kiểm tra và phản hồi sớm.
+                    </p>
+
+                    {urgentPendingBookings.map((booking) => (
+                        <div
+                            key={booking.id}
+                            style={{
+                                padding: '8px 0',
+                                borderTop: '1px solid #fed7aa'
+                            }}
+                        >
+                            <strong>
+                                {booking.bookingCode || `Đơn #${booking.id}`}
+                            </strong>
+
+                            <span style={{ marginLeft: '10px' }}>
+                                {formatDate(booking.scheduledStart)}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* THỐNG KÊ */}
             <div className="cj-stats">
@@ -958,7 +1040,6 @@ function CleanerJobs() {
                                             </p>
                                         )}
                                 </div>
-
                                 {/* CHI TIẾT ĐƠN HÀNG */}
                                 {expanded && (
                                     <div className="cj-expanded">
@@ -1009,7 +1090,8 @@ function CleanerJobs() {
                                         <h4>Tiến độ công việc</h4>
 
                                         {(() => {
-                                            const assignment = booking.cleanerAssignment || {};
+                                            const assignment =
+                                                booking.cleanerAssignment || {};
 
                                             const steps = [
                                                 {
@@ -1039,24 +1121,26 @@ function CleanerJobs() {
                                                             }`}
                                                             key={step.label}
                                                         >
-                    <span className="cj-progress-dot">
-                        {step.time ? '✓' : index + 1}
-                    </span>
+                                                            <span className="cj-progress-dot">
+                                                                {step.time ? '✓' : index + 1}
+                                                            </span>
 
                                                             <div>
-                                                                <strong>{step.label}</strong>
+                                                                <strong>
+                                                                    {step.label}
+                                                                </strong>
+
                                                                 <span>
-                            {step.time
-                                ? formatDate(step.time)
-                                : 'Chưa thực hiện'}
-                        </span>
+                                                                    {step.time
+                                                                        ? formatDate(step.time)
+                                                                        : 'Chưa thực hiện'}
+                                                                </span>
                                                             </div>
                                                         </div>
                                                     ))}
                                                 </div>
                                             );
                                         })()}
-
 
                                         <h4>Danh sách dịch vụ</h4>
 
@@ -1137,8 +1221,7 @@ function CleanerJobs() {
 
                                                                 <span
                                                                     style={{
-                                                                        fontSize:
-                                                                            '13px',
+                                                                        fontSize: '13px',
                                                                         fontWeight: 600
                                                                     }}
                                                                 >
@@ -1196,10 +1279,12 @@ function CleanerJobs() {
                                                         <option value="PROGRESS">
                                                             Cập nhật tiến độ
                                                         </option>
+
                                                         <option value="INCIDENT">
                                                             Báo cáo sự cố
                                                         </option>
                                                     </select>
+
 
                                                     <label>Nội dung</label>
 
@@ -1344,8 +1429,7 @@ function CleanerJobs() {
                                                                 {Array.isArray(
                                                                         log.imageUrls
                                                                     ) &&
-                                                                    log.imageUrls
-                                                                        .length >
+                                                                    log.imageUrls.length >
                                                                     0 && (
                                                                         <div className="cj-log-history-images">
                                                                             {log.imageUrls.map(
@@ -1354,17 +1438,13 @@ function CleanerJobs() {
                                                                                     index
                                                                                 ) => (
                                                                                     <a
-                                                                                        href={
-                                                                                            url
-                                                                                        }
+                                                                                        href={url}
                                                                                         target="_blank"
                                                                                         rel="noreferrer"
                                                                                         key={`${log.id}-${index}`}
                                                                                     >
                                                                                         <img
-                                                                                            src={
-                                                                                                url
-                                                                                            }
+                                                                                            src={url}
                                                                                             alt={`Ảnh nhật ký ${index + 1}`}
                                                                                         />
                                                                                     </a>
