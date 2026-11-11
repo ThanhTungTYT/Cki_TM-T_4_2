@@ -211,30 +211,6 @@ public class BookingStateEngine {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // Cập nhật trạng thái BookingAssignment của Cleaner (nếu có)
-        if (currentUser != null && isCleanerRole(normalizeRole(currentUser.getRole()))) {
-            final Long currentUserId = currentUser.getId();
-            bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId())
-                    .stream()
-                    .filter(a -> a.getEmployee() != null && a.getEmployee().getUser() != null
-                            && a.getEmployee().getUser().getId().equals(currentUserId))
-                    .filter(a -> !"DECLINED".equalsIgnoreCase(a.getStatus()) && !"CANCELLED".equalsIgnoreCase(a.getStatus()))
-                    .findFirst()
-                    .ifPresent(assignment -> {
-                        if (action == BookingActionEnum.START_TRAVEL) {
-                            assignment.setStatus("EN_ROUTE");
-                            if (assignment.getAcceptedAt() == null) assignment.setAcceptedAt(now);
-                        } else if (action == BookingActionEnum.START_JOB) {
-                            assignment.setStatus("IN_PROGRESS");
-                            if (assignment.getAcceptedAt() == null) assignment.setAcceptedAt(now);
-                            if (assignment.getStartedAt() == null) assignment.setStartedAt(now);
-                        } else if (action == BookingActionEnum.SUBMIT_COMPLETION) {
-                            assignment.setStatus("WORK_SUBMITTED");
-                            if (assignment.getCompletedAt() == null) assignment.setCompletedAt(now);
-                        }
-                        bookingAssignmentRepository.saveAndFlush(assignment);
-                    });
-        }
 
         // Kiểm tra xem tất cả cleaner hoạt động đã nộp kết quả hoàn thành chưa
         if (action == BookingActionEnum.SUBMIT_COMPLETION) {
@@ -615,10 +591,10 @@ public class BookingStateEngine {
             }
 
             case START_TRAVEL, START_JOB, SUBMIT_COMPLETION -> {
-                if (!isPartner && !isAssignedCleaner) {
+                if (!isPartner) {
                     throw new ResponseStatusException(
                             HttpStatus.FORBIDDEN,
-                            "Chỉ nhà cung cấp hoặc nhân viên được phân công cho đơn này mới có quyền cập nhật tiến độ."
+                            "Cleaner phải cập nhật tiến độ thông qua phân công công việc."
                     );
                 }
             }
@@ -796,7 +772,7 @@ public class BookingStateEngine {
             }
 
             case ASSIGNED -> {
-                if (isPartner || isCleaner) {
+                if (isPartner) {
                     allowed.add(BookingActionEnum.START_TRAVEL.name());
                     allowed.add(BookingActionEnum.START_JOB.name());
                 }
@@ -807,17 +783,16 @@ public class BookingStateEngine {
             }
 
             case EN_ROUTE -> {
-                if (isPartner || isCleaner) {
+                if (isPartner) {
                     allowed.add(BookingActionEnum.START_JOB.name());
                 }
             }
 
             case IN_PROGRESS -> {
-                if (isPartner || isCleaner) {
+                if (isPartner) {
                     allowed.add(BookingActionEnum.SUBMIT_COMPLETION.name());
                 }
             }
-
             case PENDING_COMPLETION -> {
                 if (isCustomer) {
                     allowed.add(BookingActionEnum.CUSTOMER_ACCEPT.name());

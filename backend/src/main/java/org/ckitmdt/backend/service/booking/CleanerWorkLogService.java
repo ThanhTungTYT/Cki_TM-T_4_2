@@ -179,11 +179,7 @@ public class CleanerWorkLogService {
                                 "Không tìm thấy phân công công việc."
                         ));
 
-        if (assignment.getEmployee() == null
-                || !Objects.equals(
-                assignment.getEmployee().getId(),
-                employee.getId()
-        )) {
+        if (!isValidAssignmentForEmployee(assignment, employee)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Bạn không có quyền xem nhật ký công việc này."
