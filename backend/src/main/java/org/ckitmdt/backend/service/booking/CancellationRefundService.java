@@ -1,3 +1,4 @@
+
 package org.ckitmdt.backend.service.booking;
 
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,29 +39,54 @@ public class CancellationRefundService {
     private final AdminAuditLogService auditLogService;
 
     @Transactional
-    public void createLatePaymentRefund(Long bookingId, BigDecimal receivedAmount,
-                                        String transactionNo) {
-        Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
-        if (booking == null || booking.getCustomer() == null
-                || receivedAmount == null || receivedAmount.signum() <= 0
+    public void createLatePaymentRefund(
+            Long bookingId,
+            BigDecimal receivedAmount,
+            String transactionNo
+    ) {
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElse(null);
+
+        if (booking == null
+                || booking.getCustomer() == null
+                || receivedAmount == null
+                || receivedAmount.signum() <= 0
                 || refundRepository.existsByBooking_Id(bookingId)) {
             return;
         }
 
-        BigDecimal requestedAmount = receivedAmount;
-        if (booking.getTotalAmount() != null && booking.getTotalAmount().signum() > 0
+        BigDecimal requestedAmount = receivedAmount.setScale(
+                2,
+                RoundingMode.HALF_UP
+        );
+
+        if (booking.getTotalAmount() != null
+                && booking.getTotalAmount().signum() > 0
                 && requestedAmount.compareTo(booking.getTotalAmount()) > 0) {
-            requestedAmount = booking.getTotalAmount();
+            requestedAmount = booking.getTotalAmount().setScale(
+                    2,
+                    RoundingMode.HALF_UP
+            );
         }
+
+        if (requestedAmount.signum() <= 0) {
+            return;
+        }
+
+        String transaction = transactionNo == null || transactionNo.isBlank()
+                ? "không có"
+                : transactionNo.trim();
 
         refundRepository.save(CancellationRefund.builder()
                 .booking(booking)
                 .requestedBy(booking.getCustomer())
                 .requestedAmount(requestedAmount)
                 .status("PENDING_REVIEW")
-                .cancellationReason("Thanh toán VNPay thành công sau khi thời hạn giữ chỗ đã kết thúc. "
-                        + "Đơn không được khôi phục; cần đối soát và hoàn tiền. Mã giao dịch: "
-                        + (transactionNo == null || transactionNo.isBlank() ? "không có" : transactionNo))
+                .cancellationReason(
+                        "Thanh toán VNPay thành công sau khi thời hạn giữ chỗ đã kết thúc. "
+                                + "Đơn không được khôi phục; cần đối soát và hoàn tiền. "
+                                + "Mã giao dịch: " + transaction
+                )
                 .requestedAt(LocalDateTime.now())
                 .build());
     }
@@ -67,19 +95,19 @@ public class CancellationRefundService {
     public Map<String, Object> requestRefund(
             Long bookingId,
             Map<String, Object> body,
-            Authentication auth) {
-
+            Authentication auth
+    ) {
         User customer = currentUser(auth);
 
         Booking booking = bookingRepository.findByIdForUpdate(bookingId)
-                .orElseThrow(() -> new ResponseStatusException(
+                .orElseThrow(() -> error(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy đơn hàng."
                 ));
 
         if (booking.getCustomer() == null
                 || !booking.getCustomer().getId().equals(customer.getId())) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.FORBIDDEN,
                     "Bạn không có quyền yêu cầu hoàn tiền cho đơn này."
             );
@@ -90,14 +118,14 @@ public class CancellationRefundService {
         if (!"CANCELLED".equals(bookingStatus)
                 && !"REJECTED".equals(bookingStatus)
                 && !"EXPIRED".equals(bookingStatus)) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.BAD_REQUEST,
                     "Chỉ đơn đã hủy, bị từ chối hoặc hết hạn mới được yêu cầu hoàn tiền."
             );
         }
 
         if (refundRepository.existsByBooking_Id(bookingId)) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.CONFLICT,
                     "Đơn hàng này đã có yêu cầu hoàn tiền."
             );
@@ -106,28 +134,32 @@ public class CancellationRefundService {
         String reason = text(body == null ? null : body.get("reason"));
 
         if (reason.isBlank() || reason.length() > 5000) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.BAD_REQUEST,
                     "Lý do yêu cầu hoàn tiền không được để trống và không vượt quá 5000 ký tự."
             );
         }
 
-        List<Payment> payments =
-                paymentRepository.findByBooking_Id(bookingId);
+        List<Payment> payments = paymentRepository.findByBooking_Id(bookingId);
 
         BigDecimal requestedAmount = payments.stream()
                 .filter(this::isSuccessfulPayment)
                 .map(Payment::getAmount)
                 .filter(amount -> amount != null && amount.signum() > 0)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
-        if (booking.getTotalAmount() != null && booking.getTotalAmount().signum() > 0
+        if (booking.getTotalAmount() != null
+                && booking.getTotalAmount().signum() > 0
                 && requestedAmount.compareTo(booking.getTotalAmount()) > 0) {
-            requestedAmount = booking.getTotalAmount();
+            requestedAmount = booking.getTotalAmount().setScale(
+                    2,
+                    RoundingMode.HALF_UP
+            );
         }
 
         if (requestedAmount.signum() <= 0) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.BAD_REQUEST,
                     "Đơn hàng chưa có giao dịch thanh toán thành công để hoàn tiền."
             );
@@ -143,13 +175,28 @@ public class CancellationRefundService {
                 .requestedAt(LocalDateTime.now())
                 .build();
 
-        return row(refundRepository.save(refund));
+        CancellationRefund saved = refundRepository.save(refund);
+
+        auditLogService.record(
+                auth,
+                "REFUND_REQUESTED",
+                "CANCELLATION_REFUND",
+                saved.getId(),
+                reason,
+                null,
+                "bookingId=" + bookingId
+                        + ";bookingCode=" + booking.getBookingCode()
+                        + ";requestedAmount=" + requestedAmount
+                        + ";status=PENDING_REVIEW"
+        );
+
+        return row(saved);
     }
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getRefundsForAdmin(
-            Authentication auth) {
-
+            Authentication auth
+    ) {
         requireStaff(auth);
 
         return refundRepository.findTop200ByOrderByRequestedAtDesc()
@@ -159,41 +206,48 @@ public class CancellationRefundService {
     }
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> getMyRefunds(Authentication auth) {
+    public List<Map<String, Object>> getMyRefunds(
+            Authentication auth
+    ) {
         User customer = currentUser(auth);
-        return refundRepository.findByRequestedBy_IdOrderByRequestedAtDesc(customer.getId())
-                .stream().map(this::row).toList();
-    }
 
+        return refundRepository
+                .findByRequestedBy_IdOrderByRequestedAtDesc(customer.getId())
+                .stream()
+                .map(this::row)
+                .toList();
+    }
 
     @Transactional
     public Map<String, Object> recordTransfer(
-            Long id, Map<String, Object> body, Authentication auth) {
-
+            Long id,
+            Map<String, Object> body,
+            Authentication auth
+    ) {
         User operator = requireAdmin(auth);
 
         if (body == null) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.BAD_REQUEST,
                     "Thiếu thông tin chuyển tiền."
             );
         }
 
         CancellationRefund refund = refundRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(
+                .orElseThrow(() -> error(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy yêu cầu hoàn tiền."
                 ));
 
         if (!"APPROVED".equalsIgnoreCase(refund.getStatus())) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.CONFLICT,
                     "Chỉ yêu cầu đã duyệt mới được ghi nhận chuyển tiền."
             );
         }
 
         if (refund.getTransferredAt() != null) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.CONFLICT,
                     "Yêu cầu này đã được ghi nhận chuyển tiền."
             );
@@ -203,35 +257,13 @@ public class CancellationRefundService {
         String evidenceUrl = text(body.get("evidenceUrl"));
 
         if (reference.isBlank() || reference.length() > 150) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.BAD_REQUEST,
                     "Mã giao dịch chuyển tiền là bắt buộc và không vượt quá 150 ký tự."
             );
         }
 
-        if (evidenceUrl.isBlank() || evidenceUrl.length() > 1000) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Phải cung cấp liên kết chứng từ chuyển tiền hợp lệ."
-            );
-        }
-
-        try {
-            java.net.URI evidenceUri = java.net.URI.create(evidenceUrl);
-            String scheme = evidenceUri.getScheme();
-
-            if (scheme == null
-                    || !(scheme.equalsIgnoreCase("http")
-                    || scheme.equalsIgnoreCase("https"))
-                    || evidenceUri.getHost() == null) {
-                throw new IllegalArgumentException();
-            }
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Liên kết chứng từ phải là URL HTTP hoặc HTTPS hợp lệ."
-            );
-        }
+        validateEvidenceUrl(evidenceUrl);
 
         LocalDateTime now = LocalDateTime.now();
 
@@ -250,7 +282,9 @@ public class CancellationRefundService {
                 "Ghi nhận chứng từ chuyển tiền hoàn cho đơn "
                         + saved.getBooking().getBookingCode(),
                 "status=APPROVED;transferredAt=null",
-                "status=APPROVED;transferReference=" + reference
+                "status=APPROVED"
+                        + ";approvedAmount=" + saved.getApprovedAmount()
+                        + ";transferReference=" + reference
                         + ";evidenceUrl=" + evidenceUrl
                         + ";transferredAt=" + now
         );
@@ -275,19 +309,19 @@ public class CancellationRefundService {
     public Map<String, Object> reviewRefund(
             Long id,
             Map<String, Object> body,
-            Authentication auth) {
-
+            Authentication auth
+    ) {
         User operator = requireAdmin(auth);
 
         if (body == null) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.BAD_REQUEST,
                     "Thiếu dữ liệu xử lý yêu cầu hoàn tiền."
             );
         }
 
         CancellationRefund refund = refundRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(
+                .orElseThrow(() -> error(
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy yêu cầu hoàn tiền."
                 ));
@@ -303,9 +337,9 @@ public class CancellationRefundService {
             try {
                 approvedAmount = new BigDecimal(
                         String.valueOf(amountValue)
-                );
-            } catch (NumberFormatException ex) {
-                throw new ResponseStatusException(
+                ).setScale(2, RoundingMode.HALF_UP);
+            } catch (NumberFormatException exception) {
+                throw error(
                         HttpStatus.BAD_REQUEST,
                         "Số tiền hoàn không hợp lệ."
                 );
@@ -328,7 +362,7 @@ public class CancellationRefundService {
         if ("APPROVED".equals(status)) {
             refund.setApprovedAmount(approvedAmount);
         } else {
-            refund.setApprovedAmount(BigDecimal.ZERO);
+            refund.setApprovedAmount(BigDecimal.ZERO.setScale(2));
         }
 
         refund.setDecisionNote(decisionNote);
@@ -343,13 +377,20 @@ public class CancellationRefundService {
                 "CANCELLATION_REFUND",
                 saved.getId(),
                 decisionNote,
-                "status=" + oldStatus + ";approvedAmount=" + oldApprovedAmount,
-                "status=" + status + ";approvedAmount=" + saved.getApprovedAmount()
+                "status=" + oldStatus
+                        + ";approvedAmount=" + oldApprovedAmount,
+                "status=" + status
+                        + ";approvedAmount=" + saved.getApprovedAmount()
+                        + ";reviewedBy=" + operator.getEmail()
+                        + ";reviewedAt=" + now
         );
 
         if (saved.getRequestedBy() != null) {
-            String message = "Yêu cầu hoàn tiền cho đơn " + saved.getBooking().getBookingCode()
-                    + ("APPROVED".equals(status) ? " đã được duyệt." : " đã bị từ chối.");
+            String message = "Yêu cầu hoàn tiền cho đơn "
+                    + saved.getBooking().getBookingCode()
+                    + ("APPROVED".equals(status)
+                    ? " đã được duyệt."
+                    : " đã bị từ chối.");
 
             customerNotificationService.notifyCustomer(
                     saved.getRequestedBy(),
@@ -382,10 +423,10 @@ public class CancellationRefundService {
             CancellationRefund refund,
             String status,
             BigDecimal approvedAmount,
-            String decisionNote) {
-
+            String decisionNote
+    ) {
         if (!"PENDING_REVIEW".equalsIgnoreCase(refund.getStatus())) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.CONFLICT,
                     "Yêu cầu này đã được xử lý."
             );
@@ -393,23 +434,22 @@ public class CancellationRefundService {
 
         if (!"APPROVED".equals(status)
                 && !"REJECTED".equals(status)) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.BAD_REQUEST,
                     "Trạng thái phải là APPROVED hoặc REJECTED."
             );
         }
 
         if (decisionNote.isBlank() || decisionNote.length() > 5000) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.BAD_REQUEST,
                     "Vui lòng nhập ghi chú xử lý không vượt quá 5000 ký tự."
             );
         }
 
         if ("APPROVED".equals(status)) {
-            if (approvedAmount == null
-                    || approvedAmount.signum() <= 0) {
-                throw new ResponseStatusException(
+            if (approvedAmount == null || approvedAmount.signum() <= 0) {
+                throw error(
                         HttpStatus.BAD_REQUEST,
                         "Số tiền hoàn phải lớn hơn 0."
                 );
@@ -418,7 +458,7 @@ public class CancellationRefundService {
             if (refund.getRequestedAmount() == null
                     || approvedAmount.compareTo(
                     refund.getRequestedAmount()) > 0) {
-                throw new ResponseStatusException(
+                throw error(
                         HttpStatus.BAD_REQUEST,
                         "Số tiền duyệt không được lớn hơn số tiền yêu cầu."
                 );
@@ -426,18 +466,44 @@ public class CancellationRefundService {
         }
     }
 
+    private void validateEvidenceUrl(String value) {
+        if (value == null || value.isBlank() || value.length() > 1000) {
+            throw error(
+                    HttpStatus.BAD_REQUEST,
+                    "Phải cung cấp liên kết chứng từ chuyển tiền hợp lệ."
+            );
+        }
+
+        try {
+            URI uri = URI.create(value);
+            String scheme = uri.getScheme();
+
+            if (scheme == null
+                    || !("http".equalsIgnoreCase(scheme)
+                    || "https".equalsIgnoreCase(scheme))
+                    || uri.getHost() == null) {
+                throw new IllegalArgumentException();
+            }
+        } catch (IllegalArgumentException exception) {
+            throw error(
+                    HttpStatus.BAD_REQUEST,
+                    "Liên kết chứng từ phải là URL HTTP hoặc HTTPS hợp lệ."
+            );
+        }
+    }
+
     private User currentUser(Authentication auth) {
         if (auth == null
                 || auth.getName() == null
                 || auth.getName().isBlank()) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.UNAUTHORIZED,
                     "Vui lòng đăng nhập."
             );
         }
 
         return userRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new ResponseStatusException(
+                .orElseThrow(() -> error(
                         HttpStatus.UNAUTHORIZED,
                         "Không tìm thấy tài khoản."
                 ));
@@ -451,7 +517,7 @@ public class CancellationRefundService {
                 && !"ROLE_ADMIN".equals(role)
                 && !"STAFF".equals(role)
                 && !"ROLE_STAFF".equals(role)) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.FORBIDDEN,
                     "Bạn không có quyền xem yêu cầu hoàn tiền."
             );
@@ -465,7 +531,7 @@ public class CancellationRefundService {
         String role = upper(user.getRole());
 
         if (!"ADMIN".equals(role) && !"ROLE_ADMIN".equals(role)) {
-            throw new ResponseStatusException(
+            throw error(
                     HttpStatus.FORBIDDEN,
                     "Chỉ Admin mới được duyệt hoặc từ chối yêu cầu hoàn tiền."
             );
@@ -498,10 +564,14 @@ public class CancellationRefundService {
         result.put("requestedAt", refund.getRequestedAt());
         result.put("reviewedAt", refund.getReviewedAt());
 
-        result.put("refundTransferStatus", refund.getTransferredAt() != null
-                ? "TRANSFERRED"
-                : "APPROVED".equalsIgnoreCase(refund.getStatus())
-                ? "WAITING_FOR_TRANSFER_EVIDENCE" : null);
+        result.put(
+                "refundTransferStatus",
+                refund.getTransferredAt() != null
+                        ? "TRANSFERRED"
+                        : "APPROVED".equalsIgnoreCase(refund.getStatus())
+                        ? "WAITING_FOR_TRANSFER_EVIDENCE"
+                        : null
+        );
 
         result.put("transferReference", refund.getTransferReference());
         result.put("transferEvidenceUrl", refund.getTransferEvidenceUrl());
@@ -519,5 +589,12 @@ public class CancellationRefundService {
         return value == null
                 ? ""
                 : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private ResponseStatusException error(
+            HttpStatus status,
+            String message
+    ) {
+        return new ResponseStatusException(status, message);
     }
 }

@@ -601,6 +601,7 @@ public class ReportController {
         return row(saved);
     }
 
+
     private boolean isAllowedTransition(String oldStatus, String newStatus) {
         if (oldStatus.equals(newStatus)) {
             return false;
@@ -612,25 +613,33 @@ public class ReportController {
                     "WAITING_PROVIDER",
                     "UNDER_REVIEW"
             ).contains(newStatus);
+
             case "IN_PROGRESS" -> Set.of(
                     "WAITING_PROVIDER",
-                    "UNDER_REVIEW"
+                    "UNDER_REVIEW",
+                    "RESOLVED",
+                    "REJECTED"
             ).contains(newStatus);
+
             case "WAITING_PROVIDER" -> Set.of(
                     "IN_PROGRESS",
                     "UNDER_REVIEW"
             ).contains(newStatus);
+
             case "PROVIDER_RESPONDED" -> Set.of(
                     "IN_PROGRESS",
                     "UNDER_REVIEW",
                     "WAITING_PROVIDER"
             ).contains(newStatus);
+
             case "UNDER_REVIEW" -> Set.of(
                     "WAITING_PROVIDER",
                     "RESOLVED",
                     "REJECTED"
             ).contains(newStatus);
+
             case "RESOLVED", "REJECTED" -> "CLOSED".equals(newStatus);
+
             default -> false;
         };
     }
@@ -923,4 +932,5 @@ public class ReportController {
                 ? ""
                 : value.trim().toUpperCase(Locale.ROOT);
     }
+
 }
