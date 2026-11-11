@@ -1,3 +1,4 @@
+
 package org.ckitmdt.backend.controller.admin;
 
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ import java.util.Set;
 @RequestMapping("/api/admin/operations")
 @RequiredArgsConstructor
 public class AdminOperationsController {
+
     private final UserRepository userRepository;
     private final ReportTicketRepository reportTicketRepository;
     private final AdminStaffAssignmentRepository assignmentRepository;
@@ -45,6 +47,7 @@ public class AdminOperationsController {
             Authentication authentication
     ) {
         requireAdmin(authentication);
+
         String search = text(keyword).toLowerCase(Locale.ROOT);
 
         return userRepository.findAll().stream()
@@ -52,19 +55,27 @@ public class AdminOperationsController {
                 .filter(user -> search.isBlank()
                         || text(user.getFullName()).toLowerCase(Locale.ROOT).contains(search)
                         || text(user.getEmail()).toLowerCase(Locale.ROOT).contains(search))
-                .sorted((a, b) -> text(a.getFullName()).compareToIgnoreCase(text(b.getFullName())))
+                .sorted((a, b) ->
+                        text(a.getFullName()).compareToIgnoreCase(text(b.getFullName())))
                 .map(this::staffRow)
                 .toList();
     }
 
     @GetMapping("/unassigned-tickets")
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> getUnassignedTickets(Authentication authentication) {
+    public List<Map<String, Object>> getUnassignedTickets(
+            Authentication authentication
+    ) {
         requireAdmin(authentication);
 
         return reportTicketRepository.findTop200ByOrderByCreatedAtDesc().stream()
-                .filter(ticket -> !Set.of("RESOLVED", "REJECTED").contains(normalize(ticket.getStatus())))
-                .filter(ticket -> assignmentRepository.findByTicket_IdAndActiveTrue(ticket.getId()).isEmpty())
+                .filter(ticket -> !Set.of(
+                        "RESOLVED",
+                        "REJECTED",
+                        "CLOSED"
+                ).contains(normalize(ticket.getStatus())))
+                .filter(ticket ->
+                        assignmentRepository.findByTicket_IdAndActiveTrue(ticket.getId()).isEmpty())
                 .map(ticket -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("ticketId", ticket.getId());
@@ -78,14 +89,21 @@ public class AdminOperationsController {
 
     @GetMapping("/assignments")
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> getAssignments(Authentication authentication) {
+    public List<Map<String, Object>> getAssignments(
+            Authentication authentication
+    ) {
         User actor = requireStaff(authentication);
 
-        List<AdminStaffAssignment> assignments = "ADMIN".equals(normalize(actor.getRole()))
-                ? assignmentRepository.findByActiveTrueOrderByAssignedAtDesc()
-                : assignmentRepository.findByStaff_IdAndActiveTrueOrderByAssignedAtDesc(actor.getId());
+        List<AdminStaffAssignment> assignments =
+                "ADMIN".equals(normalize(actor.getRole()))
+                        ? assignmentRepository.findByActiveTrueOrderByAssignedAtDesc()
+                        : assignmentRepository.findByStaff_IdAndActiveTrueOrderByAssignedAtDesc(
+                        actor.getId()
+                );
 
-        return assignments.stream().map(this::assignmentRow).toList();
+        return assignments.stream()
+                .map(this::assignmentRow)
+                .toList();
     }
 
     @PostMapping("/assignments")
@@ -95,20 +113,39 @@ public class AdminOperationsController {
             Authentication authentication
     ) {
         User admin = requireAdmin(authentication);
-        Long ticketId = number(body.get("ticketId"), "Mã khiếu nại không hợp lệ.");
-        Long staffId = number(body.get("staffId"), "Mã nhân viên không hợp lệ.");
+
+        if (body == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Thiếu dữ liệu phân công."
+            );
+        }
+
+        Long ticketId = number(
+                body.get("ticketId"),
+                "Mã khiếu nại không hợp lệ."
+        );
+
+        Long staffId = number(
+                body.get("staffId"),
+                "Mã nhân viên không hợp lệ."
+        );
+
         String reason = text(body.get("reason"));
         String idempotencyKey = text(body.get("idempotencyKey"));
 
         if (idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thiếu khóa chống gửi lặp.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Thiếu khóa chống gửi lặp."
+            );
         }
 
-        AdminStaffAssignment existingRequest = assignmentRepository.findByIdempotencyKey(idempotencyKey).orElse(null);
-        if (existingRequest != null) return assignmentRow(existingRequest);
-
         if (reason.isBlank() || reason.length() > 2000) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lý do phân công phải từ 1 đến 2000 ký tự.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Lý do phân công phải từ 1 đến 2000 ký tự."
+            );
         }
 
         LocalDateTime dueAt = null;
@@ -118,30 +155,79 @@ public class AdminOperationsController {
             try {
                 dueAt = LocalDateTime.parse(dueAtValue);
             } catch (DateTimeParseException ex) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hạn xử lý không đúng định dạng ngày giờ.");
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Hạn xử lý không đúng định dạng ngày giờ."
+                );
             }
 
             if (!dueAt.isAfter(LocalDateTime.now())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hạn xử lý phải ở thời điểm tương lai.");
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Hạn xử lý phải ở thời điểm tương lai."
+                );
             }
         }
 
         ReportTicket ticket = reportTicketRepository.findByIdForUpdate(ticketId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy khiếu nại."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy khiếu nại."
+                ));
 
-        if (Set.of("RESOLVED", "REJECTED").contains(normalize(ticket.getStatus()))) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Khiếu nại đã kết thúc, không thể phân công.");
+        AdminStaffAssignment existingRequest =
+                assignmentRepository.findByIdempotencyKey(idempotencyKey)
+                        .orElse(null);
+
+        if (existingRequest != null) {
+            boolean sameTicket = existingRequest.getTicket() != null
+                    && existingRequest.getTicket().getId().equals(ticketId);
+
+            boolean sameStaff = existingRequest.getStaff() != null
+                    && existingRequest.getStaff().getId().equals(staffId);
+
+            if (sameTicket && sameStaff) {
+                return assignmentRow(existingRequest);
+            }
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Khóa yêu cầu đã được sử dụng cho một lần phân công khác. Vui lòng tải lại và thử lại."
+            );
+        }
+
+        if (Set.of(
+                "RESOLVED",
+                "REJECTED",
+                "CLOSED"
+        ).contains(normalize(ticket.getStatus()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Khiếu nại đã kết thúc, không thể phân công."
+            );
         }
 
         User staff = userRepository.findById(staffId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy nhân viên."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy nhân viên."
+                ));
 
-        if (!"STAFF".equals(normalize(staff.getRole())) || !"ACTIVE".equals(normalize(staff.getStatus()))) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể phân công cho tài khoản Staff đang hoạt động.");
+        if (!"STAFF".equals(normalize(staff.getRole()))
+                || !"ACTIVE".equals(normalize(staff.getStatus()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Chỉ có thể phân công cho tài khoản Staff đang hoạt động."
+            );
         }
 
-        AdminStaffAssignment previous = assignmentRepository.findByTicket_IdAndActiveTrue(ticketId).orElse(null);
-        String beforeValue = previous == null ? "Chưa phân công" : previous.getStaff().getEmail();
+        AdminStaffAssignment previous =
+                assignmentRepository.findByTicket_IdAndActiveTrue(ticketId)
+                        .orElse(null);
+
+        String beforeValue = previous == null
+                ? "Chưa phân công"
+                : previous.getStaff().getEmail();
 
         if (previous != null) {
             previous.setActive(false);
@@ -150,26 +236,55 @@ public class AdminOperationsController {
 
         LocalDateTime now = LocalDateTime.now();
 
-        AdminStaffAssignment assignment = assignmentRepository.save(AdminStaffAssignment.builder()
-                .ticket(ticket)
-                .staff(staff)
-                .assignedBy(admin)
-                .reason(reason)
-                .dueAt(dueAt)
-                .idempotencyKey(idempotencyKey)
-                .active(true)
-                .assignedAt(now)
-                .build());
+        AdminStaffAssignment assignment =
+                assignmentRepository.save(AdminStaffAssignment.builder()
+                        .ticket(ticket)
+                        .staff(staff)
+                        .assignedBy(admin)
+                        .reason(reason)
+                        .dueAt(dueAt)
+                        .idempotencyKey(idempotencyKey)
+                        .active(true)
+                        .assignedAt(now)
+                        .build());
 
         ticket.setHandledBy(staff.getEmail());
         ticket.setUpdatedAt(now);
         reportTicketRepository.save(ticket);
 
+        if (previous != null
+                && previous.getStaff() != null
+                && !previous.getStaff().getId().equals(staff.getId())) {
+
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(previous.getStaff())
+                    .type("TICKET_REASSIGNED")
+                    .title("Ticket đã được bàn giao cho nhân viên khác")
+                    .message(
+                            "Khiếu nại #" + ticket.getId()
+                                    + " đã được Admin bàn giao cho "
+                                    + text(staff.getFullName()) + "."
+                    )
+                    .referenceType("REPORT_TICKET")
+                    .referenceId(ticket.getId())
+                    .createdAt(now)
+                    .build());
+        }
+
         notificationRepository.save(AdminNotification.builder()
                 .recipient(staff)
-                .type("TICKET_ASSIGNED")
-                .title("Bạn được phân công xử lý khiếu nại")
-                .message("Bạn được giao xử lý khiếu nại #" + ticket.getId() + ": " + ticket.getSubject())
+                .type(previous == null
+                        ? "TICKET_ASSIGNED"
+                        : "TICKET_REASSIGNED")
+                .title(previous == null
+                        ? "Bạn được phân công xử lý khiếu nại"
+                        : "Bạn được bàn giao xử lý khiếu nại")
+                .message(
+                        "Bạn được giao xử lý khiếu nại #"
+                                + ticket.getId()
+                                + ": "
+                                + ticket.getSubject()
+                )
                 .referenceType("REPORT_TICKET")
                 .referenceId(ticket.getId())
                 .createdAt(now)
@@ -177,12 +292,18 @@ public class AdminOperationsController {
 
         auditLogRepository.save(AdminAuditLog.builder()
                 .actor(admin)
-                .action(previous == null ? "STAFF_ASSIGNED" : "STAFF_REASSIGNED")
+                .action(previous == null
+                        ? "STAFF_ASSIGNED"
+                        : "STAFF_REASSIGNED")
                 .entityType("REPORT_TICKET")
                 .entityId(ticket.getId())
                 .reason(reason)
                 .beforeValue(beforeValue)
-                .afterValue(staff.getEmail() + (dueAt == null ? "" : " | dueAt=" + dueAt))
+                .afterValue(
+                        staff.getEmail()
+                                + " | assignmentId=" + assignment.getId()
+                                + (dueAt == null ? "" : " | dueAt=" + dueAt)
+                )
                 .createdAt(now)
                 .build());
 
@@ -191,14 +312,32 @@ public class AdminOperationsController {
 
     @GetMapping("/notifications")
     @Transactional(readOnly = true)
-    public Map<String, Object> getNotifications(Authentication authentication) {
+    public Map<String, Object> getNotifications(
+            Authentication authentication
+    ) {
         User actor = requireStaff(authentication);
-        List<AdminNotification> notifications = notificationRepository
-                .findTop100ByRecipient_IdOrderByCreatedAtDesc(actor.getId());
+
+        List<AdminNotification> notifications =
+                notificationRepository.findTop100ByRecipient_IdOrderByCreatedAtDesc(
+                        actor.getId()
+                );
 
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("unreadCount", notificationRepository.countByRecipient_IdAndReadAtIsNull(actor.getId()));
-        response.put("items", notifications.stream().map(this::notificationRow).toList());
+
+        response.put(
+                "unreadCount",
+                notificationRepository.countByRecipient_IdAndReadAtIsNull(
+                        actor.getId()
+                )
+        );
+
+        response.put(
+                "items",
+                notifications.stream()
+                        .map(this::notificationRow)
+                        .toList()
+        );
+
         return response;
     }
 
@@ -209,8 +348,16 @@ public class AdminOperationsController {
             Authentication authentication
     ) {
         User actor = requireStaff(authentication);
-        AdminNotification notification = notificationRepository.findByIdAndRecipient_Id(id, actor.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo."));
+
+        AdminNotification notification =
+                notificationRepository.findByIdAndRecipient_Id(
+                                id,
+                                actor.getId()
+                        )
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Không tìm thấy thông báo."
+                        ));
 
         if (notification.getReadAt() == null) {
             notification.setReadAt(LocalDateTime.now());
@@ -229,37 +376,65 @@ public class AdminOperationsController {
             Authentication authentication
     ) {
         requireAdmin(authentication);
+
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
-        PageRequest pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        PageRequest pageable = PageRequest.of(
+                safePage,
+                safeSize,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
 
         Page<AdminAuditLog> result = text(entityType).isBlank()
                 ? auditLogRepository.findAllByOrderByCreatedAtDesc(pageable)
-                : auditLogRepository.findByEntityTypeIgnoreCaseOrderByCreatedAtDesc(text(entityType), pageable);
+                : auditLogRepository.findByEntityTypeIgnoreCaseOrderByCreatedAtDesc(
+                text(entityType),
+                pageable
+        );
 
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("items", result.getContent().stream().map(this::auditRow).toList());
+
+        response.put(
+                "items",
+                result.getContent().stream()
+                        .map(this::auditRow)
+                        .toList()
+        );
+
         response.put("page", result.getNumber());
         response.put("size", result.getSize());
         response.put("totalElements", result.getTotalElements());
         response.put("totalPages", result.getTotalPages());
+
         return response;
     }
 
     private User currentUser(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Vui lòng đăng nhập.");
+        if (authentication == null
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Vui lòng đăng nhập."
+            );
         }
 
         return userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Không tìm thấy tài khoản."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Không tìm thấy tài khoản."
+                ));
     }
 
     private User requireStaff(Authentication authentication) {
         User user = currentUser(authentication);
 
         if (!Set.of("ADMIN", "STAFF").contains(normalize(user.getRole()))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền truy cập chức năng này.");
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Bạn không có quyền truy cập chức năng này."
+            );
         }
 
         return user;
@@ -269,7 +444,10 @@ public class AdminOperationsController {
         User user = currentUser(authentication);
 
         if (!"ADMIN".equals(normalize(user.getRole()))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ Admin được thực hiện thao tác này.");
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ Admin được thực hiện thao tác này."
+            );
         }
 
         return user;
@@ -277,17 +455,23 @@ public class AdminOperationsController {
 
     private Map<String, Object> staffRow(User user) {
         Map<String, Object> row = new LinkedHashMap<>();
+
         row.put("id", user.getId());
         row.put("name", user.getFullName());
         row.put("email", user.getEmail());
         row.put("phone", user.getPhone());
         row.put("status", user.getStatus());
+
         return row;
     }
 
-    private Map<String, Object> assignmentRow(AdminStaffAssignment assignment) {
+    private Map<String, Object> assignmentRow(
+            AdminStaffAssignment assignment
+    ) {
         Map<String, Object> row = new LinkedHashMap<>();
+
         ReportTicket ticket = assignment.getTicket();
+
         row.put("id", assignment.getId());
         row.put("ticketId", ticket.getId());
         row.put("subject", ticket.getSubject());
@@ -301,11 +485,15 @@ public class AdminOperationsController {
         row.put("assignedAt", assignment.getAssignedAt());
         row.put("idempotencyKey", assignment.getIdempotencyKey());
         row.put("active", assignment.getActive());
+
         return row;
     }
 
-    private Map<String, Object> notificationRow(AdminNotification notification) {
+    private Map<String, Object> notificationRow(
+            AdminNotification notification
+    ) {
         Map<String, Object> row = new LinkedHashMap<>();
+
         row.put("id", notification.getId());
         row.put("type", notification.getType());
         row.put("title", notification.getTitle());
@@ -315,11 +503,13 @@ public class AdminOperationsController {
         row.put("read", notification.getReadAt() != null);
         row.put("readAt", notification.getReadAt());
         row.put("createdAt", notification.getCreatedAt());
+
         return row;
     }
 
     private Map<String, Object> auditRow(AdminAuditLog log) {
         Map<String, Object> row = new LinkedHashMap<>();
+
         row.put("id", log.getId());
         row.put("actorId", log.getActor().getId());
         row.put("actorName", log.getActor().getFullName());
@@ -331,24 +521,36 @@ public class AdminOperationsController {
         row.put("beforeValue", log.getBeforeValue());
         row.put("afterValue", log.getAfterValue());
         row.put("createdAt", log.getCreatedAt());
+
         return row;
     }
 
     private Long number(Object value, String message) {
         try {
             Long result = Long.valueOf(String.valueOf(value));
-            if (result <= 0) throw new NumberFormatException();
+
+            if (result <= 0) {
+                throw new NumberFormatException();
+            }
+
             return result;
         } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    message
+            );
         }
     }
 
     private String text(Object value) {
-        return value == null ? "" : String.valueOf(value).trim();
+        return value == null
+                ? ""
+                : String.valueOf(value).trim();
     }
 
     private String normalize(String value) {
-        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        return value == null
+                ? ""
+                : value.trim().toUpperCase(Locale.ROOT);
     }
 }
