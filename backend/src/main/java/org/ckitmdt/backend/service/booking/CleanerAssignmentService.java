@@ -280,11 +280,9 @@ public class CleanerAssignmentService {
                 yield "ACCEPTED";
             }
 
-            // Cleaner từ chối công việc
+            // Cleaner chỉ được từ chối khi assignment đang chờ nhận.
             case "DECLINE" -> {
-                if (!"ASSIGNED".equals(currentStatus)
-                        && !"ACCEPTED".equals(currentStatus)) {
-
+                if (!"ASSIGNED".equals(currentStatus)) {
                     throw invalidAssignmentTransition(
                             currentStatus,
                             action
