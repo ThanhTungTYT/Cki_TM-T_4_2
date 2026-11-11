@@ -41,37 +41,43 @@ const menuItems = [
     { label: "Đơn hàng khuyến mãi", path: "/admin/reward-orders", icon: faBoxOpen }
 ];
 
+function getCurrentUser() {
+    try {
+        return JSON.parse(
+            sessionStorage.getItem("user") ||
+            localStorage.getItem("user") ||
+            "{}"
+        );
+    } catch {
+        return {};
+    }
+}
+
+function normalizeRole(role) {
+    return String(role || "")
+        .trim()
+        .toUpperCase()
+        .replace(/^ROLE_/, "");
+}
+
 function AdminLayout({ children }) {
     const location = useLocation();
     const navigate = useNavigate();
 
-    const currentUser = (() => {
-        try {
-            return JSON.parse(
-                sessionStorage.getItem("user") ||
-                localStorage.getItem("user") ||
-                "{}"
-            );
-        } catch {
-            return {};
-        }
-    })();
-
-    const currentRole = String(currentUser.role || "")
-        .replace(/^ROLE_/i, "")
-        .toUpperCase();
+    const currentUser = getCurrentUser();
+    const currentRole = normalizeRole(currentUser.role);
 
     const isStaff = currentRole === "STAFF";
     const isAdmin = currentRole === "ADMIN";
 
+    const staffAllowedPaths = [
+        "/admin/complaints",
+        "/admin/staff-operations",
+        "/admin/reward-orders"
+    ];
+
     const visibleMenuItems = isStaff
-        ? menuItems.filter(item =>
-            [
-                "/admin/reward-orders",
-                "/admin/complaints",
-                "/admin/staff-operations"
-            ].includes(item.path)
-        )
+        ? menuItems.filter(item => staffAllowedPaths.includes(item.path))
         : isAdmin
             ? menuItems
             : [];
@@ -83,7 +89,8 @@ function AdminLayout({ children }) {
         sessionStorage.removeItem("accessToken");
         localStorage.removeItem("user");
         sessionStorage.removeItem("user");
-        navigate("/login");
+
+        navigate("/login", { replace: true });
     };
 
     return (
@@ -92,9 +99,13 @@ function AdminLayout({ children }) {
 
             <aside className="admin-sidebar">
                 <Link
-                    to="/admin"
+                    to="/"
                     className="admin-brand"
-                    style={{ textDecoration: "none", color: "inherit" }}
+                    style={{
+                        textDecoration: "none",
+                        color: "inherit"
+                    }}
+                    title="Trở về trang chủ CleanMate"
                 >
                     <div className="admin-brand-icon">
                         <FontAwesomeIcon icon={faHouse} />
@@ -106,7 +117,9 @@ function AdminLayout({ children }) {
                     </div>
                 </Link>
 
-                <div className="admin-menu-title">MENU QUẢN TRỊ</div>
+                <div className="admin-menu-title">
+                    MENU QUẢN TRỊ
+                </div>
 
                 <nav className="admin-menu">
                     {visibleMenuItems.map(item => {
@@ -139,7 +152,9 @@ function AdminLayout({ children }) {
                                 {currentUser.fullName ||
                                     (isStaff ? "Nhân viên" : "Quản trị viên")}
                             </strong>
-                            <span>{isStaff ? "Staff" : "Administrator"}</span>
+                            <span>
+                                {isStaff ? "Staff" : "Administrator"}
+                            </span>
                         </div>
                     </div>
 
@@ -166,6 +181,7 @@ function AdminLayout({ children }) {
                 {isAdmin && location.pathname === "/admin" && (
                     <AdminOverviewCards />
                 )}
+
                 {children}
             </main>
         </div>
