@@ -52,6 +52,13 @@ const CATEGORY_LABELS = Object.fromEntries(
     INCIDENT_CATEGORIES.map((item) => [item.value, item.label])
 );
 
+// Nhận diện Assignment đã gửi báo cáo không thể thực hiện.
+function hasReportedUnable(assignment) {
+    return String(assignment?.assignmentNote || '').includes(
+        'BÁO KHÔNG THỂ THỰC HIỆN ['
+    );
+}
+
 function formatDate(value) {
     if (!value) return 'Chưa có thời gian';
 
@@ -220,70 +227,77 @@ function CleanerJobs() {
         });
     }
 
-    async function handleSelectWorkLogImages(assignmentId, fileList) {
-        const files = Array.from(fileList || []);
-        const current = selectedImages[assignmentId] || [];
-        const slots = 5 - current.length;
+    async function handleImageChange(assignmentId, event) {
+        const files = Array.from(event.target.files || []);
 
-        if (slots <= 0) {
+        if (files.length === 0) return;
+
+        const currentImages = selectedImages[assignmentId] || [];
+        const remainingSlots = 5 - currentImages.length;
+
+        if (remainingSlots <= 0) {
             setLogMessage(
                 assignmentId,
                 'error',
-                'Mỗi báo cáo chỉ được đính kèm tối đa 5 ảnh.'
+                'Mỗi nhật ký chỉ được gửi tối đa 5 ảnh.'
             );
+            event.target.value = '';
             return;
         }
 
-        const accepted = files.slice(0, slots);
-        const newImages = [];
+        const selectedFiles = files.slice(0, remainingSlots);
 
-        for (const file of accepted) {
-            if (
-                !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
-            ) {
-                setLogMessage(
-                    assignmentId,
-                    'error',
-                    'Chỉ chấp nhận ảnh JPG, PNG hoặc WEBP.'
-                );
-                continue;
-            }
+        const validFiles = selectedFiles.filter((file) => {
+            const validType = [
+                'image/jpeg',
+                'image/png',
+                'image/webp'
+            ].includes(file.type);
 
-            if (file.size > 5 * 1024 * 1024) {
-                setLogMessage(
-                    assignmentId,
-                    'error',
-                    `Ảnh ${file.name} vượt quá 5 MB.`
-                );
-                continue;
-            }
+            const validSize = file.size <= 5 * 1024 * 1024;
 
-            try {
-                const preview = await readImagePreview(file);
-                newImages.push({ file, preview });
-            } catch {
-                setLogMessage(
-                    assignmentId,
-                    'error',
-                    'Không thể đọc một ảnh đã chọn.'
-                );
-            }
+            return validType && validSize;
+        });
+
+        if (validFiles.length !== selectedFiles.length) {
+            setLogMessage(
+                assignmentId,
+                'error',
+                'Ảnh phải có định dạng JPG, PNG hoặc WEBP và không vượt quá 5 MB.'
+            );
         }
 
-        setSelectedImages((prev) => ({
-            ...prev,
-            [assignmentId]: [
-                ...(prev[assignmentId] || []),
-                ...newImages
-            ].slice(0, 5)
-        }));
+        try {
+            const previews = await Promise.all(
+                validFiles.map(async (file) => ({
+                    file,
+                    preview: await readImagePreview(file)
+                }))
+            );
+
+            setSelectedImages((prev) => ({
+                ...prev,
+                [assignmentId]: [
+                    ...(prev[assignmentId] || []),
+                    ...previews
+                ]
+            }));
+        } catch (err) {
+            setLogMessage(
+                assignmentId,
+                'error',
+                err?.message || 'Không thể đọc ảnh đã chọn.'
+            );
+        }
+
+        event.target.value = '';
     }
 
-    function handleRemoveWorkLogImage(assignmentId, indexToRemove) {
+    function removeSelectedImage(assignmentId, index) {
         setSelectedImages((prev) => ({
             ...prev,
             [assignmentId]: (prev[assignmentId] || []).filter(
-                (_, index) => index !== indexToRemove
+                (_, imageIndex) => imageIndex !== index
             )
         }));
     }
@@ -291,17 +305,12 @@ function CleanerJobs() {
     async function loadWorkLogs(assignmentId) {
         if (!assignmentId) return;
 
-        setLogLoading((prev) => ({
-            ...prev,
-            [assignmentId]: true
-        }));
-
         try {
-            const data = await bookingApi.getCleanerWorkLogs(assignmentId);
+            const logs = await bookingApi.getCleanerWorkLogs(assignmentId);
 
             setWorkLogs((prev) => ({
                 ...prev,
-                [assignmentId]: Array.isArray(data) ? data : []
+                [assignmentId]: Array.isArray(logs) ? logs : []
             }));
         } catch (err) {
             setLogMessage(
@@ -309,19 +318,15 @@ function CleanerJobs() {
                 'error',
                 err?.message || 'Không thể tải nhật ký công việc.'
             );
-        } finally {
-            setLogLoading((prev) => ({
-                ...prev,
-                [assignmentId]: false
-            }));
         }
     }
 
     async function handleSubmitWorkLog(assignmentId) {
-        if (!assignmentId || logLoading[assignmentId]) return;
+        if (logLoading[assignmentId]) return;
 
         const note = (logNote[assignmentId] || '').trim();
         const type = logType[assignmentId] || 'PROGRESS';
+        const images = selectedImages[assignmentId] || [];
 
         if (!note) {
             setLogMessage(
@@ -332,59 +337,72 @@ function CleanerJobs() {
             return;
         }
 
-        if (note.length > 5000) {
+        if (images.length > 5) {
             setLogMessage(
                 assignmentId,
                 'error',
-                'Nội dung không được vượt quá 5000 ký tự.'
+                'Mỗi nhật ký chỉ được gửi tối đa 5 ảnh.'
             );
             return;
         }
 
-        const severity = incidentSeverity[assignmentId] || 'MEDIUM';
-        const category = incidentCategory[assignmentId] || 'OTHER';
+        if (
+            type === 'INCIDENT' &&
+            !incidentCategory[assignmentId]
+        ) {
+            setLogMessage(
+                assignmentId,
+                'error',
+                'Vui lòng chọn loại sự cố.'
+            );
+            return;
+        }
+
+        if (
+            type === 'INCIDENT' &&
+            !incidentSeverity[assignmentId]
+        ) {
+            setLogMessage(
+                assignmentId,
+                'error',
+                'Vui lòng chọn mức độ sự cố.'
+            );
+            return;
+        }
 
         setLogLoading((prev) => ({
             ...prev,
             [assignmentId]: true
         }));
 
-        setLogFeedback((prev) => ({
-            ...prev,
-            [assignmentId]: null
-        }));
-
         try {
-            const images = selectedImages[assignmentId] || [];
             const imageUrls = [];
 
             for (const image of images) {
-                const uploaded =
-                    await bookingApi.uploadCleanerWorkLogImage(image.file);
+                const result = await bookingApi.uploadCleanerWorkLogImage(
+                    image.file
+                );
 
-                if (!uploaded?.imageUrl) {
-                    throw new Error(
-                        'Máy chủ không trả về đường dẫn ảnh.'
-                    );
+                if (result?.imageUrl) {
+                    imageUrls.push(result.imageUrl);
                 }
-
-                imageUrls.push(uploaded.imageUrl);
-            }
-
-            const payload = {
-                logType: type,
-                note,
-                imageUrls
-            };
-
-            if (type === 'INCIDENT') {
-                payload.severity = severity;
-                payload.category = category;
             }
 
             await bookingApi.createCleanerWorkLog(
                 assignmentId,
-                payload
+                {
+                    type,
+                    note,
+                    imageUrls,
+                    category:
+                        type === 'INCIDENT'
+                            ? incidentCategory[assignmentId]
+                            : null,
+                    severity:
+                        type === 'INCIDENT'
+                            ? incidentSeverity[assignmentId]
+                            : null
+                }
             );
 
             setLogNote((prev) => ({
@@ -433,6 +451,22 @@ function CleanerJobs() {
                 [booking.id]: {
                     type: 'error',
                     message: 'Không tìm thấy phân công của bạn.'
+                }
+            }));
+            return;
+        }
+
+        // Không cho phép bắt đầu nếu đã báo không thể thực hiện.
+        if (
+            action === 'START_JOB' &&
+            hasReportedUnable(assignment)
+        ) {
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'error',
+                    message:
+                        'Bạn đã báo không thể thực hiện công việc này. Vui lòng chờ Provider/Staff điều phối nhân viên thay thế.'
                 }
             }));
             return;
@@ -530,21 +564,97 @@ function CleanerJobs() {
         }
     }
 
+    async function handleReportUnable(booking) {
+        if (processingId !== null) return;
+
+        const assignment = booking.cleanerAssignment;
+        const assignmentId =
+            assignment?.assignmentId || assignment?.id;
+
+        if (!assignmentId) {
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'error',
+                    message: 'Không tìm thấy phân công của bạn.'
+                }
+            }));
+            return;
+        }
+
+        // Chặn gửi báo cáo lần thứ hai.
+        if (hasReportedUnable(assignment)) {
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'error',
+                    message:
+                        'Bạn đã gửi báo cáo trước đó. Vui lòng chờ Provider/Staff điều phối nhân viên thay thế.'
+                }
+            }));
+            return;
+        }
+
+        const note = window.prompt(
+            'Nhập lý do bạn không thể thực hiện công việc. Nhà cung cấp sẽ nhận được thông báo để điều phối nhân viên thay thế:'
+        );
+
+        if (note === null) return;
+
+        if (!note.trim()) {
+            window.alert('Vui lòng nhập lý do không thể thực hiện công việc.');
+            return;
+        }
+
+        setProcessingId(booking.id);
+
+        try {
+            await bookingApi.executeCleanerAssignmentAction(
+                assignmentId,
+                'REPORT_UNABLE',
+                note.trim()
+            );
+
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'success',
+                    message:
+                        'Đã gửi thông báo đến nhà cung cấp. Vui lòng chờ điều phối nhân viên thay thế.'
+                }
+            }));
+
+            await loadBookings();
+        } catch (err) {
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'error',
+                    message: err?.message || 'Không thể gửi thông báo.'
+                }
+            }));
+
+            await loadBookings();
+        } finally {
+            setProcessingId(null);
+        }
+    }
+
     const stats = useMemo(() => ({
         total: bookings.length,
         upcoming: bookings.filter((booking) =>
             getFilterGroup(
-                booking.cleanerAssignment?.assignmentStatus || booking.status
+                booking.cleanerAssignment?.assignmentStatus
             ) === 'UPCOMING'
         ).length,
         inProgress: bookings.filter((booking) =>
             getFilterGroup(
-                booking.cleanerAssignment?.assignmentStatus || booking.status
+                booking.cleanerAssignment?.assignmentStatus
             ) === 'IN_PROGRESS'
         ).length,
         completed: bookings.filter((booking) =>
             getFilterGroup(
-                booking.cleanerAssignment?.assignmentStatus || booking.status
+                booking.cleanerAssignment?.assignmentStatus
             ) === 'COMPLETED'
         ).length
     }), [bookings]);
@@ -553,9 +663,11 @@ function CleanerJobs() {
         const keyword = search.trim().toLowerCase();
 
         return bookings.filter((booking) => {
-            const status =
+            const status = String(
                 booking.cleanerAssignment?.assignmentStatus ||
-                booking.status;
+                booking.status ||
+                ''
+            ).toUpperCase();
 
             const matchFilter =
                 filter === 'ALL' ||
@@ -577,24 +689,6 @@ function CleanerJobs() {
         });
     }, [bookings, filter, search]);
 
-    const urgentPendingBookings = useMemo(() => {
-        const now = Date.now();
-        const windowMs = 24 * 60 * 60 * 1000;
-
-        return bookings.filter((booking) => {
-            const status = String(
-                booking.cleanerAssignment?.assignmentStatus || ''
-            ).toUpperCase();
-
-            const start = new Date(booking.scheduledStart).getTime();
-
-            return status === 'ASSIGNED' &&
-                Number.isFinite(start) &&
-                start >= now &&
-                start - now <= windowMs;
-        });
-    }, [bookings]);
-
     return (
         <div className="cj-page">
             <div className="cj-header">
@@ -615,25 +709,6 @@ function CleanerJobs() {
                 </button>
             </div>
 
-            {urgentPendingBookings.length > 0 && (
-                <div className="cj-urgent-reminder">
-                    <h3>⚠ Nhắc nhở tiếp nhận công việc</h3>
-                    <p>
-                        Bạn có {urgentPendingBookings.length} công việc chưa
-                        tiếp nhận và sắp đến giờ thực hiện.
-                    </p>
-
-                    {urgentPendingBookings.map((booking) => (
-                        <div key={booking.id}>
-                            <strong>
-                                {booking.bookingCode || `Đơn #${booking.id}`}
-                            </strong>
-                            <span>{formatDate(booking.scheduledStart)}</span>
-                        </div>
-                    ))}
-                </div>
-            )}
-
             <div className="cj-stats">
                 <div className="cj-stat-card">
                     <div className="cj-stat-icon cj-icon-blue">▤</div>
@@ -652,7 +727,7 @@ function CleanerJobs() {
                 </div>
 
                 <div className="cj-stat-card">
-                    <div className="cj-stat-icon cj-icon-purple">⚙</div>
+                    <div className="cj-stat-icon cj-icon-green">✓</div>
                     <div>
                         <span>Đang thực hiện</span>
                         <strong>{stats.inProgress}</strong>
@@ -660,9 +735,9 @@ function CleanerJobs() {
                 </div>
 
                 <div className="cj-stat-card">
-                    <div className="cj-stat-icon cj-icon-green">✓</div>
+                    <div className="cj-stat-icon cj-icon-purple">★</div>
                     <div>
-                        <span>Đã hoàn thành</span>
+                        <span>Hoàn thành</span>
                         <strong>{stats.completed}</strong>
                     </div>
                 </div>
@@ -673,9 +748,9 @@ function CleanerJobs() {
                     <span>⌕</span>
                     <input
                         type="text"
-                        placeholder="Tìm mã đơn, khách hàng, địa chỉ..."
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
+                        placeholder="Tìm mã đơn, khách hàng, địa chỉ..."
                     />
                 </div>
 
@@ -684,7 +759,11 @@ function CleanerJobs() {
                         <button
                             type="button"
                             key={item.value}
-                            className={filter === item.value ? 'active' : ''}
+                            className={
+                                filter === item.value
+                                    ? 'active'
+                                    : ''
+                            }
                             onClick={() => setFilter(item.value)}
                         >
                             {item.label}
@@ -694,30 +773,29 @@ function CleanerJobs() {
             </div>
 
             {loading && (
-                <div className="cj-message">
+                <div className="cj-state">
                     <div className="cj-spinner" />
                     <p>Đang tải danh sách công việc...</p>
                 </div>
             )}
 
             {!loading && error && (
-                <div className="cj-error">
-                    <strong>Không tải được công việc</strong>
+                <div className="cj-state cj-state-error">
+                    <h3>Không thể tải công việc</h3>
                     <p>{error}</p>
-                    <button type="button" onClick={loadBookings}>
+                    <button
+                        type="button"
+                        onClick={loadBookings}
+                    >
                         Thử lại
                     </button>
                 </div>
             )}
 
             {!loading && !error && filteredBookings.length === 0 && (
-                <div className="cj-empty">
+                <div className="cj-state">
                     <div className="cj-empty-icon">▤</div>
-                    <h3>
-                        {bookings.length === 0
-                            ? 'Bạn chưa có công việc nào'
-                            : 'Không tìm thấy công việc phù hợp'}
-                    </h3>
+                    <h3>Không tìm thấy công việc</h3>
                     <p>
                         {bookings.length === 0
                             ? 'Các công việc được nhà cung cấp phân công sẽ xuất hiện tại đây.'
@@ -753,6 +831,9 @@ function CleanerJobs() {
                         const status = getStatus(assignmentStatus);
                         const expanded = expandedId === booking.id;
                         const busy = processingId === booking.id;
+
+                        const reportedUnable =
+                            hasReportedUnable(assignment);
 
                         const canWriteLog = [
                             'ACCEPTED',
@@ -876,18 +957,41 @@ function CleanerJobs() {
                                     )}
 
                                     {assignmentStatus === 'ACCEPTED' && (
-                                        <button
-                                            type="button"
-                                            disabled={busy}
-                                            onClick={() =>
-                                                handleBookingAction(
-                                                    booking,
-                                                    'START_JOB'
-                                                )
-                                            }
-                                        >
-                                            Bắt đầu công việc
-                                        </button>
+                                        reportedUnable ? (
+                                            <div className="cj-action-feedback success">
+                                                Bạn đã báo không thể thực hiện công việc.
+                                                Vui lòng chờ Provider/Staff điều phối
+                                                nhân viên thay thế.
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        handleBookingAction(
+                                                            booking,
+                                                            'START_JOB'
+                                                        )
+                                                    }
+                                                >
+                                                    {busy
+                                                        ? 'Đang xử lý...'
+                                                        : 'Bắt đầu công việc'}
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    className="cj-decline-btn"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        handleReportUnable(booking)
+                                                    }
+                                                >
+                                                    Báo không thể thực hiện
+                                                </button>
+                                            </>
+                                        )
                                     )}
 
                                     {assignmentStatus === 'IN_PROGRESS' && (
@@ -930,384 +1034,308 @@ function CleanerJobs() {
                                                                 {item.serviceName ||
                                                                     'Dịch vụ'}
                                                             </strong>
-                                                            {item.description && (
-                                                                <span>
-                                                                    {item.description}
-                                                                </span>
-                                                            )}
+                                                            <span>
+                                                                Số lượng: {item.quantity || 1}
+                                                            </span>
                                                         </div>
-                                                        <span>
-                                                            x{item.quantity || 1}
-                                                        </span>
+
+                                                        {item.employeeCount && (
+                                                            <span>
+                                                                {item.employeeCount} nhân viên
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
                                         ) : (
-                                            <p className="cj-no-items">
-                                                Không có thông tin chi tiết dịch vụ.
+                                            <p>Chưa có thông tin chi tiết dịch vụ.</p>
+                                        )}
+
+                                        <div className="cj-customer-note">
+                                            <h4>Ghi chú của khách hàng</h4>
+                                            <p>
+                                                {booking.note ||
+                                                    booking.customerNote ||
+                                                    'Khách hàng không có ghi chú.'}
                                             </p>
-                                        )}
-
-                                        {booking.assignments?.length > 1 && (
-                                            <>
-                                                <h4>
-                                                    Đội ngũ cùng thực hiện (
-                                                    {booking.assignments.length} người)
-                                                </h4>
-
-                                                <div className="cj-items">
-                                                    {booking.assignments.map((item) => (
-                                                        <div
-                                                            className="cj-item"
-                                                            key={
-                                                                item.assignmentId ||
-                                                                item.id
-                                                            }
-                                                        >
-                                                            <div>
-                                                                <strong>
-                                                                    {item.employeeName ||
-                                                                        item.employeeCode ||
-                                                                        'Nhân viên'}
-                                                                </strong>
-                                                            </div>
-                                                            <span>
-                                                                {item.assignmentStatus ||
-                                                                    item.status ||
-                                                                    'Đã giao'}
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </>
-                                        )}
-
-                                        {booking.customerNote && (
-                                            <>
-                                                <h4>Ghi chú của khách hàng</h4>
-                                                <p className="cj-customer-note">
-                                                    {booking.customerNote}
-                                                </p>
-                                            </>
-                                        )}
+                                        </div>
 
                                         {canWriteLog && (
-                                            <div className="cj-work-log">
-                                                <h4>Nhật ký và báo cáo sự cố</h4>
-                                                <p>
-                                                    Ghi nhận tiến độ hoặc báo cáo
-                                                    vấn đề phát sinh trong quá trình
-                                                    thực hiện công việc.
-                                                </p>
+                                            <div className="cj-work-log-form">
+                                                <h4>Cập nhật tiến độ công việc</h4>
 
-                                                <div className="cj-log-form">
-                                                    <label>Loại nhật ký</label>
-                                                    <select
-                                                        value={
-                                                            logType[assignmentId] ||
-                                                            'PROGRESS'
+                                                <div className="cj-log-type">
+                                                    <button
+                                                        type="button"
+                                                        className={
+                                                            (logType[assignmentId] || 'PROGRESS') === 'PROGRESS'
+                                                                ? 'active'
+                                                                : ''
                                                         }
-                                                        onChange={(event) =>
+                                                        onClick={() =>
                                                             setLogType((prev) => ({
                                                                 ...prev,
-                                                                [assignmentId]:
-                                                                event.target.value
+                                                                [assignmentId]: 'PROGRESS'
                                                             }))
                                                         }
                                                     >
-                                                        <option value="PROGRESS">
-                                                            Cập nhật tiến độ
-                                                        </option>
-                                                        <option value="INCIDENT">
-                                                            Báo cáo sự cố
-                                                        </option>
-                                                    </select>
-
-                                                    {(logType[assignmentId] ||
-                                                        'PROGRESS') === 'INCIDENT' && (
-                                                        <>
-                                                            <label>
-                                                                Nhóm sự cố
-                                                            </label>
-                                                            <select
-                                                                value={
-                                                                    incidentCategory[
-                                                                        assignmentId
-                                                                        ] || 'OTHER'
-                                                                }
-                                                                onChange={(event) =>
-                                                                    setIncidentCategory(
-                                                                        (prev) => ({
-                                                                            ...prev,
-                                                                            [assignmentId]:
-                                                                            event.target.value
-                                                                        })
-                                                                    )
-                                                                }
-                                                            >
-                                                                {INCIDENT_CATEGORIES.map(
-                                                                    (item) => (
-                                                                        <option
-                                                                            key={item.value}
-                                                                            value={item.value}
-                                                                        >
-                                                                            {item.label}
-                                                                        </option>
-                                                                    )
-                                                                )}
-                                                            </select>
-
-                                                            <label>
-                                                                Mức độ nghiêm trọng
-                                                            </label>
-                                                            <select
-                                                                value={
-                                                                    incidentSeverity[
-                                                                        assignmentId
-                                                                        ] || 'MEDIUM'
-                                                                }
-                                                                onChange={(event) =>
-                                                                    setIncidentSeverity(
-                                                                        (prev) => ({
-                                                                            ...prev,
-                                                                            [assignmentId]:
-                                                                            event.target.value
-                                                                        })
-                                                                    )
-                                                                }
-                                                            >
-                                                                {INCIDENT_SEVERITIES.map(
-                                                                    (item) => (
-                                                                        <option
-                                                                            key={item.value}
-                                                                            value={item.value}
-                                                                        >
-                                                                            {item.label}
-                                                                        </option>
-                                                                    )
-                                                                )}
-                                                            </select>
-
-                                                            <div className="cj-incident-warning">
-                                                                Báo cáo sự cố sẽ được
-                                                                ghi nhận với trạng thái
-                                                                ban đầu là OPEN để nhà
-                                                                cung cấp tiếp nhận.
-                                                            </div>
-                                                        </>
-                                                    )}
-
-                                                    <label>Nội dung</label>
-                                                    <textarea
-                                                        rows="4"
-                                                        maxLength={5000}
-                                                        placeholder={
-                                                            (logType[assignmentId] ||
-                                                                'PROGRESS') ===
-                                                            'INCIDENT'
-                                                                ? 'Mô tả sự cố, thời điểm xảy ra và ảnh hưởng...'
-                                                                : 'Nhập nội dung tiến độ công việc...'
-                                                        }
-                                                        value={
-                                                            logNote[assignmentId] || ''
-                                                        }
-                                                        onChange={(event) =>
-                                                            setLogNote((prev) => ({
-                                                                ...prev,
-                                                                [assignmentId]:
-                                                                event.target.value
-                                                            }))
-                                                        }
-                                                    />
-
-                                                    <small>
-                                                        {(logNote[assignmentId] || '')
-                                                            .length}/5000 ký tự
-                                                    </small>
-
-                                                    <label>
-                                                        Ảnh minh chứng (tối đa 5 ảnh,
-                                                        mỗi ảnh không quá 5 MB)
-                                                    </label>
-
-                                                    <input
-                                                        type="file"
-                                                        accept="image/jpeg,image/png,image/webp"
-                                                        multiple
-                                                        onChange={(event) => {
-                                                            handleSelectWorkLogImages(
-                                                                assignmentId,
-                                                                event.target.files
-                                                            );
-                                                            event.target.value = '';
-                                                        }}
-                                                    />
-
-                                                    {(selectedImages[assignmentId] ||
-                                                        []).length > 0 && (
-                                                        <div className="cj-log-image-preview">
-                                                            {selectedImages[
-                                                                assignmentId
-                                                                ].map((image, index) => (
-                                                                <div
-                                                                    className="cj-log-image-preview-item"
-                                                                    key={`${index}-${image.file.name}`}
-                                                                >
-                                                                    <img
-                                                                        src={image.preview}
-                                                                        alt={`Ảnh minh chứng ${index + 1}`}
-                                                                    />
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() =>
-                                                                            handleRemoveWorkLogImage(
-                                                                                assignmentId,
-                                                                                index
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        Xóa
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
+                                                        Nhật ký tiến độ
+                                                    </button>
 
                                                     <button
                                                         type="button"
-                                                        disabled={
-                                                            !!logLoading[assignmentId]
+                                                        className={
+                                                            logType[assignmentId] === 'INCIDENT'
+                                                                ? 'active'
+                                                                : ''
                                                         }
                                                         onClick={() =>
-                                                            handleSubmitWorkLog(
-                                                                assignmentId
-                                                            )
+                                                            setLogType((prev) => ({
+                                                                ...prev,
+                                                                [assignmentId]: 'INCIDENT'
+                                                            }))
                                                         }
                                                     >
-                                                        {logLoading[assignmentId]
-                                                            ? 'Đang gửi...'
-                                                            : (logType[assignmentId] ||
-                                                                'PROGRESS') ===
-                                                            'INCIDENT'
-                                                                ? 'Gửi báo cáo sự cố'
-                                                                : 'Gửi nhật ký'}
+                                                        Báo cáo sự cố
                                                     </button>
-
-                                                    {logFeedback[assignmentId] && (
-                                                        <p
-                                                            className={`cj-log-feedback ${logFeedback[assignmentId].type}`}
-                                                        >
-                                                            {
-                                                                logFeedback[
-                                                                    assignmentId
-                                                                    ].message
-                                                            }
-                                                        </p>
-                                                    )}
                                                 </div>
 
-                                                <div className="cj-log-history">
-                                                    <div className="cj-log-history-header">
-                                                        <strong>
-                                                            Lịch sử cập nhật
-                                                        </strong>
-                                                        <button
-                                                            type="button"
-                                                            disabled={
-                                                                !!logLoading[assignmentId]
-                                                            }
-                                                            onClick={() =>
-                                                                loadWorkLogs(
-                                                                    assignmentId
+                                                {logType[assignmentId] === 'INCIDENT' && (
+                                                    <div className="cj-incident-fields">
+                                                        <label>
+                                                            Loại sự cố
+                                                            <select
+                                                                value={incidentCategory[assignmentId] || ''}
+                                                                onChange={(event) =>
+                                                                    setIncidentCategory((prev) => ({
+                                                                        ...prev,
+                                                                        [assignmentId]: event.target.value
+                                                                    }))
+                                                                }
+                                                            >
+                                                                <option value="">
+                                                                    Chọn loại sự cố
+                                                                </option>
+                                                                {INCIDENT_CATEGORIES.map((item) => (
+                                                                    <option
+                                                                        key={item.value}
+                                                                        value={item.value}
+                                                                    >
+                                                                        {item.label}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </label>
+
+                                                        <label>
+                                                            Mức độ
+                                                            <select
+                                                                value={incidentSeverity[assignmentId] || ''}
+                                                                onChange={(event) =>
+                                                                    setIncidentSeverity((prev) => ({
+                                                                        ...prev,
+                                                                        [assignmentId]: event.target.value
+                                                                    }))
+                                                                }
+                                                            >
+                                                                <option value="">
+                                                                    Chọn mức độ
+                                                                </option>
+                                                                {INCIDENT_SEVERITIES.map((item) => (
+                                                                    <option
+                                                                        key={item.value}
+                                                                        value={item.value}
+                                                                    >
+                                                                        {item.label}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </label>
+                                                    </div>
+                                                )}
+
+                                                <label className="cj-log-note">
+                                                    Nội dung
+                                                    <textarea
+                                                        value={logNote[assignmentId] || ''}
+                                                        onChange={(event) =>
+                                                            setLogNote((prev) => ({
+                                                                ...prev,
+                                                                [assignmentId]: event.target.value
+                                                            }))
+                                                        }
+                                                        placeholder={
+                                                            logType[assignmentId] === 'INCIDENT'
+                                                                ? 'Mô tả sự cố, tình trạng và cách xử lý hiện tại...'
+                                                                : 'Mô tả tiến độ công việc đã thực hiện...'
+                                                        }
+                                                        rows={4}
+                                                        maxLength={5000}
+                                                    />
+                                                </label>
+
+                                                <div className="cj-image-upload">
+                                                    <label>
+                                                        Ảnh minh chứng (tối đa 5 ảnh)
+                                                        <input
+                                                            type="file"
+                                                            accept="image/jpeg,image/png,image/webp"
+                                                            multiple
+                                                            onChange={(event) =>
+                                                                handleImageChange(
+                                                                    assignmentId,
+                                                                    event
                                                                 )
                                                             }
-                                                        >
-                                                            Tải lịch sử
-                                                        </button>
-                                                    </div>
+                                                        />
+                                                    </label>
 
-                                                    {(workLogs[assignmentId] || [])
-                                                        .length === 0 ? (
-                                                        <p>
-                                                            Chưa có nhật ký công việc.
-                                                        </p>
-                                                    ) : (
-                                                        (workLogs[assignmentId] || [])
-                                                            .map((log) => (
-                                                                <div
-                                                                    className="cj-log-item"
-                                                                    key={log.id}
-                                                                >
-                                                                    <strong>
-                                                                        {log.logType ===
-                                                                        'INCIDENT'
-                                                                            ? '⚠ Báo cáo sự cố'
-                                                                            : '✓ Cập nhật tiến độ'}
-                                                                    </strong>
-
-                                                                    {log.logType ===
-                                                                        'INCIDENT' && (
-                                                                            <div className="cj-incident-meta">
-                                                                            <span>
-                                                                                Nhóm:{' '}
-                                                                                {CATEGORY_LABELS[
-                                                                                        log.category
-                                                                                        ] ||
-                                                                                    log.category ||
-                                                                                    'Khác'}
-                                                                            </span>
-                                                                                <span>
-                                                                                Mức độ:{' '}
-                                                                                    {SEVERITY_LABELS[
-                                                                                            log.severity
-                                                                                            ] ||
-                                                                                        log.severity ||
-                                                                                        'Trung bình'}
-                                                                            </span>
-                                                                                <span>
-                                                                                Trạng thái:{' '}
-                                                                                    {log.incidentStatus ||
-                                                                                        'OPEN'}
-                                                                            </span>
-                                                                            </div>
-                                                                        )}
-
-                                                                    <p>{log.note}</p>
-
-                                                                    {getImageUrls(log)
-                                                                        .length > 0 && (
-                                                                        <div className="cj-log-history-images">
-                                                                            {getImageUrls(
-                                                                                log
-                                                                            ).map(
-                                                                                (url, index) => (
-                                                                                    <a
-                                                                                        href={url}
-                                                                                        target="_blank"
-                                                                                        rel="noreferrer"
-                                                                                        key={`${log.id}-${index}`}
-                                                                                    >
-                                                                                        <img
-                                                                                            src={url}
-                                                                                            alt={`Ảnh minh chứng ${index + 1}`}
-                                                                                        />
-                                                                                    </a>
+                                                    {(selectedImages[assignmentId] || []).length > 0 && (
+                                                        <div className="cj-selected-images">
+                                                            {selectedImages[assignmentId].map(
+                                                                (image, index) => (
+                                                                    <div
+                                                                        className="cj-selected-image"
+                                                                        key={`${image.file.name}-${index}`}
+                                                                    >
+                                                                        <img
+                                                                            src={image.preview}
+                                                                            alt={`Ảnh đã chọn ${index + 1}`}
+                                                                        />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                removeSelectedImage(
+                                                                                    assignmentId,
+                                                                                    index
                                                                                 )
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-
-                                                                    <small>
-                                                                        {formatDate(
-                                                                            log.createdAt
-                                                                        )}
-                                                                    </small>
-                                                                </div>
-                                                            ))
+                                                                            }
+                                                                        >
+                                                                            ×
+                                                                        </button>
+                                                                    </div>
+                                                                )
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </div>
+
+                                                <button
+                                                    type="button"
+                                                    className="cj-submit-log"
+                                                    disabled={Boolean(logLoading[assignmentId])}
+                                                    onClick={() =>
+                                                        handleSubmitWorkLog(assignmentId)
+                                                    }
+                                                >
+                                                    {logLoading[assignmentId]
+                                                        ? 'Đang gửi...'
+                                                        : logType[assignmentId] === 'INCIDENT'
+                                                            ? 'Gửi báo cáo sự cố'
+                                                            : 'Gửi nhật ký tiến độ'}
+                                                </button>
+
+                                                {logFeedback[assignmentId] && (
+                                                    <p
+                                                        className={`cj-log-feedback ${logFeedback[assignmentId].type}`}
+                                                    >
+                                                        {logFeedback[assignmentId].message}
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
+
+                                        <div className="cj-work-log-history">
+                                            <div className="cj-log-history-heading">
+                                                <h4>Lịch sử cập nhật công việc</h4>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        loadWorkLogs(assignmentId)
+                                                    }
+                                                >
+                                                    Làm mới
+                                                </button>
+                                            </div>
+
+                                            {!workLogs[assignmentId] && (
+                                                <p>
+                                                    Nhấn xem thông tin để tải lịch sử công việc.
+                                                </p>
+                                            )}
+
+                                            {workLogs[assignmentId]?.length === 0 && (
+                                                <p>Chưa có nhật ký công việc.</p>
+                                            )}
+
+                                            {workLogs[assignmentId]?.length > 0 && (
+                                                <div className="cj-log-list">
+                                                    {workLogs[assignmentId].map((log) => {
+                                                        const imageUrls = getImageUrls(log);
+                                                        const isIncident =
+                                                            String(log.type || '').toUpperCase() === 'INCIDENT';
+
+                                                        return (
+                                                            <div
+                                                                className={`cj-log-item ${isIncident ? 'incident' : ''}`}
+                                                                key={log.id}
+                                                            >
+                                                                <div className="cj-log-item-heading">
+                                                                    <strong>
+                                                                        {isIncident
+                                                                            ? 'Báo cáo sự cố'
+                                                                            : 'Cập nhật tiến độ'}
+                                                                    </strong>
+
+                                                                    {isIncident && (
+                                                                        <span>
+                                                                            {SEVERITY_LABELS[
+                                                                                String(log.severity || '').toUpperCase()
+                                                                                ] || log.severity || 'Chưa xác định'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+
+                                                                {isIncident && (
+                                                                    <p className="cj-log-category">
+                                                                        Loại sự cố:{' '}
+                                                                        {CATEGORY_LABELS[
+                                                                            String(log.category || '').toUpperCase()
+                                                                            ] || log.category || 'Khác'}
+                                                                    </p>
+                                                                )}
+
+                                                                <p>{log.note}</p>
+
+                                                                {imageUrls.length > 0 && (
+                                                                    <div className="cj-log-images">
+                                                                        {imageUrls.map(
+                                                                            (url, index) => (
+                                                                                <a
+                                                                                    href={url}
+                                                                                    target="_blank"
+                                                                                    rel="noreferrer"
+                                                                                    key={`${log.id}-${index}`}
+                                                                                >
+                                                                                    <img
+                                                                                        src={url}
+                                                                                        alt={`Ảnh minh chứng ${index + 1}`}
+                                                                                    />
+                                                                                </a>
+                                                                            )
+                                                                        )}
+                                                                    </div>
+                                                                )}
+
+                                                                <small>
+                                                                    {formatDate(log.createdAt)}
+                                                                </small>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </article>
