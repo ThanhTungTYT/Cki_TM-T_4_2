@@ -1,5 +1,5 @@
-
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import {useEffect} from "react";
 import Home from './pages/home';
 import Rewards from './pages/rewards';
 import Login from './pages/login';
