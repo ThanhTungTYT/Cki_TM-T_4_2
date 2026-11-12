@@ -26,8 +26,16 @@ public class CleanerNotificationController {
     private final UserRepository userRepository;
     private final AdminNotificationRepository notificationRepository;
 
+    /**
+     * Lấy tài khoản Cleaner hiện tại từ thông tin xác thực.
+     * Không nhận userId từ Frontend để tránh xem thông báo người khác.
+     */
     private User currentCleaner(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null) {
+
+        if (authentication == null
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
+
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
                     "Vui lòng đăng nhập."
@@ -40,42 +48,62 @@ public class CleanerNotificationController {
                         "Không tìm thấy tài khoản."
                 ));
 
-        String role = user.getRole() == null
-                ? ""
-                : user.getRole().trim().toUpperCase(Locale.ROOT);
+        String role = normalize(user.getRole());
 
         if (role.startsWith("ROLE_")) {
             role = role.substring(5);
         }
 
-        if (!"CLEANER".equals(role)) {
+        boolean isCleaner =
+                "CLEANER".equals(role)
+                        || "EMPLOYEE".equals(role);
+
+        if (!isCleaner) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Chỉ nhân viên vệ sinh mới được xem thông báo này."
             );
         }
 
+        if (!"ACTIVE".equals(normalize(user.getStatus()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Tài khoản nhân viên hiện không hoạt động."
+            );
+        }
+
         return user;
     }
 
-    // GET: Danh sách thông báo và số lượng chưa đọc
+    /**
+     * GET /api/cleaner/notifications
+     *
+     * Lấy tối đa 100 thông báo mới nhất của tài khoản Cleaner.
+     */
     @GetMapping
     @Transactional(readOnly = true)
-    public Map<String, Object> getNotifications(Authentication authentication) {
+    public Map<String, Object> getNotifications(
+            Authentication authentication
+    ) {
+
         User cleaner = currentCleaner(authentication);
 
         List<AdminNotification> notifications =
-                notificationRepository.findTop100ByRecipient_IdOrderByCreatedAtDesc(
-                        cleaner.getId()
-                );
+                notificationRepository
+                        .findTop100ByRecipient_IdOrderByCreatedAtDesc(
+                                cleaner.getId()
+                        );
+
+        long unreadCount =
+                notificationRepository
+                        .countByRecipient_IdAndReadAtIsNull(
+                                cleaner.getId()
+                        );
 
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put(
-                "unreadCount",
-                notificationRepository.countByRecipient_IdAndReadAtIsNull(
-                        cleaner.getId()
-                )
-        );
+
+        response.put("unreadCount", unreadCount);
+
         response.put(
                 "items",
                 notifications.stream()
@@ -86,13 +114,18 @@ public class CleanerNotificationController {
         return response;
     }
 
-    // PATCH: Đánh dấu một thông báo đã đọc
+    /**
+     * PATCH /api/cleaner/notifications/{id}/read
+     *
+     * Chỉ được đánh dấu đã đọc thông báo thuộc chính tài khoản đăng nhập.
+     */
     @PatchMapping("/{id}/read")
     @Transactional
     public Map<String, Object> markNotificationRead(
             @PathVariable Long id,
             Authentication authentication
     ) {
+
         User cleaner = currentCleaner(authentication);
 
         AdminNotification notification =
@@ -113,9 +146,13 @@ public class CleanerNotificationController {
         return notificationRow(notification);
     }
 
+    /**
+     * Chuyển thông báo thành dữ liệu trả về Frontend.
+     */
     private Map<String, Object> notificationRow(
             AdminNotification notification
     ) {
+
         Map<String, Object> row = new LinkedHashMap<>();
 
         row.put("id", notification.getId());
@@ -129,5 +166,12 @@ public class CleanerNotificationController {
         row.put("createdAt", notification.getCreatedAt());
 
         return row;
+    }
+
+    private String normalize(String value) {
+
+        return value == null
+                ? ""
+                : value.trim().toUpperCase(Locale.ROOT);
     }
 }
