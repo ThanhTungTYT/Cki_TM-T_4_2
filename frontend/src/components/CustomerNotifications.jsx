@@ -47,6 +47,9 @@ export default function CustomerNotifications() {
                     const notification = JSON.parse(message.body);
                     setItems(current => [notification, ...current.filter(item => item.id !== notification.id)].slice(0, 100));
                     setUnreadCount(current => current + 1);
+                    window.dispatchEvent(new CustomEvent('cleanmate:customer-notification', {
+                        detail: notification
+                    }));
                 } catch {
                     refresh();
                 }

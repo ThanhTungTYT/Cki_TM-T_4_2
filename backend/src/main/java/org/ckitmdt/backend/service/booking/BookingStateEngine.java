@@ -412,20 +412,39 @@ public class BookingStateEngine {
     @Transactional
     public void expirePendingProvider(Long bookingId) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime providerDeadline = booking == null
+                ? null : booking.getProviderDeadlineAt();
+        if (providerDeadline == null && booking != null
+                && booking.getScheduledStart() != null && booking.getCreatedAt() != null) {
+            providerDeadline = BookingService.calculateProviderDeadline(
+                    booking.getScheduledStart(), booking.getCreatedAt());
+        }
+        boolean approvalOverdue = booking != null
+                && providerDeadline != null
+                && !now.isBefore(providerDeadline);
+        boolean appointmentPassed = booking != null
+                && booking.getScheduledStart() != null
+                && !now.isBefore(booking.getScheduledStart());
 
         if (booking == null
                 || !BookingStatusEnum.PENDING_PROVIDER.name().equals(booking.getStatus())
-                || booking.getProviderDeadlineAt() == null
-                || LocalDateTime.now().isBefore(booking.getProviderDeadlineAt())) {
+                || (!approvalOverdue && !appointmentPassed)) {
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
         String oldStatus = booking.getStatus();
+        String cancellationReason = appointmentPassed
+                ? "Lịch hẹn đã qua nhưng đối tác chưa tiếp nhận đơn hàng."
+                : "Đối tác quá thời hạn duyệt đơn hàng.";
+        String historyNote = appointmentPassed
+                ? "Tự động hủy vì đã qua thời gian đặt nhưng đơn vẫn chưa được đối tác tiếp nhận."
+                : "Tự động hủy vì đối tác quá thời hạn duyệt đơn hàng.";
 
         booking.setStatus(BookingStatusEnum.EXPIRED.name());
         booking.setUpdatedAt(now);
-        booking.setCancelReason("Đối tác quá hạn tiếp nhận đơn hàng.");
+        booking.setCancelledAt(now);
+        booking.setCancelReason(cancellationReason);
 
         Booking saved = bookingRepository.save(booking);
 
@@ -433,18 +452,24 @@ public class BookingStateEngine {
                 .booking(saved)
                 .oldStatus(oldStatus)
                 .newStatus(BookingStatusEnum.EXPIRED.name())
-                .note("Hết thời gian chờ đối tác tiếp nhận đơn hàng.")
+                .note(historyNote)
                 .createdAt(now)
                 .build());
 
-        // Thông báo cho khách hàng
-        customerNotificationService.notifyBookingStatus(saved);
+        customerNotificationService.notifyCustomer(
+                saved.getCustomer(),
+                "BOOKING_EXPIRED",
+                "Đơn hàng đã tự hủy",
+                "Đơn " + saved.getBookingCode() + " đã tự hủy. " + cancellationReason,
+                "BOOKING",
+                saved.getId()
+        );
 
         // Thông báo cho Admin (đơn tiền mặt không cần hoàn tiền, chỉ thông báo)
         adminNotificationRepository.save(AdminNotification.builder()
                 .type("BOOKING_PROVIDER_EXPIRED")
                 .title("Đơn hàng quá hạn tiếp nhận")
-                .message("Đơn hàng #" + saved.getBookingCode() + " đã quá hạn mà đối tác không tiếp nhận. Đơn đã được tự động kết thúc.")
+                .message("Đơn hàng #" + saved.getBookingCode() + " đã tự hủy. " + cancellationReason)
                 .referenceType("BOOKING")
                 .referenceId(saved.getId())
                 .createdAt(now)

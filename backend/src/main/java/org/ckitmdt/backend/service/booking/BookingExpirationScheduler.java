@@ -7,6 +7,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -24,8 +26,17 @@ public class BookingExpirationScheduler {
 
     @Scheduled(fixedDelay = 60_000)
     public void expirePendingProviderBookings() {
-        bookingRepository.findByStatusAndProviderDeadlineAtBefore(
-                        BookingStatusEnum.PENDING_PROVIDER.name(), LocalDateTime.now())
-                .forEach(booking -> bookingStateEngine.expirePendingProvider(booking.getId()));
+        LocalDateTime now = LocalDateTime.now();
+        String pendingProvider = BookingStatusEnum.PENDING_PROVIDER.name();
+        Set<Long> expiredBookingIds = new LinkedHashSet<>();
+
+        bookingRepository.findByStatusAndProviderDeadlineAtBefore(pendingProvider, now)
+                .forEach(booking -> expiredBookingIds.add(booking.getId()));
+        bookingRepository.findByStatusAndProviderDeadlineAtIsNull(pendingProvider)
+                .forEach(booking -> expiredBookingIds.add(booking.getId()));
+        bookingRepository.findByStatusAndScheduledStartBefore(pendingProvider, now)
+                .forEach(booking -> expiredBookingIds.add(booking.getId()));
+
+        expiredBookingIds.forEach(bookingStateEngine::expirePendingProvider);
     }
 }

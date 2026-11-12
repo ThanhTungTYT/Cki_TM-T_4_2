@@ -245,6 +245,26 @@
 
 .customer-report-evidence-link:hover:not(:disabled) { background: #dbeafe; }
 .customer-report-evidence-link:disabled { opacity: .65; cursor: wait; }
+.customer-report-evidence-block {
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    margin: 4px 0 12px;
+}
+.customer-report-evidence-block .customer-report-evidence-link {
+    margin: 4px 0 0;
+}
+.customer-report-upload-preview {
+    display: block;
+    width: min(240px, 100%);
+    max-height: 170px;
+    margin-top: 10px;
+    object-fit: cover;
+    border: 1px solid #dbe5f2;
+    border-radius: 9px;
+    background: #fff;
+}
 .customer-report-field input[type="file"] {
     display: block;
     width: 100%;

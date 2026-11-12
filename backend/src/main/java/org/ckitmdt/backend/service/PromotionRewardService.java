@@ -209,14 +209,7 @@ public class PromotionRewardService {
 
         if (requested > 0) {
             policy = rewardPolicyRepository.findById(1L)
-                    .orElse(null);
-
-            if (policy == null) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Chính sách Ccoin chưa được cấu hình."
-                );
-            }
+                    .orElseGet(this::defaultRewardPolicy);
 
             if (!Boolean.TRUE.equals(policy.getEnabled())) {
                 throw new ResponseStatusException(
@@ -404,6 +397,23 @@ public class PromotionRewardService {
 
     private int zero(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private RewardPolicy defaultRewardPolicy() {
+        // Keep checkout usable on databases without the optional admin policy row.
+        // Defaults follow the customer-facing redemption rule.
+        return RewardPolicy.builder()
+                .id(1L)
+                .earnAmountStep(BigDecimal.valueOf(1000))
+                .earnPoints(1)
+                .pointValue(BigDecimal.ONE)
+                .maxRedeemPercent(BigDecimal.valueOf(100))
+                .minRedeemPoints(1000)
+                .maxRedeemPoints(Integer.MAX_VALUE)
+                .expiryMonths(12)
+                .enabled(true)
+                .allowCombineWithPromotion(true)
+                .build();
     }
 
     public record Pricing(

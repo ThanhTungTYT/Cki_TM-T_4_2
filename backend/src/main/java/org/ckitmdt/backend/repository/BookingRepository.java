@@ -138,6 +138,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByStatusAndProviderDeadlineAtBefore(String status, LocalDateTime expiresAt);
 
+    List<Booking> findByStatusAndProviderDeadlineAtIsNull(String status);
+
+    List<Booking> findByStatusAndScheduledStartBefore(String status, LocalDateTime scheduledStart);
+
     List<Booking> findByStatusIn(List<String> statuses);
 
     long countByStatusIgnoreCase(String status);

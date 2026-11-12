@@ -230,7 +230,6 @@ export default function CustomerBookingsView() {
     const [ratingComment, setRatingComment] = useState('');
     const [reviewableServices, setReviewableServices] = useState([]);
     const [selectedReviewServiceId, setSelectedReviewServiceId] = useState('');
-    const [reviewEligibilityLoading, setReviewEligibilityLoading] = useState(false);
     const [reviewSubmitting, setReviewSubmitting] = useState(false);
     const [reviewError, setReviewError] = useState('');
     const [actionFeedback, setActionFeedback] = useState('');
@@ -304,6 +303,31 @@ export default function CustomerBookingsView() {
 
     useEffect(() => {
         loadBookings();
+    }, []);
+
+    useEffect(() => {
+        const refreshBookingStatuses = async () => {
+            try {
+                const response = await bookingApi.getMyBookings();
+                if (Array.isArray(response)) setBookings(response.map(mapBooking));
+            } catch {
+                // Keep the current order list when a background refresh fails.
+            }
+        };
+        const onCustomerNotification = event => {
+            if (String(event.detail?.referenceType || '').toUpperCase() === 'BOOKING') {
+                refreshBookingStatuses();
+            }
+        };
+        const timer = window.setInterval(refreshBookingStatuses, 60_000);
+        window.addEventListener('focus', refreshBookingStatuses);
+        window.addEventListener('cleanmate:customer-notification', onCustomerNotification);
+
+        return () => {
+            window.clearInterval(timer);
+            window.removeEventListener('focus', refreshBookingStatuses);
+            window.removeEventListener('cleanmate:customer-notification', onCustomerNotification);
+        };
     }, []);
 
     const selectedBooking = useMemo(() => {
@@ -511,36 +535,20 @@ export default function CustomerBookingsView() {
             setReviewError('');
             setReviewableServices([]);
             setSelectedReviewServiceId('');
-            setReviewEligibilityLoading(true);
-
-            try {
-                const serviceItems = Array.from(new Map(
-                    (selectedBooking.items || [])
-                        .filter(item => item.serviceId != null)
-                        .map(item => [String(item.serviceId), item])
-                ).values());
-                const eligibilityResults = await Promise.all(
-                    serviceItems.map(async item => ({
-                        item,
-                        result: await reviewApi.getServiceReviews(item.serviceId)
-                    }))
-                );
-                const eligibleItems = eligibilityResults
-                    .filter(({ result }) => result.canReview && !result.hasReviewed)
-                    .map(({ item }) => item);
-                setReviewableServices(eligibleItems);
-                setSelectedReviewServiceId(
-                    eligibleItems[0] ? String(eligibleItems[0].serviceId) : ''
-                );
-                if (eligibleItems.length === 0) {
-                    setReviewError(
-                        'Bạn không còn dịch vụ nào trong đơn đủ điều kiện đánh giá. Mỗi khách hàng chỉ đánh giá một lần cho mỗi dịch vụ.'
-                    );
-                }
-            } catch (error) {
-                setReviewError(error.message || 'Không thể kiểm tra điều kiện đánh giá.');
-            } finally {
-                setReviewEligibilityLoading(false);
+            const completedItems = Array.isArray(updated.items) && updated.items.length
+                ? updated.items
+                : selectedBooking.items || [];
+            const serviceItems = Array.from(new Map(
+                completedItems
+                    .filter(item => item.serviceId != null)
+                    .map(item => [String(item.serviceId), item])
+            ).values());
+            setReviewableServices(serviceItems);
+            setSelectedReviewServiceId(
+                serviceItems[0] ? String(serviceItems[0].serviceId) : ''
+            );
+            if (serviceItems.length === 0) {
+                setReviewError('Đơn hàng không có dịch vụ hợp lệ để gửi đánh giá.');
             }
         } catch (error) {
             showFeedback(
@@ -699,7 +707,7 @@ export default function CustomerBookingsView() {
         event.preventDefault();
         const serviceId = Number(selectedReviewServiceId);
         const comment = ratingComment.trim();
-        if (!serviceId || !comment || reviewSubmitting || reviewEligibilityLoading) return;
+        if (!serviceId || !comment || reviewSubmitting) return;
 
         setReviewSubmitting(true);
         setReviewError('');
@@ -1513,7 +1521,7 @@ export default function CustomerBookingsView() {
                                     id="review-service-select"
                                     value={selectedReviewServiceId}
                                     onChange={event => setSelectedReviewServiceId(event.target.value)}
-                                    disabled={reviewEligibilityLoading || reviewSubmitting}
+                                    disabled={reviewSubmitting}
                                     required
                                 >
                                     {reviewableServices.map(item => (
@@ -1541,7 +1549,7 @@ export default function CustomerBookingsView() {
                                         onClick={() => setRatingScore(star)}
                                         aria-label={`${star} sao`}
                                         aria-pressed={ratingScore === star}
-                                        disabled={reviewEligibilityLoading || reviewSubmitting}
+                                        disabled={reviewSubmitting}
                                     >
                                         <FontAwesomeIcon icon={faStar} />
                                     </button>
@@ -1561,14 +1569,11 @@ export default function CustomerBookingsView() {
                                 onChange={event => setRatingComment(event.target.value)}
                                 maxLength={2000}
                                 required
-                                disabled={reviewEligibilityLoading || reviewSubmitting}
+                                disabled={reviewSubmitting}
                             />
                             <span className="review-comment-count">{ratingComment.length}/2000 ký tự</span>
                         </div>
 
-                        {reviewEligibilityLoading && (
-                            <p className="review-modal-feedback">Đang kiểm tra điều kiện đánh giá...</p>
-                        )}
                         {reviewError && (
                             <p className="review-modal-feedback is-error" role="alert">{reviewError}</p>
                         )}
@@ -1577,7 +1582,7 @@ export default function CustomerBookingsView() {
                             <button
                                 type="submit"
                                 className="btn-save-review"
-                                disabled={reviewEligibilityLoading || reviewSubmitting || !selectedReviewServiceId || !ratingComment.trim()}
+                                disabled={reviewSubmitting || !selectedReviewServiceId || !ratingComment.trim()}
                             >
                                 {reviewSubmitting ? 'Đang gửi...' : 'Gửi đánh giá dịch vụ'}
                             </button>

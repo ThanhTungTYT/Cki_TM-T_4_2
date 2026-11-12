@@ -16,6 +16,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import AdminLayout from "./AdminLayout";
 import { downloadReportEvidence } from "../../services/api";
+import ReportEvidencePreview from "../../components/ReportEvidencePreview";
 import "./AdminComplaintManagement.css";
 
 const API_URL = "http://localhost:8080/api/reports";
@@ -736,8 +737,11 @@ function AdminComplaintManagement() {
                                     <div>
                                         <strong>Minh chứng đính kèm</strong>
                                         <p>
-                                            Mở liên kết để xem minh chứng người gửi cung cấp.
+                                            Ảnh bằng chứng do người gửi cung cấp.
                                         </p>
+                                        {selectedReport.evidenceUrl.startsWith("/api/reports/") && (
+                                            <ReportEvidencePreview reportId={selectedReport.id} />
+                                        )}
                                     </div>
                                     {selectedReport.evidenceUrl.startsWith("/api/reports/") ? (
                                         <button type="button" onClick={() => handleEvidenceDownload(selectedReport.id)} className="complaint-evidence-link">

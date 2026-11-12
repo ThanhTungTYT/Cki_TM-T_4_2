@@ -72,6 +72,17 @@ export async function downloadReportEvidence(url, fileName = 'bang-chung-khieu-n
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
 }
 
+export async function getReportEvidenceObjectUrl(reportId, signal) {
+    const response = await fetch(
+        `${BASE_URL}/reports/${encodeURIComponent(reportId)}/evidence`,
+        { headers: getAuthHeaders(), signal }
+    );
+    if (!response.ok) {
+        await handleResponse(response, 'Không thể tải ảnh bằng chứng.');
+    }
+    return URL.createObjectURL(await response.blob());
+}
+
 // =========================
 // HANDLE API RESPONSE
 // =========================
