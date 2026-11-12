@@ -204,12 +204,7 @@ public class PromotionRewardService {
                     .filter(item -> item.getExpiresAt() == null
                             || now.isBefore(item.getExpiresAt()))
                     .findFirst()
-                    .orElseThrow(() -> new ResponseStatusException(
-                            HttpStatus.FORBIDDEN,
-                            "Voucher này không thuộc tài khoản của bạn, "
-                                    + "đã được sử dụng, đang giữ cho đơn khác "
-                                    + "hoặc đã hết hạn."
-                    ));
+                    .orElse(null);
         }
 
         if (requested > 0) {

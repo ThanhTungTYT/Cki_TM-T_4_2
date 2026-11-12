@@ -881,6 +881,69 @@
     max-width: 100%;
 }
 
+.review-service-picker {
+    margin-top: 16px;
+}
+
+.review-service-selected {
+    margin: 16px 0 0;
+    color: #475569;
+    font-size: 13px;
+}
+
+.review-service-selected strong {
+    color: #1e385c;
+}
+
+.review-service-picker select,
+.review-comment-group textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    background: #fff;
+    color: #1e293b;
+    padding: 10px 12px;
+    box-sizing: border-box;
+}
+
+.review-service-picker select:focus,
+.review-comment-group textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.review-comment-group {
+    margin: 16px 0 0;
+}
+
+.review-comment-group textarea {
+    display: block;
+    min-height: 92px;
+    resize: vertical;
+    font: inherit;
+    font-size: 14px;
+}
+
+.review-comment-count {
+    display: block;
+    margin-top: 5px;
+    color: #64748b;
+    font-size: 11px;
+    text-align: right;
+}
+
+.review-modal-feedback {
+    margin: 12px 0 0;
+    color: #475569;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.review-modal-feedback.is-error {
+    color: #b91c1c;
+}
+
 .form-group textarea:focus {
     outline: none;
     border-color: #2563eb !important;
@@ -953,10 +1016,20 @@
 }
 
 .star-ico {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: #cbd5e1;
     font-size: 25px;
     cursor: pointer;
     transition: transform 0.15s, color 0.15s;
+}
+
+.star-ico:disabled {
+    cursor: not-allowed;
 }
 
 .star-ico:hover {
@@ -1302,10 +1375,100 @@
 .reschedule-panel .reschedule-submit { grid-column: 1 / -1; justify-self: end; min-height: 36px; padding: 8px 16px; border-radius: 8px; background: #2563eb; font-size: 12px; }
 .reschedule-panel .reschedule-submit:disabled { opacity: .5; cursor: not-allowed; }
 .reschedule-note { grid-column: 1 / -1; margin-top: -8px; }
+
+.customer-work-logs-panel {
+    margin-top: 16px;
+}
+.customer-work-logs-panel > h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.customer-work-logs-muted,
+.customer-work-logs-error {
+    margin: 0;
+    color: #64748b;
+    font-size: 13px;
+}
+.customer-work-logs-error { color: #b91c1c; }
+.customer-work-logs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+}
+.customer-work-log {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 11px;
+    background: #f8fafc;
+}
+.customer-work-log.incident {
+    border-color: #fed7aa;
+    background: #fffaf4;
+}
+.customer-work-log-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    color: #1e385c;
+}
+.customer-work-log-heading time {
+    flex-shrink: 0;
+    color: #64748b;
+    font-size: 12px;
+}
+.customer-work-log-author {
+    display: inline-block;
+    margin-top: 5px;
+    color: #64748b;
+    font-size: 12px;
+}
+.customer-work-log-meta {
+    margin: 8px 0 0;
+    color: #9a3412;
+    font-size: 12px;
+    font-weight: 600;
+}
+.customer-work-log-note {
+    margin: 9px 0 0;
+    color: #334155;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.customer-work-log-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin-top: 11px;
+}
+.customer-work-log-images a {
+    display: block;
+    width: 104px;
+    height: 82px;
+    overflow: hidden;
+    border: 1px solid #dbe5f2;
+    border-radius: 8px;
+    background: #fff;
+}
+.customer-work-log-images img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform .18s ease;
+}
+.customer-work-log-images a:hover img { transform: scale(1.04); }
+
 @media (max-width: 720px) {
     .customer-action-container.reschedule-panel { grid-template-columns: minmax(0, 1fr); padding: 12px; }
     .reschedule-heading, .reschedule-panel .reschedule-submit, .reschedule-note { grid-column: 1; }
     .reschedule-calendar { max-width: 340px; width: 100%; }
     .reschedule-time-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .reschedule-panel .reschedule-submit { justify-self: stretch; width: 100%; }
+    .customer-work-log-heading { flex-direction: column; gap: 4px; }
 }

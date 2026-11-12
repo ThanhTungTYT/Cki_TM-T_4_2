@@ -167,7 +167,7 @@ export default function ServiceReviews({ serviceId }) {
     }
 
     return (
-        <section className="service-reviews" aria-labelledby="service-reviews-title">
+        <section id="service-reviews" className="service-reviews" aria-labelledby="service-reviews-title">
             <div className="service-reviews-heading">
                 <div>
                     <span className="service-reviews-eyebrow">Trải nghiệm khách hàng</span>

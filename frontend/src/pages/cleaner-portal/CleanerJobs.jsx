@@ -391,7 +391,7 @@ function CleanerJobs() {
             await bookingApi.createCleanerWorkLog(
                 assignmentId,
                 {
-                    type,
+                    logType: type,
                     note,
                     imageUrls,
                     category:

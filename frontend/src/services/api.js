@@ -241,6 +241,14 @@ export const bookingApi = {
         return handleResponse(res, 'Không thể tải danh sách đơn hàng.');
     },
 
+    async getCustomerWorkLogs(bookingId) {
+        const res = await fetch(
+            `${BASE_URL}/v1/me/bookings/${encodeURIComponent(bookingId)}/work-logs`,
+            { method: 'GET', headers: getAuthHeaders() }
+        );
+        return handleResponse(res, 'Không thể tải nhật ký công việc của đơn hàng.');
+    },
+
     async getCleanerBookings() {
         const res = await fetch(`${BASE_URL}/bookings/cleaner/me`, {
             method: 'GET',

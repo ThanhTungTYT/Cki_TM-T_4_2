@@ -882,3 +882,359 @@
     color: #ae3939;
 }
 
+/* Form controls used by the current CleanerJobs markup */
+.cj-page .cj-actions > button,
+.cj-page .cj-state > button,
+.cj-page .cj-refresh-btn,
+.cj-page .cj-submit-log,
+.cj-page .cj-log-history-heading > button {
+    min-height: 40px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    padding: 9px 15px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.25;
+    cursor: pointer;
+    transition: background-color .18s ease, border-color .18s ease,
+        color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.cj-page .cj-actions > button:not(.cj-decline-btn),
+.cj-page .cj-state > button,
+.cj-page .cj-submit-log {
+    color: #fff;
+    background: #2563eb;
+    box-shadow: 0 2px 5px rgba(37, 99, 235, .16);
+}
+
+.cj-page .cj-actions > button:not(.cj-decline-btn):hover:not(:disabled),
+.cj-page .cj-state > button:hover,
+.cj-page .cj-submit-log:hover:not(:disabled) {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+.cj-page .cj-actions > .cj-decline-btn {
+    border: 1px solid #fecaca;
+    color: #b42318;
+    background: #fff5f4;
+}
+
+.cj-page .cj-actions > .cj-decline-btn:hover:not(:disabled) {
+    border-color: #fca5a5;
+    background: #feeceb;
+}
+
+.cj-page .cj-actions > button:disabled,
+.cj-page .cj-submit-log:disabled,
+.cj-page .cj-refresh-btn:disabled {
+    opacity: .58;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+.cj-page button:focus-visible,
+.cj-page input:focus-visible,
+.cj-page select:focus-visible,
+.cj-page textarea:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, .2);
+    outline-offset: 2px;
+}
+
+.cj-card-details {
+    margin-top: 15px;
+    padding: 18px;
+    border: 1px solid #e4ebf5;
+    border-radius: 12px;
+    background: #f8faff;
+}
+
+.cj-card-details > h4 {
+    margin: 0 0 14px;
+    color: #1e385c;
+    font-size: 15px;
+}
+
+.cj-work-log-form {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    margin-top: 18px;
+    padding: 18px;
+    border: 1px solid #dbe7f8;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.cj-work-log-form > h4,
+.cj-work-log-history h4 {
+    margin: 0;
+    color: #1e385c;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.cj-log-type {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cj-log-type > button {
+    min-height: 36px;
+    border: 1px solid #dbe5f2;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #475569;
+    background: #f8fafc;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: .18s ease;
+}
+
+.cj-log-type > button:hover {
+    border-color: #93b4f8;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+.cj-log-type > button.active {
+    border-color: #2563eb;
+    color: #1d4ed8;
+    background: #eff6ff;
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .08);
+}
+
+.cj-incident-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.cj-incident-fields label,
+.cj-log-note,
+.cj-image-upload > label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.cj-incident-fields select,
+.cj-log-note textarea,
+.cj-image-upload input[type="file"] {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid #d7e0ec;
+    border-radius: 9px;
+    color: #243247;
+    background: #fff;
+    font: inherit;
+    font-size: 13px;
+    box-sizing: border-box;
+    transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.cj-incident-fields select {
+    min-height: 42px;
+    padding: 9px 11px;
+}
+
+.cj-log-note textarea {
+    min-height: 112px;
+    padding: 11px 12px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.cj-log-note textarea::placeholder {
+    color: #94a3b8;
+}
+
+.cj-image-upload input[type="file"] {
+    padding: 9px;
+    border-style: dashed;
+    background: #f8fafc;
+    cursor: pointer;
+}
+
+.cj-image-upload input[type="file"]::file-selector-button {
+    margin-right: 10px;
+    border: 1px solid #cbdaf0;
+    border-radius: 7px;
+    padding: 7px 10px;
+    color: #1d4ed8;
+    background: #eff6ff;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cj-selected-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.cj-selected-image {
+    position: relative;
+    width: 92px;
+    height: 82px;
+    overflow: hidden;
+    border: 1px solid #dbe5f2;
+    border-radius: 9px;
+    background: #f1f5f9;
+}
+
+.cj-selected-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cj-selected-image > button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(153, 27, 27, .88);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.cj-work-log-form .cj-log-feedback {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.cj-work-log-form .cj-log-feedback.success {
+    color: #166534;
+    background: #f0fdf4;
+}
+
+.cj-work-log-form .cj-log-feedback.error {
+    color: #b91c1c;
+    background: #fef2f2;
+}
+
+.cj-work-log-history {
+    margin-top: 20px;
+}
+
+.cj-log-history-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.cj-page .cj-log-history-heading > button {
+    min-height: 34px;
+    border-color: #dbe5f2;
+    padding: 7px 11px;
+    color: #1d4ed8;
+    background: #fff;
+    font-size: 12px;
+}
+
+.cj-page .cj-log-history-heading > button:hover {
+    border-color: #93b4f8;
+    background: #eff6ff;
+}
+
+.cj-work-log-history > p {
+    margin: 0;
+    color: #64748b;
+    font-size: 13px;
+}
+
+.cj-log-item {
+    padding: 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.cj-log-item.incident {
+    border-color: #fed7aa;
+    background: #fffbf5;
+}
+
+.cj-log-item-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: #334155;
+}
+
+.cj-log-item-heading > span {
+    border-radius: 999px;
+    padding: 4px 8px;
+    color: #9a3412;
+    background: #ffedd5;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.cj-log-category {
+    color: #9a3412;
+    font-size: 12px;
+}
+
+.cj-log-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin: 10px 0;
+}
+
+.cj-log-images img {
+    display: block;
+    width: 96px;
+    height: 76px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+@media (max-width: 600px) {
+    .cj-card-details,
+    .cj-work-log-form {
+        padding: 13px;
+    }
+
+    .cj-incident-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .cj-page .cj-actions > button {
+        flex: 1 1 100%;
+    }
+
+    .cj-log-history-heading {
+        align-items: flex-start;
+    }
+}
+

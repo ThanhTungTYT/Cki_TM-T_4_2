@@ -22,14 +22,14 @@ const EMPTY_PROMOTION = {
 };
 
 const DEFAULT_POLICY = {
-    earnAmountStep: "10000",
+    earnAmountStep: "1000",
     earnPoints: "1",
     pointValue: "100",
     maxRedeemPercent: "20",
     minRedeemPoints: "100",
     maxRedeemPoints: "5000",
     expiryMonths: "12",
-    enabled: false,
+    enabled: true,
     allowCombineWithPromotion: false,
 };
 
@@ -145,12 +145,8 @@ export default function AdminPromotions() {
         ]);
 
         setPolicy({
-            earnAmountStep: String(
-                policyData?.earnAmountStep ?? DEFAULT_POLICY.earnAmountStep
-            ),
-            earnPoints: String(
-                policyData?.earnPoints ?? DEFAULT_POLICY.earnPoints
-            ),
+            earnAmountStep: DEFAULT_POLICY.earnAmountStep,
+            earnPoints: DEFAULT_POLICY.earnPoints,
             pointValue: String(
                 policyData?.pointValue ?? DEFAULT_POLICY.pointValue
             ),
@@ -166,7 +162,7 @@ export default function AdminPromotions() {
             expiryMonths: String(
                 policyData?.expiryMonths ?? DEFAULT_POLICY.expiryMonths
             ),
-            enabled: Boolean(policyData?.enabled),
+            enabled: true,
             allowCombineWithPromotion: Boolean(
                 policyData?.allowCombineWithPromotion
             ),
@@ -389,14 +385,14 @@ export default function AdminPromotions() {
         if (saving) return;
 
         const payload = {
-            earnAmountStep: Number(policy.earnAmountStep),
-            earnPoints: Number(policy.earnPoints),
+            earnAmountStep: 1000,
+            earnPoints: 1,
             pointValue: Number(policy.pointValue),
             maxRedeemPercent: Number(policy.maxRedeemPercent),
             minRedeemPoints: Number(policy.minRedeemPoints),
             maxRedeemPoints: Number(policy.maxRedeemPoints),
             expiryMonths: Number(policy.expiryMonths),
-            enabled: Boolean(policy.enabled),
+            enabled: true,
             allowCombineWithPromotion: Boolean(
                 policy.allowCombineWithPromotion
             ),
@@ -685,7 +681,7 @@ export default function AdminPromotions() {
                                 <div>
                                     <h2>Chính sách tích và đổi điểm</h2>
                                     <p>
-                                        Quy đổi cố định: 1.000đ tích 1 Ccoin;
+                                        Mỗi đơn đã thanh toán và hoàn thành tích 1 Ccoin cho mỗi 1.000đ;
                                         1.000 Ccoin giảm 1.000đ. Có thể cấu hình
                                         thời hạn điểm và kết hợp khuyến mãi.
                                     </p>
@@ -696,7 +692,7 @@ export default function AdminPromotions() {
                                 <input
                                     type="checkbox"
                                     disabled
-                                    checked={policy.enabled}
+                                    checked
                                     onChange={(event) =>
                                         setPolicy((current) => ({
                                             ...current,
@@ -713,6 +709,7 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="1"
+                                        disabled
                                         value={policy.earnAmountStep}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -728,6 +725,7 @@ export default function AdminPromotions() {
                                     <input
                                         type="number"
                                         min="1"
+                                        disabled
                                         value={policy.earnPoints}
                                         onChange={(event) =>
                                             setPolicy((current) => ({
@@ -840,10 +838,9 @@ export default function AdminPromotions() {
                             </button>
 
                             <p className="promotion-footnote">
-                                Phần này lưu cấu hình chính sách và hỗ trợ điều
-                                chỉnh điểm thủ công. Luồng tự động tích/đổi điểm
-                                tại booking sẽ được nối ở phần tích hợp Checkout
-                                và BookingStateEngine.
+                                Công thức tích điểm được cố định theo quy tắc
+                                nghiệp vụ. Phần này lưu cấu hình đổi điểm, thời hạn
+                                Ccoin và hỗ trợ điều chỉnh điểm thủ công.
                             </p>
                         </form>
 
