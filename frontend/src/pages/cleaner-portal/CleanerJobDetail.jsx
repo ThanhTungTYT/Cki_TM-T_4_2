@@ -573,7 +573,7 @@ function CleanerJobDetail() {
 
                                 <div className="cl-detail-log-content">
                                     <strong>
-                                        {log.type === 'INCIDENT'
+                                        {(log.logType || log.type) === 'INCIDENT'
                                             ? 'Báo cáo sự cố'
                                             : 'Cập nhật tiến độ'}
                                     </strong>

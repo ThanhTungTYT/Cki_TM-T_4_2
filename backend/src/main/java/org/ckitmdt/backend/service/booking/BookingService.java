@@ -155,20 +155,36 @@ public class BookingService {
                 LocalTime.of(13, 30), LocalTime.of(15, 0), LocalTime.of(16, 30),
                 LocalTime.of(18, 0));
         LocalDateTime now = LocalDateTime.now();
+        LocalDateTime excludedBookingStart = excludedBooking == null
+                ? null : excludedBooking.getScheduledStart();
+        LocalDateTime excludedBookingEnd = excludedBooking == null
+                ? null : excludedBooking.getScheduledEnd();
+        if (excludedBookingStart != null && excludedBookingEnd == null) {
+            excludedBookingEnd = excludedBookingStart.plusMinutes(totalDurationMinutes);
+        }
+        LocalDateTime currentBookingEnd = excludedBookingEnd;
 
         return slots.stream().map(time -> {
             LocalDateTime start = LocalDateTime.of(request.getDate(), time);
             LocalDateTime end = start.plusMinutes(totalDurationMinutes);
+            boolean replacesCurrentBookingTime = excludedBookingStart != null
+                    && currentBookingEnd != null
+                    && start.isBefore(currentBookingEnd)
+                    && end.isAfter(excludedBookingStart);
             boolean meetsNotice = !start.isBefore(now.plusMinutes(effectiveMinimumNoticeMinutes()))
-                    || (excludedBooking != null && start.equals(excludedBooking.getScheduledStart()));
+                    || replacesCurrentBookingTime;
             boolean withinWorkingHours = isWithinWorkingHours(start, end);
-            long reservedEmployees = meetsNotice && withinWorkingHours
-                    ? bookingItemRepository.countReservedEmployees(
-                    partner.getId(),
-                    start.minusMinutes(effectiveTravelBufferMinutes()),
-                    end.plusMinutes(effectiveTravelBufferMinutes()),
-                    now)
-                    : activeEmployees;
+            long reservedEmployees = activeEmployees;
+            if (meetsNotice && withinWorkingHours) {
+                LocalDateTime reservationStart = start.minusMinutes(effectiveTravelBufferMinutes());
+                LocalDateTime reservationEnd = end.plusMinutes(effectiveTravelBufferMinutes());
+                reservedEmployees = excludedBooking == null
+                        ? bookingItemRepository.countReservedEmployees(
+                        partner.getId(), reservationStart, reservationEnd, now)
+                        : bookingItemRepository.countReservedEmployeesExcludingBooking(
+                        partner.getId(), excludedBooking.getId(),
+                        reservationStart, reservationEnd, now);
+            }
             boolean available = meetsNotice && withinWorkingHours && activeEmployees > 0
                     && reservedEmployees + employeesNeeded <= activeEmployees;
             String message = !meetsNotice ? "Cần đặt trước ít nhất "
@@ -813,7 +829,15 @@ public class BookingService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Không thể xác định thời lượng đơn hàng.");
         }
         LocalDateTime newEnd = newStart.plusMinutes(duration);
-        if (newStart.isBefore(LocalDateTime.now().plusMinutes(effectiveMinimumNoticeMinutes()))) {
+        LocalDateTime oldStart = booking.getScheduledStart();
+        LocalDateTime oldEnd = booking.getScheduledEnd() != null
+                ? booking.getScheduledEnd()
+                : oldStart != null ? oldStart.plusMinutes(duration) : null;
+        boolean replacesCurrentBookingTime = oldStart != null && oldEnd != null
+                && newStart.isBefore(oldEnd)
+                && newEnd.isAfter(oldStart);
+        if (newStart.isBefore(LocalDateTime.now().plusMinutes(effectiveMinimumNoticeMinutes()))
+                && !replacesCurrentBookingTime) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Lịch mới cần được đặt trước ít nhất "
                             + effectiveMinimumNoticeMinutes() + " phút.");
@@ -835,7 +859,6 @@ public class BookingService {
                     "Khung giờ mới không còn đủ nhân viên. Vui lòng chọn thời gian khác.");
         }
 
-        LocalDateTime oldStart = booking.getScheduledStart();
         booking.setScheduledStart(newStart);
         booking.setScheduledEnd(newEnd);
         booking.setProviderDeadlineAt(calculateProviderDeadline(newStart, LocalDateTime.now()));

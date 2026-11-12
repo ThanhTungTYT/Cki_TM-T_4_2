@@ -109,13 +109,6 @@ public class BookingRewardLifecycleService {
             return;
         }
 
-        if (!paymentRepository.existsByBooking_IdAndStatus(
-                booking.getId(),
-                "SUCCESS"
-        )) {
-            return;
-        }
-
         if (booking.getCustomer() == null) {
             return;
         }
@@ -123,45 +116,14 @@ public class BookingRewardLifecycleService {
         RewardPolicy policy = rewardPolicyRepository.findById(1L)
                 .orElse(null);
 
-        BigDecimal earnAmountStep = policy == null
-                ? BigDecimal.valueOf(1000)
-                : policy.getEarnAmountStep();
-
-        Integer earnPoints = policy == null
-                ? 1
-                : policy.getEarnPoints();
-
         Integer expiryMonths = policy == null
                 ? 12
                 : policy.getExpiryMonths();
 
-        if (policy != null && !Boolean.TRUE.equals(policy.getEnabled())) {
-            log.info(
-                    "Không cộng Ccoin cho booking {} vì chính sách đang tắt.",
-                    booking.getBookingCode()
-            );
-            return;
-        }
-
-        if (earnAmountStep == null
-                || earnAmountStep.signum() <= 0
-                || earnPoints == null
-                || earnPoints <= 0) {
-            log.error(
-                    "Chính sách tích điểm không hợp lệ cho booking {}.",
-                    booking.getBookingCode()
-            );
-            return;
-        }
-
         int earnedPoints;
 
         try {
-            earnedPoints = CcoinRules.earned(
-                    booking.getTotalAmount(),
-                    earnAmountStep,
-                    earnPoints
-            );
+            earnedPoints = CcoinRules.earned(booking.getTotalAmount());
         } catch (IllegalArgumentException exception) {
             log.error(
                     "Không thể tính điểm cho booking {}: {}",

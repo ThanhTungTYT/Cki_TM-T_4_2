@@ -93,7 +93,9 @@ public class CleanerWorkLogService {
             );
         }
 
-        String logType = normalize(text(body.get("logType")));
+        String logType = normalize(text(
+                body.containsKey("logType") ? body.get("logType") : body.get("type")
+        ));
 
         if (!LOG_TYPES.contains(logType)) {
             throw new ResponseStatusException(
@@ -387,6 +389,7 @@ public class CleanerWorkLogService {
         result.put("cleanerId", log.getCleaner().getId());
         result.put("cleanerName", log.getCleaner().getFullName());
         result.put("logType", log.getLogType());
+        result.put("type", log.getLogType());
         result.put("note", log.getNote());
         result.put("imageUrls", imageUrls);
         result.put("createdAt", log.getCreatedAt());

@@ -37,7 +37,7 @@ public class AdminPromotionController {
     private static final Long REWARD_POLICY_ID = 1L;
 
     private static final BigDecimal DEFAULT_EARN_AMOUNT_STEP =
-            BigDecimal.valueOf(10000);
+            BigDecimal.valueOf(1000);
     private static final int DEFAULT_EARN_POINTS = 1;
     private static final BigDecimal DEFAULT_POINT_VALUE =
             BigDecimal.valueOf(100);
@@ -182,16 +182,15 @@ public class AdminPromotionController {
                     return created;
                 });
 
-        policy.setEarnAmountStep(request.earnAmountStep());
-        policy.setEarnPoints(request.earnPoints());
+        // Booking earnings follow the fixed customer rule: 1 Ccoin per 1,000 VND.
+        policy.setEarnAmountStep(DEFAULT_EARN_AMOUNT_STEP);
+        policy.setEarnPoints(DEFAULT_EARN_POINTS);
         policy.setPointValue(request.pointValue());
         policy.setMaxRedeemPercent(request.maxRedeemPercent());
         policy.setMinRedeemPoints(request.minRedeemPoints());
         policy.setMaxRedeemPoints(request.maxRedeemPoints());
         policy.setExpiryMonths(request.expiryMonths());
-        policy.setEnabled(
-                request.enabled() == null || request.enabled()
-        );
+        policy.setEnabled(true);
         policy.setAllowCombineWithPromotion(
                 Boolean.TRUE.equals(request.allowCombineWithPromotion())
         );

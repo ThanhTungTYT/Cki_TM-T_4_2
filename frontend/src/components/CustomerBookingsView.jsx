@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faClock,
@@ -20,7 +20,7 @@ import {
     faCheck,
     faRotateLeft
 } from '@fortawesome/free-solid-svg-icons';
-import { bookingApi, refundApi } from '../services/api';
+import { bookingApi, refundApi, reviewApi } from '../services/api';
 import { createVNPayPayment } from '../services/paymentService';
 import './CustomerBookingsView.css';
 
@@ -215,6 +215,7 @@ function mapBooking(booking) {
 }
 
 export default function CustomerBookingsView() {
+    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const highlightId = searchParams.get('id');
 
@@ -227,6 +228,11 @@ export default function CustomerBookingsView() {
     const [showReviewModal, setShowReviewModal] = useState(false);
     const [ratingScore, setRatingScore] = useState(5);
     const [ratingComment, setRatingComment] = useState('');
+    const [reviewableServices, setReviewableServices] = useState([]);
+    const [selectedReviewServiceId, setSelectedReviewServiceId] = useState('');
+    const [reviewEligibilityLoading, setReviewEligibilityLoading] = useState(false);
+    const [reviewSubmitting, setReviewSubmitting] = useState(false);
+    const [reviewError, setReviewError] = useState('');
     const [actionFeedback, setActionFeedback] = useState('');
     const [feedbackType, setFeedbackType] = useState('success');
     const [showRefundModal, setShowRefundModal] = useState(false);
@@ -242,6 +248,9 @@ export default function CustomerBookingsView() {
     const [actionLoading, setActionLoading] = useState(false);
     const [paymentLoading, setPaymentLoading] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
+    const [cleanerWorkLogs, setCleanerWorkLogs] = useState([]);
+    const [cleanerWorkLogsLoading, setCleanerWorkLogsLoading] = useState(false);
+    const [cleanerWorkLogsError, setCleanerWorkLogsError] = useState('');
 
     const showFeedback = (message, type = 'success') => {
         setFeedbackType(type);
@@ -305,6 +314,33 @@ export default function CustomerBookingsView() {
             || bookings[0]
             || null;
     }, [bookings, selectedBookingId, highlightId]);
+
+    useEffect(() => {
+        if (!selectedBooking?.dbId) {
+            setCleanerWorkLogs([]);
+            return undefined;
+        }
+
+        let active = true;
+        setCleanerWorkLogs([]);
+        setCleanerWorkLogsLoading(true);
+        setCleanerWorkLogsError('');
+        bookingApi.getCustomerWorkLogs(selectedBooking.dbId)
+            .then(logs => {
+                if (active) setCleanerWorkLogs(Array.isArray(logs) ? logs : []);
+            })
+            .catch(error => {
+                if (active) {
+                    setCleanerWorkLogs([]);
+                    setCleanerWorkLogsError(error.message || 'Không thể tải cập nhật từ nhân viên.');
+                }
+            })
+            .finally(() => {
+                if (active) setCleanerWorkLogsLoading(false);
+            });
+
+        return () => { active = false; };
+    }, [selectedBooking?.dbId]);
 
     const selectedRefund = myRefunds.find(
         refund => String(refund.bookingId) === String(selectedBooking?.dbId)
@@ -470,6 +506,42 @@ export default function CustomerBookingsView() {
 
             updateBookingFromResponse(updated);
             setShowReviewModal(true);
+            setRatingScore(5);
+            setRatingComment('');
+            setReviewError('');
+            setReviewableServices([]);
+            setSelectedReviewServiceId('');
+            setReviewEligibilityLoading(true);
+
+            try {
+                const serviceItems = Array.from(new Map(
+                    (selectedBooking.items || [])
+                        .filter(item => item.serviceId != null)
+                        .map(item => [String(item.serviceId), item])
+                ).values());
+                const eligibilityResults = await Promise.all(
+                    serviceItems.map(async item => ({
+                        item,
+                        result: await reviewApi.getServiceReviews(item.serviceId)
+                    }))
+                );
+                const eligibleItems = eligibilityResults
+                    .filter(({ result }) => result.canReview && !result.hasReviewed)
+                    .map(({ item }) => item);
+                setReviewableServices(eligibleItems);
+                setSelectedReviewServiceId(
+                    eligibleItems[0] ? String(eligibleItems[0].serviceId) : ''
+                );
+                if (eligibleItems.length === 0) {
+                    setReviewError(
+                        'Bạn không còn dịch vụ nào trong đơn đủ điều kiện đánh giá. Mỗi khách hàng chỉ đánh giá một lần cho mỗi dịch vụ.'
+                    );
+                }
+            } catch (error) {
+                setReviewError(error.message || 'Không thể kiểm tra điều kiện đánh giá.');
+            } finally {
+                setReviewEligibilityLoading(false);
+            }
         } catch (error) {
             showFeedback(
                 error.message || 'Không thể xác nhận hoàn thành đơn hàng.',
@@ -623,11 +695,26 @@ export default function CustomerBookingsView() {
         }
     };
 
-    const handleSubmitReview = () => {
-        showFeedback(
-            'Chức năng gửi đánh giá cần được kết nối với API đánh giá backend.',
-            'error'
-        );
+    const handleSubmitReview = async event => {
+        event.preventDefault();
+        const serviceId = Number(selectedReviewServiceId);
+        const comment = ratingComment.trim();
+        if (!serviceId || !comment || reviewSubmitting || reviewEligibilityLoading) return;
+
+        setReviewSubmitting(true);
+        setReviewError('');
+        try {
+            await reviewApi.createServiceReview(serviceId, {
+                rating: ratingScore,
+                comment
+            });
+            setShowReviewModal(false);
+            navigate(`/service-detail/${serviceId}#service-reviews`);
+        } catch (error) {
+            setReviewError(error.message || 'Không thể gửi đánh giá.');
+        } finally {
+            setReviewSubmitting(false);
+        }
     };
 
     return (
@@ -1260,6 +1347,51 @@ export default function CustomerBookingsView() {
                                     </div>
                                 )}
                             </div>
+
+                            <div className="panel-card customer-work-logs-panel">
+                                <h4>
+                                    <FontAwesomeIcon icon={faBroom} />
+                                    {' '}Cập nhật từ nhân viên
+                                </h4>
+                                {cleanerWorkLogsLoading ? (
+                                    <p className="customer-work-logs-muted">Đang tải cập nhật công việc...</p>
+                                ) : cleanerWorkLogsError ? (
+                                    <p className="customer-work-logs-error">{cleanerWorkLogsError}</p>
+                                ) : cleanerWorkLogs.length === 0 ? (
+                                    <p className="customer-work-logs-muted">Nhân viên chưa gửi cập nhật hoặc ảnh cho đơn hàng này.</p>
+                                ) : (
+                                    <div className="customer-work-logs-list">
+                                        {cleanerWorkLogs.map(log => {
+                                            const logType = String(log.logType || log.type || '').toUpperCase();
+                                            const images = Array.isArray(log.imageUrls) ? log.imageUrls : [];
+                                            return (
+                                                <article className={`customer-work-log ${logType === 'INCIDENT' ? 'incident' : ''}`} key={log.id}>
+                                                    <div className="customer-work-log-heading">
+                                                        <strong>{logType === 'INCIDENT' ? 'Báo cáo sự cố' : 'Cập nhật tiến độ'}</strong>
+                                                        <time>{formatDate(log.createdAt)}</time>
+                                                    </div>
+                                                    {log.cleanerName && <span className="customer-work-log-author">Nhân viên: {log.cleanerName}</span>}
+                                                    {logType === 'INCIDENT' && (log.category || log.severity) && (
+                                                        <p className="customer-work-log-meta">
+                                                            {log.category || 'Sự cố'}{log.severity ? ` · Mức độ ${log.severity}` : ''}
+                                                        </p>
+                                                    )}
+                                                    <p className="customer-work-log-note">{log.note}</p>
+                                                    {images.length > 0 && (
+                                                        <div className="customer-work-log-images">
+                                                            {images.map((url, index) => (
+                                                                <a href={url} target="_blank" rel="noreferrer" key={`${log.id}-${index}`}>
+                                                                    <img src={url} alt={`Ảnh cập nhật công việc ${index + 1}`} loading="lazy" />
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </article>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     ) : (
                         <div className="view-detail-pane">
@@ -1364,7 +1496,7 @@ export default function CustomerBookingsView() {
 
             {showReviewModal && (
                 <div className="modal-overlay">
-                    <div className="modal-card">
+                    <form className="modal-card" onSubmit={handleSubmitReview}>
                         <div className="modal-top">
                             <FontAwesomeIcon
                                 icon={faCheckCircle}
@@ -1374,58 +1506,92 @@ export default function CustomerBookingsView() {
                             <p>Đơn hàng đã được cập nhật trên hệ thống.</p>
                         </div>
 
+                        {reviewableServices.length > 1 && (
+                            <div className="form-group review-service-picker">
+                                <label htmlFor="review-service-select">Dịch vụ muốn đánh giá</label>
+                                <select
+                                    id="review-service-select"
+                                    value={selectedReviewServiceId}
+                                    onChange={event => setSelectedReviewServiceId(event.target.value)}
+                                    disabled={reviewEligibilityLoading || reviewSubmitting}
+                                    required
+                                >
+                                    {reviewableServices.map(item => (
+                                        <option key={item.serviceId} value={String(item.serviceId)}>
+                                            {item.serviceName || `Dịch vụ #${item.serviceId}`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {reviewableServices.length === 1 && (
+                            <p className="review-service-selected">
+                                Dịch vụ: <strong>{reviewableServices[0].serviceName || `#${reviewableServices[0].serviceId}`}</strong>
+                            </p>
+                        )}
+
                         <div className="rating-selector">
                             <span>Mức độ hài lòng:</span>
                             <div className="stars-row">
                                 {[1, 2, 3, 4, 5].map(star => (
-                                    <FontAwesomeIcon
+                                    <button
                                         key={star}
-                                        icon={faStar}
+                                        type="button"
                                         className={`star-ico ${star <= ratingScore ? 'active' : ''}`}
                                         onClick={() => setRatingScore(star)}
-                                    />
+                                        aria-label={`${star} sao`}
+                                        aria-pressed={ratingScore === star}
+                                        disabled={reviewEligibilityLoading || reviewSubmitting}
+                                    >
+                                        <FontAwesomeIcon icon={faStar} />
+                                    </button>
                                 ))}
                             </div>
                         </div>
 
-                        <div className="form-group" style={{ margin: '16px 0' }}>
+                        <div className="form-group review-comment-group">
                             <label htmlFor="rating-comment">
                                 Nhận xét chất lượng dịch vụ
                             </label>
                             <textarea
                                 id="rating-comment"
                                 rows="3"
-                                style={{
-                                    width: '100%',
-                                    padding: '10px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #cbd5e1',
-                                    boxSizing: 'border-box'
-                                }}
                                 placeholder="Nhập nhận xét của bạn..."
                                 value={ratingComment}
                                 onChange={event => setRatingComment(event.target.value)}
+                                maxLength={2000}
+                                required
+                                disabled={reviewEligibilityLoading || reviewSubmitting}
                             />
+                            <span className="review-comment-count">{ratingComment.length}/2000 ký tự</span>
                         </div>
+
+                        {reviewEligibilityLoading && (
+                            <p className="review-modal-feedback">Đang kiểm tra điều kiện đánh giá...</p>
+                        )}
+                        {reviewError && (
+                            <p className="review-modal-feedback is-error" role="alert">{reviewError}</p>
+                        )}
 
                         <div className="modal-actions">
                             <button
-                                type="button"
+                                type="submit"
                                 className="btn-save-review"
-                                onClick={handleSubmitReview}
+                                disabled={reviewEligibilityLoading || reviewSubmitting || !selectedReviewServiceId || !ratingComment.trim()}
                             >
-                                Gửi đánh giá dịch vụ
+                                {reviewSubmitting ? 'Đang gửi...' : 'Gửi đánh giá dịch vụ'}
                             </button>
 
                             <button
                                 type="button"
                                 className="btn-skip"
                                 onClick={() => setShowReviewModal(false)}
+                                disabled={reviewSubmitting}
                             >
                                 Đóng
                             </button>
                         </div>
-                    </div>
+                    </form>
                 </div>
             )}
         </div>

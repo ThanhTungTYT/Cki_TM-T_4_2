@@ -152,8 +152,8 @@ export default function Rewards() {
             </article>)}</section>
             {!loading && !error && !gifts.length && <p>Cửa hàng chưa có quà. Vui lòng quay lại sau.</p>}
             <section className="rewards-panel rewards-voucher-panel">
-                <h2>Voucher của bạn</h2>
-                <p className="rewards-voucher-intro">Voucher được cấp riêng cho tài khoản của bạn. Sao chép mã để áp dụng tại bước checkout.</p>
+                <h2>Voucher khuyến mãi</h2>
+                <p className="rewards-voucher-intro">Bao gồm voucher áp dụng chung và voucher đã nhận riêng. Sao chép mã để áp dụng tại checkout.</p>
                 {!vouchers.length ? <p>Bạn chưa có voucher nào.</p> : vouchers.map(voucher => {
                     const expired = voucher.expiresAt && new Date(voucher.expiresAt) < new Date();
                     const status = String(voucher.status || '').toUpperCase();
@@ -169,6 +169,7 @@ export default function Rewards() {
                     return <article className="rewards-voucher" key={voucher.id}>
                         <div className="rewards-voucher-main">
                             <strong>{voucher.name || 'Voucher CleanMate'}</strong>
+                            {voucher.shared && <span className="rewards-voucher-shared">Áp dụng cho mọi khách hàng</span>}
                             <span>{discount}</span>
                             {voucher.description && <p>{voucher.description}</p>}
                             <small>{voucher.expiresAt ? `Hạn dùng: ${new Date(voucher.expiresAt).toLocaleDateString('vi-VN')}` : 'Không có hạn sử dụng riêng'}</small>

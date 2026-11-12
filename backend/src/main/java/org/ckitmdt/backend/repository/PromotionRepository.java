@@ -9,11 +9,18 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 public interface PromotionRepository extends JpaRepository<Promotion, Long> {
     Optional<Promotion> findByCodeIgnoreCase(String code);
     boolean existsByCodeIgnoreCase(String code);
     List<Promotion> findAllByOrderByCreatedAtDesc();
+
+    @Query("SELECT p FROM Promotion p WHERE UPPER(p.status) = 'ACTIVE' "
+            + "AND p.startAt <= :now AND p.endAt >= :now "
+            + "AND (p.usageLimit IS NULL OR COALESCE(p.usageCount, 0) < p.usageLimit) "
+            + "ORDER BY p.endAt ASC")
+    List<Promotion> findCurrentlyAvailable(@Param("now") LocalDateTime now);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Promotion p WHERE p.id = :id")

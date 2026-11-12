@@ -141,6 +141,17 @@ function ServiceDetail() {
         return () => controller.abort();
     }, [id]);
 
+    useEffect(() => {
+        if (!service || window.location.hash !== '#service-reviews') return undefined;
+        const timeoutId = window.setTimeout(() => {
+            document.getElementById('service-reviews')?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }, 0);
+        return () => window.clearTimeout(timeoutId);
+    }, [service, id]);
+
     if (isLoading) {
         return (
             <div className="detail-page">

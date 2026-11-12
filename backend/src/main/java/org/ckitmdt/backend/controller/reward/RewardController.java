@@ -6,11 +6,13 @@ import org.ckitmdt.backend.entity.RewardAccount;
 import org.ckitmdt.backend.entity.RewardPolicy;
 import org.ckitmdt.backend.entity.RewardTransaction;
 import org.ckitmdt.backend.entity.RewardRedemption;
+import org.ckitmdt.backend.entity.Promotion;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.RewardAccountRepository;
 import org.ckitmdt.backend.repository.RewardPolicyRepository;
 import org.ckitmdt.backend.repository.RewardTransactionRepository;
 import org.ckitmdt.backend.repository.RewardRedemptionRepository;
+import org.ckitmdt.backend.repository.PromotionRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.ckitmdt.backend.service.RewardExpiryService;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/rewards")
@@ -34,6 +39,7 @@ public class RewardController {
     private final RewardTransactionRepository rewardTransactionRepository;
     private final RewardRedemptionRepository rewardRedemptionRepository;
     private final RewardExpiryService rewardExpiryService;
+    private final PromotionRepository promotionRepository;
 
     @GetMapping("/me")
     public ResponseEntity<RewardWalletResponse> getMyWallet(
@@ -88,11 +94,18 @@ public class RewardController {
     ) {
         User user = requireCustomer(authentication);
 
-        List<VoucherResponse> vouchers = rewardRedemptionRepository
-                .findByUser_IdOrderByRedeemedAtDesc(user.getId())
-                .stream()
+        List<RewardRedemption> redemptions = rewardRedemptionRepository
+                .findByUser_IdOrderByRedeemedAtDesc(user.getId());
+        Set<Long> personallyAvailablePromotionIds = new HashSet<>();
+        LocalDateTime now = LocalDateTime.now();
+        List<VoucherResponse> vouchers = new ArrayList<>(redemptions.stream()
                 .map(redemption -> {
                     var promotion = redemption.getPromotion();
+                    if ("AVAILABLE".equalsIgnoreCase(redemption.getStatus())
+                            && (redemption.getExpiresAt() == null
+                            || now.isBefore(redemption.getExpiresAt()))) {
+                        personallyAvailablePromotionIds.add(promotion.getId());
+                    }
 
                     return new VoucherResponse(
                             redemption.getId(),
@@ -109,10 +122,21 @@ public class RewardController {
                             redemption.getExpiresAt(),
                             redemption.getBooking() == null
                                     ? null
-                                    : redemption.getBooking().getId()
+                                    : redemption.getBooking().getId(),
+                            false
                     );
                 })
-                .toList();
+                .toList());
+
+        for (Promotion promotion : promotionRepository.findCurrentlyAvailable(now)) {
+            if (personallyAvailablePromotionIds.contains(promotion.getId())) continue;
+            vouchers.add(new VoucherResponse(
+                    -promotion.getId(), promotion.getCode(), promotion.getName(),
+                    promotion.getDescription(), promotion.getDiscountType(),
+                    promotion.getDiscountValue(), 0, "AVAILABLE", null,
+                    promotion.getEndAt(), null, true
+            ));
+        }
 
         return ResponseEntity.ok(vouchers);
     }
@@ -159,7 +183,7 @@ public class RewardController {
     private RewardPolicyResponse toPolicyResponse(RewardPolicy policy) {
         if (policy == null) {
             return new RewardPolicyResponse(
-                    BigDecimal.valueOf(10000),
+                    BigDecimal.valueOf(1000),
                     1,
                     BigDecimal.valueOf(100),
                     BigDecimal.valueOf(20),
@@ -231,7 +255,8 @@ public class RewardController {
             String status,
             LocalDateTime redeemedAt,
             LocalDateTime expiresAt,
-            Long bookingId
+            Long bookingId,
+            boolean shared
     ) {
     }
 }
