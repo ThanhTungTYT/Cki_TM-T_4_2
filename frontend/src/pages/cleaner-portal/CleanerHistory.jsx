@@ -3,9 +3,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { bookingApi } from '../../services/api';
 import './CleanerWorkspace.css';
 
-const TERMINAL_ASSIGNMENT_STATUSES = [
+const TERMINAL_STATUSES = [
     'COMPLETED',
     'WORK_SUBMITTED',
+    'DECLINED',
+    'REJECTED',
+    'CANCELLED',
+    'EXPIRED'
+];
+
+const CANCELLED_STATUSES = [
     'DECLINED',
     'REJECTED',
     'CANCELLED',
@@ -39,6 +46,37 @@ const STATUS_CONFIG = {
     }
 };
 
+const PAGE_SIZE = 8;
+
+function normalizeStatus(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function getAssignmentStatus(assignment) {
+    const assignmentStatus = normalizeStatus(
+        assignment?.assignmentStatus ||
+        assignment?.status
+    );
+
+    const bookingStatus = normalizeStatus(
+        assignment?.booking?.status
+    );
+
+    // Ưu tiên trạng thái kết thúc của chính phân công.
+    if (TERMINAL_STATUSES.includes(assignmentStatus)) {
+        return assignmentStatus;
+    }
+
+    // Nếu đơn đã bị hủy nhưng phân công chưa có trạng thái kết thúc.
+    if (
+        ['CANCELLED', 'REJECTED'].includes(bookingStatus)
+    ) {
+        return bookingStatus;
+    }
+
+    return assignmentStatus || bookingStatus || 'UNKNOWN';
+}
+
 function formatDateTime(value) {
     if (!value) return '—';
 
@@ -55,11 +93,23 @@ function formatDateTime(value) {
     });
 }
 
-function getStatus(status) {
-    const key = String(status || '').toUpperCase();
+function getDateKey(value) {
+    if (!value) return '';
 
-    return STATUS_CONFIG[key] || {
-        label: status || 'Chưa xác định',
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return '';
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+}
+
+function getStatusConfig(status) {
+    return STATUS_CONFIG[normalizeStatus(status)] || {
+        label: 'Chưa xác định',
         type: 'default'
     };
 }
@@ -81,7 +131,9 @@ function getServiceNames(booking) {
 function getHistoryTime(assignment, booking) {
     return (
         assignment?.completedAt ||
+        assignment?.workSubmittedAt ||
         booking?.completedAt ||
+        assignment?.updatedAt ||
         assignment?.assignedAt ||
         booking?.updatedAt ||
         booking?.createdAt ||
@@ -89,21 +141,76 @@ function getHistoryTime(assignment, booking) {
     );
 }
 
+function isHistoryAssignment(assignment) {
+    const assignmentStatus = normalizeStatus(
+        assignment?.assignmentStatus ||
+        assignment?.status
+    );
+
+    const bookingStatus = normalizeStatus(
+        assignment?.booking?.status
+    );
+
+    return (
+        TERMINAL_STATUSES.includes(assignmentStatus) ||
+        ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(
+            bookingStatus
+        )
+    );
+}
+
 export default function CleanerHistory() {
     const [assignments, setAssignments] = useState([]);
+
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+
     const [error, setError] = useState('');
+
     const [filter, setFilter] = useState('ALL');
     const [search, setSearch] = useState('');
 
-    async function loadHistory(showLoading = true) {
-        if (showLoading) {
-            setLoading(true);
-        } else {
-            setRefreshing(true);
-        }
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
 
+    const [page, setPage] = useState(1);
+
+    // Tải lịch sử lần đầu.
+    useEffect(() => {
+        let active = true;
+
+        const fetchHistory = async () => {
+            try {
+                const rows = await bookingApi.getCleanerAssignments();
+
+                if (!active) return;
+
+                setAssignments(Array.isArray(rows) ? rows : []);
+                setError('');
+            } catch (err) {
+                if (active) {
+                    setError(
+                        err?.message ||
+                        'Không thể tải lịch sử công việc.'
+                    );
+                }
+            } finally {
+                if (active) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        fetchHistory();
+
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    // Làm mới dữ liệu.
+    const loadHistory = async () => {
+        setRefreshing(true);
         setError('');
 
         try {
@@ -112,138 +219,166 @@ export default function CleanerHistory() {
             setAssignments(Array.isArray(rows) ? rows : []);
         } catch (err) {
             setError(
-                err?.message || 'Không thể tải lịch sử công việc.'
+                err?.message ||
+                'Không thể tải lịch sử công việc.'
             );
         } finally {
-            setLoading(false);
             setRefreshing(false);
+            setLoading(false);
         }
-    }
+    };
 
-    useEffect(() => {
-        loadHistory();
+    // Chuẩn hóa danh sách lịch sử.
+    const allHistory = useMemo(() => {
+        return assignments
+            .filter(isHistoryAssignment)
+            .map((assignment) => ({
+                ...assignment,
+                historyStatus: getAssignmentStatus(assignment),
+                booking: assignment?.booking || {}
+            }))
+            .sort((a, b) => {
+                const timeA = new Date(
+                    getHistoryTime(a, a.booking) || 0
+                ).getTime();
 
-        // Không cần giữ trạng thái cập nhật sau khi component unmount.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+                const timeB = new Date(
+                    getHistoryTime(b, b.booking) || 0
+                ).getTime();
 
-    const history = useMemo(() => {
+                return timeB - timeA;
+            });
+    }, [assignments]);
+
+    // Thống kê toàn bộ lịch sử, không phụ thuộc bộ lọc tìm kiếm.
+    const statistics = useMemo(() => {
+        return {
+            total: allHistory.length,
+
+            completed: allHistory.filter(
+                (item) => item.historyStatus === 'COMPLETED'
+            ).length,
+
+            submitted: allHistory.filter(
+                (item) => item.historyStatus === 'WORK_SUBMITTED'
+            ).length,
+
+            cancelled: allHistory.filter((item) =>
+                CANCELLED_STATUSES.includes(item.historyStatus)
+            ).length
+        };
+    }, [allHistory]);
+
+    // Lọc trạng thái, từ khóa và thời gian.
+    const filteredHistory = useMemo(() => {
         const keyword = search.trim().toLowerCase();
 
-        return assignments
-            .filter((assignment) => {
-                const assignmentStatus = String(
-                    assignment?.assignmentStatus || ''
-                ).toUpperCase();
+        return allHistory.filter((assignment) => {
+            const status = assignment.historyStatus;
+            const booking = assignment.booking;
 
-                const bookingStatus = String(
-                    assignment?.booking?.status || ''
-                ).toUpperCase();
+            if (filter === 'COMPLETED' && status !== 'COMPLETED') {
+                return false;
+            }
 
-                return (
-                    TERMINAL_ASSIGNMENT_STATUSES.includes(
-                        assignmentStatus
-                    ) ||
-                    ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(
-                        bookingStatus
-                    )
-                );
-            })
-            .filter((assignment) => {
-                const status = String(
-                    assignment?.assignmentStatus || ''
-                ).toUpperCase();
+            if (
+                filter === 'SUBMITTED' &&
+                status !== 'WORK_SUBMITTED'
+            ) {
+                return false;
+            }
 
-                if (filter === 'ALL') return true;
+            if (
+                filter === 'CANCELLED' &&
+                !CANCELLED_STATUSES.includes(status)
+            ) {
+                return false;
+            }
 
-                if (filter === 'COMPLETED') {
-                    return status === 'COMPLETED';
-                }
+            const historyDate = getDateKey(
+                getHistoryTime(assignment, booking)
+            );
 
-                if (filter === 'SUBMITTED') {
-                    return status === 'WORK_SUBMITTED';
-                }
+            if (dateFrom && (!historyDate || historyDate < dateFrom)) {
+                return false;
+            }
 
-                if (filter === 'CANCELLED') {
-                    return [
-                        'DECLINED',
-                        'REJECTED',
-                        'CANCELLED',
-                        'EXPIRED'
-                    ].includes(status);
-                }
+            if (dateTo && (!historyDate || historyDate > dateTo)) {
+                return false;
+            }
 
-                return true;
-            })
-            .filter((assignment) => {
-                if (!keyword) return true;
-
-                const booking = assignment?.booking || {};
-
+            if (keyword) {
                 const searchableText = [
                     booking.bookingCode,
                     booking.fullAddress,
                     booking.customerName,
+                    booking.receiverName,
                     getServiceNames(booking),
-                    assignment.assignmentId
+                    assignment.assignmentId,
+                    booking.id
                 ]
                     .filter(Boolean)
                     .join(' ')
                     .toLowerCase();
 
-                return searchableText.includes(keyword);
-            })
-            .sort((a, b) => {
-                const timeA = new Date(
-                    getHistoryTime(a, a?.booking) || 0
-                ).getTime();
+                if (!searchableText.includes(keyword)) {
+                    return false;
+                }
+            }
 
-                const timeB = new Date(
-                    getHistoryTime(b, b?.booking) || 0
-                ).getTime();
+            return true;
+        });
+    }, [
+        allHistory,
+        filter,
+        search,
+        dateFrom,
+        dateTo
+    ]);
 
-                return timeB - timeA;
-            });
-    }, [assignments, filter, search]);
+    const totalPages = Math.max(
+        1,
+        Math.ceil(filteredHistory.length / PAGE_SIZE)
+    );
 
-    const statistics = useMemo(() => {
-        return {
-            total: assignments.filter((assignment) =>
-                TERMINAL_ASSIGNMENT_STATUSES.includes(
-                    String(
-                        assignment?.assignmentStatus || ''
-                    ).toUpperCase()
-                )
-            ).length,
+    const currentPage = Math.min(page, totalPages);
 
-            completed: assignments.filter(
-                (assignment) =>
-                    String(
-                        assignment?.assignmentStatus || ''
-                    ).toUpperCase() === 'COMPLETED'
-            ).length,
+    const paginatedHistory = useMemo(() => {
+        const start = (currentPage - 1) * PAGE_SIZE;
 
-            submitted: assignments.filter(
-                (assignment) =>
-                    String(
-                        assignment?.assignmentStatus || ''
-                    ).toUpperCase() === 'WORK_SUBMITTED'
-            ).length,
+        return filteredHistory.slice(
+            start,
+            start + PAGE_SIZE
+        );
+    }, [filteredHistory, currentPage]);
 
-            cancelled: assignments.filter((assignment) =>
-                [
-                    'DECLINED',
-                    'REJECTED',
-                    'CANCELLED',
-                    'EXPIRED'
-                ].includes(
-                    String(
-                        assignment?.assignmentStatus || ''
-                    ).toUpperCase()
-                )
-            ).length
-        };
-    }, [assignments]);
+    const handleFilterChange = (value) => {
+        setFilter(value);
+        setPage(1);
+    };
+
+    const handleSearchChange = (value) => {
+        setSearch(value);
+        setPage(1);
+    };
+
+    const handleDateFromChange = (value) => {
+        setDateFrom(value);
+        setPage(1);
+    };
+
+    const handleDateToChange = (value) => {
+        setDateTo(value);
+        setPage(1);
+    };
+
+    const clearFilters = () => {
+        setFilter('ALL');
+        setSearch('');
+        setDateFrom('');
+        setDateTo('');
+        setPage(1);
+    };
 
     return (
         <section className="cw-page">
@@ -256,20 +391,26 @@ export default function CleanerHistory() {
                     <h1>Lịch sử công việc</h1>
 
                     <p>
-                        Theo dõi các công việc bạn đã thực hiện,
-                        đã gửi kết quả hoặc đã từ chối.
+                        Theo dõi các công việc đã hoàn thành,
+                        đã gửi kết quả hoặc đã kết thúc phân công.
                     </p>
                 </div>
 
                 <button
                     type="button"
                     className="cw-button"
-                    onClick={() => loadHistory(false)}
+                    onClick={loadHistory}
                     disabled={loading || refreshing}
                 >
                     {refreshing ? 'Đang cập nhật...' : 'Làm mới'}
                 </button>
             </header>
+
+            {error && (
+                <div className="cw-alert error" role="alert">
+                    {error}
+                </div>
+            )}
 
             <div className="cw-stats-grid">
                 <article className="cw-stat-card">
@@ -293,144 +434,250 @@ export default function CleanerHistory() {
                 </article>
             </div>
 
-            {error && (
-                <div className="cw-alert error">
-                    {error}
-                </div>
-            )}
-
-            <div className="cw-toolbar">
-                <div className="cw-tabs">
-                    <button
-                        type="button"
-                        className={filter === 'ALL' ? 'active' : ''}
-                        onClick={() => setFilter('ALL')}
-                    >
-                        Tất cả
-                    </button>
-
-                    <button
-                        type="button"
-                        className={filter === 'COMPLETED' ? 'active' : ''}
-                        onClick={() => setFilter('COMPLETED')}
-                    >
-                        Hoàn thành
-                    </button>
-
-                    <button
-                        type="button"
-                        className={filter === 'SUBMITTED' ? 'active' : ''}
-                        onClick={() => setFilter('SUBMITTED')}
-                    >
-                        Đã gửi kết quả
-                    </button>
-
-                    <button
-                        type="button"
-                        className={filter === 'CANCELLED' ? 'active' : ''}
-                        onClick={() => setFilter('CANCELLED')}
-                    >
-                        Từ chối / hủy
-                    </button>
-                </div>
-
-                <span className="cw-muted">
-                    {history.length} kết quả
-                </span>
-            </div>
-
-            <div className="cw-search">
-                <input
-                    type="search"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Tìm theo mã đơn, dịch vụ hoặc địa chỉ..."
-                    aria-label="Tìm kiếm lịch sử công việc"
-                />
-            </div>
-
             <div className="cw-panel cw-history-panel">
+                <div className="cw-toolbar">
+                    <div className="cw-tabs">
+                        <button
+                            type="button"
+                            className={filter === 'ALL' ? 'active' : ''}
+                            onClick={() => handleFilterChange('ALL')}
+                        >
+                            Tất cả
+                        </button>
+
+                        <button
+                            type="button"
+                            className={
+                                filter === 'COMPLETED' ? 'active' : ''
+                            }
+                            onClick={() =>
+                                handleFilterChange('COMPLETED')
+                            }
+                        >
+                            Hoàn thành
+                        </button>
+
+                        <button
+                            type="button"
+                            className={
+                                filter === 'SUBMITTED' ? 'active' : ''
+                            }
+                            onClick={() =>
+                                handleFilterChange('SUBMITTED')
+                            }
+                        >
+                            Đã gửi kết quả
+                        </button>
+
+                        <button
+                            type="button"
+                            className={
+                                filter === 'CANCELLED' ? 'active' : ''
+                            }
+                            onClick={() =>
+                                handleFilterChange('CANCELLED')
+                            }
+                        >
+                            Từ chối / hủy
+                        </button>
+                    </div>
+
+                    <span className="cw-muted">
+                        {filteredHistory.length} kết quả
+                    </span>
+                </div>
+
+                <div className="cw-search">
+                    <input
+                        type="search"
+                        value={search}
+                        onChange={(event) =>
+                            handleSearchChange(event.target.value)
+                        }
+                        placeholder="Tìm theo mã đơn, dịch vụ hoặc địa chỉ..."
+                        aria-label="Tìm kiếm lịch sử công việc"
+                    />
+                </div>
+
+                <div className="cw-toolbar">
+                    <label>
+                        Từ ngày
+                        <input
+                            type="date"
+                            value={dateFrom}
+                            max={dateTo || undefined}
+                            onChange={(event) =>
+                                handleDateFromChange(event.target.value)
+                            }
+                        />
+                    </label>
+
+                    <label>
+                        Đến ngày
+                        <input
+                            type="date"
+                            value={dateTo}
+                            min={dateFrom || undefined}
+                            onChange={(event) =>
+                                handleDateToChange(event.target.value)
+                            }
+                        />
+                    </label>
+
+                    <button
+                        type="button"
+                        className="cw-text-button"
+                        onClick={clearFilters}
+                        disabled={
+                            filter === 'ALL' &&
+                            !search &&
+                            !dateFrom &&
+                            !dateTo
+                        }
+                    >
+                        Xóa bộ lọc
+                    </button>
+                </div>
+
                 {loading ? (
                     <div className="cw-empty">
                         <strong>Đang tải lịch sử...</strong>
                     </div>
-                ) : history.length === 0 ? (
+                ) : filteredHistory.length === 0 ? (
                     <div className="cw-empty">
                         <span>🗂️</span>
 
                         <strong>
-                            {search
+                            {search || dateFrom || dateTo ||
+                            filter !== 'ALL'
                                 ? 'Không tìm thấy công việc phù hợp'
                                 : 'Chưa có lịch sử công việc'}
                         </strong>
 
                         <p>
-                            Các công việc đã kết thúc sẽ xuất hiện tại đây.
+                            Các phân công đã kết thúc sẽ xuất hiện tại đây.
                         </p>
                     </div>
                 ) : (
-                    history.map((assignment) => {
-                        const booking = assignment?.booking || {};
+                    <>
+                        <div className="cw-history-list">
+                            {paginatedHistory.map((assignment) => {
+                                const booking = assignment.booking;
 
-                        const status = String(
-                            assignment?.assignmentStatus ||
-                            booking?.status ||
-                            ''
-                        ).toUpperCase();
+                                const status = assignment.historyStatus;
 
-                        const statusConfig = getStatus(status);
+                                const statusConfig =
+                                    getStatusConfig(status);
 
-                        return (
-                            <article
-                                className="cw-history-row"
-                                key={assignment.assignmentId}
-                            >
-                                <div
-                                    className={`cw-status-dot ${
-                                        status === 'COMPLETED'
-                                            ? 'success'
-                                            : ''
-                                    }`}
-                                />
+                                const historyTime = getHistoryTime(
+                                    assignment,
+                                    booking
+                                );
 
-                                <div className="cw-history-main">
-                                    <strong>
-                                        {getServiceNames(booking)}
-                                    </strong>
-
-                                    <span>
-                                        {booking.fullAddress ||
-                                            'Chưa có địa chỉ'}
-                                    </span>
-
-                                    <small>
-                                        {booking.bookingCode ||
-                                            `Mã đơn #${booking.id || '—'}`}
-                                        {' · '}
-                                        {formatDateTime(
-                                            getHistoryTime(
-                                                assignment,
-                                                booking
-                                            )
-                                        )}
-                                    </small>
-                                </div>
-
-                                <div className="cw-history-side">
-                                    <b
-                                        className={`cw-status-label ${statusConfig.type}`}
+                                return (
+                                    <article
+                                        className="cw-history-row"
+                                        key={
+                                            assignment.assignmentId ||
+                                            assignment.id
+                                        }
                                     >
-                                        {statusConfig.label}
-                                    </b>
+                                        <div
+                                            className={
+                                                `cw-status-dot ${
+                                                    status === 'COMPLETED'
+                                                        ? 'success'
+                                                        : ''
+                                                }`
+                                            }
+                                        />
 
-                                    <span>
-                                        Mã phân công: #
-                                        {assignment.assignmentId}
-                                    </span>
-                                </div>
-                            </article>
-                        );
-                    })
+                                        <div className="cw-history-main">
+                                            <strong>
+                                                {getServiceNames(booking)}
+                                            </strong>
+
+                                            <span>
+                                                {booking.fullAddress ||
+                                                    'Chưa có địa chỉ'}
+                                            </span>
+
+                                            <small>
+                                                {booking.bookingCode ||
+                                                    `Mã đơn #${booking.id || '—'}`}
+                                            </small>
+
+                                            <small>
+                                                Thời gian ghi nhận:{' '}
+                                                {formatDateTime(historyTime)}
+                                            </small>
+
+                                            {booking.scheduledStart && (
+                                                <small>
+                                                    Lịch làm việc:{' '}
+                                                    {formatDateTime(
+                                                        booking.scheduledStart
+                                                    )}
+                                                </small>
+                                            )}
+                                        </div>
+
+                                        <div className="cw-history-side">
+                                            <b
+                                                className={
+                                                    `cw-status-label ${statusConfig.type}`
+                                                }
+                                            >
+                                                {statusConfig.label}
+                                            </b>
+
+                                            <span>
+                                                Phân công: #
+                                                {assignment.assignmentId || '—'}
+                                            </span>
+                                        </div>
+                                    </article>
+                                );
+                            })}
+                        </div>
+
+                        {totalPages > 1 && (
+                            <div className="cw-pagination">
+                                <button
+                                    type="button"
+                                    className="cw-button secondary"
+                                    disabled={currentPage <= 1}
+                                    onClick={() =>
+                                        setPage((previous) =>
+                                            Math.max(1, previous - 1)
+                                        )
+                                    }
+                                >
+                                    Trang trước
+                                </button>
+
+                                <span>
+                                    Trang {currentPage} / {totalPages}
+                                </span>
+
+                                <button
+                                    type="button"
+                                    className="cw-button secondary"
+                                    disabled={currentPage >= totalPages}
+                                    onClick={() =>
+                                        setPage((previous) =>
+                                            Math.min(
+                                                totalPages,
+                                                previous + 1
+                                            )
+                                        )
+                                    }
+                                >
+                                    Trang sau
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </section>

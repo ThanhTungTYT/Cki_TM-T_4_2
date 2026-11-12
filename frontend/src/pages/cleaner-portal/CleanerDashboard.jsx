@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { bookingApi } from '../../services/api';
 
+const INITIAL_NOW = new Date();
+
 function getCleanerName() {
     try {
         const savedUser =
@@ -50,22 +52,65 @@ function formatDateTime(value) {
     });
 }
 
+function formatTime(value) {
+    if (!value) return '--:--';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return '--:--';
+
+    return date.toLocaleTimeString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function getAssignmentStatus(booking) {
+    return String(
+        booking?.cleanerAssignment?.assignmentStatus ||
+        booking?.cleanerAssignment?.status ||
+        booking?.assignmentStatus ||
+        booking?.status ||
+        ''
+    ).toUpperCase();
+}
+
 function getStatusInfo(status) {
     const statusMap = {
         ASSIGNED: {
-            label: 'Đã phân công',
+            label: 'Chờ nhận việc',
             className: 'assigned'
         },
+        PENDING_ACCEPTANCE: {
+            label: 'Chờ nhận việc',
+            className: 'assigned'
+        },
+        ACCEPTED: {
+            label: 'Đã nhận việc',
+            className: 'confirmed'
+        },
+        ON_THE_WAY: {
+            label: 'Đang di chuyển',
+            className: 'in-progress'
+        },
         EN_ROUTE: {
-            label: 'Đang thực hiện',
+            label: 'Đang di chuyển',
             className: 'in-progress'
         },
         IN_PROGRESS: {
             label: 'Đang thực hiện',
             className: 'in-progress'
         },
+        WORK_SUBMITTED: {
+            label: 'Đã nộp kết quả',
+            className: 'pending'
+        },
         PENDING_COMPLETION: {
             label: 'Chờ xác nhận',
+            className: 'pending'
+        },
+        AWAITING_CONFIRMATION: {
+            label: 'Chờ khách xác nhận',
             className: 'pending'
         },
         COMPLETED: {
@@ -76,8 +121,16 @@ function getStatusInfo(status) {
             label: 'Đã hủy',
             className: 'cancelled'
         },
+        DECLINED: {
+            label: 'Đã từ chối',
+            className: 'cancelled'
+        },
         REJECTED: {
             label: 'Bị từ chối',
+            className: 'cancelled'
+        },
+        EXPIRED: {
+            label: 'Đã hết hạn',
             className: 'cancelled'
         }
     };
@@ -89,11 +142,21 @@ function getStatusInfo(status) {
 }
 
 function CleanerDashboard() {
-    const userName = getCleanerName();
+    const userName = useMemo(() => getCleanerName(), []);
 
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [currentTime, setCurrentTime] = useState(INITIAL_NOW);
+
+    const todayKey = getLocalDateKey(currentTime);
+
+    const todayLabel = currentTime.toLocaleDateString('vi-VN', {
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
 
     const fetchBookings = useCallback(async () => {
         const data = await bookingApi.getCleanerBookings();
@@ -107,8 +170,11 @@ function CleanerDashboard() {
         try {
             const data = await fetchBookings();
             setBookings(data);
+            setCurrentTime(new Date());
         } catch (err) {
-            setError(err.message || 'Không thể tải dữ liệu tổng quan.');
+            setError(
+                err.message || 'Không thể tải dữ liệu tổng quan.'
+            );
         } finally {
             setLoading(false);
         }
@@ -119,11 +185,16 @@ function CleanerDashboard() {
 
         fetchBookings()
             .then((data) => {
-                if (active) setBookings(data);
+                if (active) {
+                    setBookings(data);
+                    setCurrentTime(new Date());
+                }
             })
             .catch((err) => {
                 if (active) {
-                    setError(err.message || 'Không thể tải dữ liệu tổng quan.');
+                    setError(
+                        err.message || 'Không thể tải dữ liệu tổng quan.'
+                    );
                 }
             })
             .finally(() => {
@@ -135,68 +206,166 @@ function CleanerDashboard() {
         };
     }, [fetchBookings]);
 
-    const today = new Date();
+    const activeBookings = useMemo(() => {
+        return bookings.filter((booking) => {
+            const status = getAssignmentStatus(booking);
 
-    const todayKey = getLocalDateKey(today);
-
-    const todayLabel = today.toLocaleDateString('vi-VN', {
-        weekday: 'long',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
+            return ![
+                'CANCELLED',
+                'DECLINED',
+                'REJECTED',
+                'EXPIRED'
+            ].includes(status);
+        });
+    }, [bookings]);
 
     const todayBookings = useMemo(() => {
-        return bookings
+        return activeBookings
             .filter((booking) => {
                 return getLocalDateKey(booking.scheduledStart) === todayKey;
             })
             .sort((a, b) => {
-                return new Date(a.scheduledStart) - new Date(b.scheduledStart);
+                return (
+                    new Date(a.scheduledStart).getTime() -
+                    new Date(b.scheduledStart).getTime()
+                );
             });
-    }, [bookings, todayKey]);
+    }, [activeBookings, todayKey]);
 
-    const stats = useMemo(() => {
-        return [
-            {
-                title: 'Công việc hôm nay',
-                value: todayBookings.length,
-                description: 'Theo lịch được phân công',
-                icon: '📋'
-            },
-            {
-                title: 'Đang thực hiện',
-                value: bookings.filter(
-                    (booking) => booking.status === 'IN_PROGRESS'
-                ).length,
-                description: 'Công việc chưa hoàn tất',
-                icon: '🧹'
-            },
-            {
-                title: 'Chờ xác nhận',
-                value: bookings.filter(
-                    (booking) => booking.status === 'PENDING_COMPLETION'
-                ).length,
-                description: 'Đã báo hoàn thành',
-                icon: '⏳'
-            },
-            {
-                title: 'Đã hoàn thành',
-                value: bookings.filter(
-                    (booking) => booking.status === 'COMPLETED'
-                ).length,
-                description: 'Tổng công việc hoàn tất',
-                icon: '✓'
-            }
-        ];
-    }, [bookings, todayBookings.length]);
+    const newBookings = useMemo(() => {
+        return activeBookings.filter((booking) => {
+            return ['ASSIGNED', 'PENDING_ACCEPTANCE'].includes(
+                getAssignmentStatus(booking)
+            );
+        });
+    }, [activeBookings]);
+
+    const inProgressBookings = useMemo(() => {
+        return activeBookings.filter((booking) => {
+            return [
+                'ON_THE_WAY',
+                'EN_ROUTE',
+                'IN_PROGRESS'
+            ].includes(getAssignmentStatus(booking));
+        });
+    }, [activeBookings]);
+
+    const submittedBookings = useMemo(() => {
+        return activeBookings.filter((booking) => {
+            return [
+                'WORK_SUBMITTED',
+                'PENDING_COMPLETION',
+                'AWAITING_CONFIRMATION'
+            ].includes(getAssignmentStatus(booking));
+        });
+    }, [activeBookings]);
+
+    const upcomingBookings = useMemo(() => {
+        return activeBookings
+            .filter((booking) => {
+                const start = new Date(booking.scheduledStart);
+
+                return (
+                    !Number.isNaN(start.getTime()) &&
+                    start.getTime() > currentTime.getTime() &&
+                    getLocalDateKey(booking.scheduledStart) !== todayKey
+                );
+            })
+            .sort((a, b) => {
+                return (
+                    new Date(a.scheduledStart).getTime() -
+                    new Date(b.scheduledStart).getTime()
+                );
+            });
+    }, [activeBookings, currentTime, todayKey]);
+
+    const stats = [
+        {
+            title: 'Việc mới',
+            value: newBookings.length,
+            description: 'Đang chờ bạn phản hồi',
+            icon: '📩',
+            link: '/cleaner/jobs'
+        },
+        {
+            title: 'Công việc hôm nay',
+            value: todayBookings.length,
+            description: 'Theo lịch được phân công',
+            icon: '📋',
+            link: '/cleaner/calendar'
+        },
+        {
+            title: 'Đang thực hiện',
+            value: inProgressBookings.length,
+            description: 'Công việc chưa nộp kết quả',
+            icon: '🧹',
+            link: '/cleaner/jobs'
+        },
+        {
+            title: 'Chờ xác nhận',
+            value: submittedBookings.length,
+            description: 'Đã nộp phần việc',
+            icon: '⏳',
+            link: '/cleaner/history'
+        }
+    ];
+
+    const renderBookingItem = (booking) => {
+        const status = getStatusInfo(getAssignmentStatus(booking));
+
+        return (
+            <div
+                className="cl-today-item"
+                key={
+                    booking.cleanerAssignment?.id ||
+                    booking.assignmentId ||
+                    booking.id
+                }
+            >
+                <div className="cl-today-time">
+                    {formatTime(booking.scheduledStart)}
+                </div>
+
+                <div className="cl-today-content">
+                    <strong>
+                        {booking.customerName || 'Khách hàng'}
+                    </strong>
+
+                    <span>
+                        {booking.items?.length
+                            ? booking.items
+                                .map((item) => item.serviceName)
+                                .filter(Boolean)
+                                .join(', ')
+                            : 'Chưa có thông tin dịch vụ'}
+                    </span>
+
+                    <small>
+                        {booking.fullAddress || 'Chưa có địa chỉ'}
+                    </small>
+
+                    <span
+                        className={`cl-today-status cl-today-status-${status.className}`}
+                    >
+                        {status.label}
+                    </span>
+                </div>
+
+                <span className="cl-today-code">
+                    {booking.bookingCode || `#${booking.id}`}
+                </span>
+            </div>
+        );
+    };
 
     return (
         <div className="cl-page">
             <div className="cl-page-heading">
                 <div>
-                    <h1>Tổng quan</h1>
-                    <p>Theo dõi công việc và lịch làm việc của bạn.</p>
+                    <h1>Tổng quan công việc</h1>
+                    <p>
+                        Theo dõi công việc và lịch làm việc của bạn.
+                    </p>
                 </div>
 
                 <div className="cl-current-date">
@@ -215,10 +384,14 @@ function CleanerDashboard() {
 
                     <p>
                         Chúc bạn có một ngày làm việc hiệu quả.
-                        Hãy kiểm tra lịch và các công việc được phân công nhé.
+                        Hãy kiểm tra các công việc mới và lịch làm việc
+                        của mình nhé.
                     </p>
 
-                    <Link to="/cleaner/jobs" className="cl-primary-button">
+                    <Link
+                        to="/cleaner/jobs"
+                        className="cl-primary-button"
+                    >
                         Xem công việc
                         <span>→</span>
                     </Link>
@@ -238,7 +411,7 @@ function CleanerDashboard() {
                         <p>
                             {loading
                                 ? 'Đang tải số liệu...'
-                                : 'Số liệu từ danh sách công việc được phân công'}
+                                : 'Thống kê phân công của tài khoản Cleaner hiện tại'}
                         </p>
                     </div>
 
@@ -255,7 +428,11 @@ function CleanerDashboard() {
                 {error && (
                     <div className="cl-dashboard-error">
                         <span>{error}</span>
-                        <button type="button" onClick={loadBookings}>
+
+                        <button
+                            type="button"
+                            onClick={loadBookings}
+                        >
                             Thử lại
                         </button>
                     </div>
@@ -263,19 +440,27 @@ function CleanerDashboard() {
 
                 <div className="cl-stat-grid">
                     {stats.map((item, index) => (
-                        <div className="cl-stat-card" key={item.title}>
-                            <div className={`cl-stat-icon cl-stat-icon-${index + 1}`}>
+                        <Link
+                            to={item.link}
+                            className="cl-stat-card"
+                            key={item.title}
+                        >
+                            <div
+                                className={`cl-stat-icon cl-stat-icon-${index + 1}`}
+                            >
                                 {item.icon}
                             </div>
 
                             <div className="cl-stat-info">
                                 <span>{item.title}</span>
+
                                 <strong>
                                     {loading ? '—' : item.value}
                                 </strong>
+
                                 <small>{item.description}</small>
                             </div>
-                        </div>
+                        </Link>
                     ))}
                 </div>
             </section>
@@ -285,12 +470,18 @@ function CleanerDashboard() {
                     <div className="cl-panel-heading">
                         <div>
                             <h2>Lịch làm việc hôm nay</h2>
+
                             <p>
-                                {todayBookings.length} công việc theo lịch hôm nay
+                                {loading
+                                    ? 'Đang tải...'
+                                    : `${todayBookings.length} công việc theo lịch hôm nay`}
                             </p>
                         </div>
 
-                        <Link to="/cleaner/calendar" className="cl-text-link">
+                        <Link
+                            to="/cleaner/calendar"
+                            className="cl-text-link"
+                        >
                             Xem lịch
                         </Link>
                     </div>
@@ -306,64 +497,21 @@ function CleanerDashboard() {
                     ) : todayBookings.length === 0 ? (
                         <div className="cl-empty-state">
                             <div className="cl-empty-icon">📅</div>
-                            <strong>Hôm nay chưa có công việc</strong>
+
+                            <strong>
+                                Hôm nay chưa có công việc
+                            </strong>
+
                             <p>
-                                Các công việc được phân công trong ngày sẽ
-                                xuất hiện tại đây.
+                                Các công việc được phân công trong ngày
+                                sẽ xuất hiện tại đây.
                             </p>
                         </div>
                     ) : (
                         <div className="cl-today-list">
-                            {todayBookings.slice(0, 5).map((booking) => {
-                                const status = getStatusInfo(booking.status);
-
-                                return (
-                                    <div
-                                        className="cl-today-item"
-                                        key={booking.id}
-                                    >
-                                        <div className="cl-today-time">
-                                            {booking.scheduledStart
-                                                ? new Date(
-                                                    booking.scheduledStart
-                                                ).toLocaleTimeString('vi-VN', {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit'
-                                                })
-                                                : '--:--'}
-                                        </div>
-
-                                        <div className="cl-today-content">
-                                            <strong>
-                                                {booking.customerName || 'Khách hàng'}
-                                            </strong>
-
-                                            <span>
-                                                {booking.items?.length
-                                                    ? booking.items
-                                                        .map((item) => item.serviceName)
-                                                        .filter(Boolean)
-                                                        .join(', ')
-                                                    : 'Chưa có thông tin dịch vụ'}
-                                            </span>
-
-                                            <small>
-                                                {booking.fullAddress || 'Chưa có địa chỉ'}
-                                            </small>
-
-                                            <span
-                                                className={`cl-today-status cl-today-status-${status.className}`}
-                                            >
-                                                {status.label}
-                                            </span>
-                                        </div>
-
-                                        <span className="cl-today-code">
-                                            {booking.bookingCode || `#${booking.id}`}
-                                        </span>
-                                    </div>
-                                );
-                            })}
+                            {todayBookings
+                                .slice(0, 5)
+                                .map(renderBookingItem)}
 
                             {todayBookings.length > 5 && (
                                 <Link
@@ -386,51 +534,169 @@ function CleanerDashboard() {
                     </div>
 
                     <div className="cl-shortcut-list">
-                        <Link to="/cleaner/jobs" className="cl-shortcut-item">
+                        <Link
+                            to="/cleaner/jobs"
+                            className="cl-shortcut-item"
+                        >
                             <div className="cl-shortcut-icon">📋</div>
+
                             <div>
                                 <strong>Công việc của tôi</strong>
-                                <span>Xem công việc được phân công</span>
+                                <span>
+                                    Xem, nhận và cập nhật công việc
+                                </span>
                             </div>
+
                             <span className="cl-shortcut-arrow">›</span>
                         </Link>
 
-                        <Link to="/cleaner/calendar" className="cl-shortcut-item">
+                        <Link
+                            to="/cleaner/calendar"
+                            className="cl-shortcut-item"
+                        >
                             <div className="cl-shortcut-icon">🗓️</div>
+
                             <div>
                                 <strong>Lịch làm việc</strong>
-                                <span>Theo dõi lịch làm việc</span>
+                                <span>Theo dõi lịch được phân công</span>
                             </div>
+
                             <span className="cl-shortcut-arrow">›</span>
                         </Link>
 
-                        <Link to="/cleaner/history" className="cl-shortcut-item">
+                        <Link
+                            to="/cleaner/history"
+                            className="cl-shortcut-item"
+                        >
                             <div className="cl-shortcut-icon">🕘</div>
+
                             <div>
                                 <strong>Lịch sử công việc</strong>
                                 <span>Xem các công việc trước đây</span>
                             </div>
+
                             <span className="cl-shortcut-arrow">›</span>
                         </Link>
 
-                        <Link to="/cleaner/profile" className="cl-shortcut-item">
+                        <Link
+                            to="/cleaner/notifications"
+                            className="cl-shortcut-item"
+                        >
+                            <div className="cl-shortcut-icon">🔔</div>
+
+                            <div>
+                                <strong>Thông báo</strong>
+                                <span>Xem phân công và cập nhật mới</span>
+                            </div>
+
+                            <span className="cl-shortcut-arrow">›</span>
+                        </Link>
+
+                        <Link
+                            to="/cleaner/profile"
+                            className="cl-shortcut-item"
+                        >
                             <div className="cl-shortcut-icon">👤</div>
+
                             <div>
                                 <strong>Hồ sơ của tôi</strong>
                                 <span>Thông tin tài khoản cá nhân</span>
                             </div>
+
                             <span className="cl-shortcut-arrow">›</span>
                         </Link>
                     </div>
                 </section>
             </div>
 
+            <section className="cl-panel cl-schedule-panel">
+                <div className="cl-panel-heading">
+                    <div>
+                        <h2>Công việc sắp tới</h2>
+                        <p>
+                            Các công việc sau ngày hôm nay
+                        </p>
+                    </div>
+
+                    <Link
+                        to="/cleaner/calendar"
+                        className="cl-text-link"
+                    >
+                        Xem lịch
+                    </Link>
+                </div>
+
+                {loading ? (
+                    <div className="cl-dashboard-message">
+                        Đang tải công việc...
+                    </div>
+                ) : upcomingBookings.length === 0 ? (
+                    <div className="cl-dashboard-message">
+                        Chưa có công việc sắp tới.
+                    </div>
+                ) : (
+                    <div className="cl-today-list">
+                        {upcomingBookings
+                            .slice(0, 4)
+                            .map((booking) => (
+                                <div
+                                    className="cl-today-item"
+                                    key={
+                                        booking.cleanerAssignment?.id ||
+                                        booking.assignmentId ||
+                                        booking.id
+                                    }
+                                >
+                                    <div className="cl-today-time">
+                                        {formatTime(booking.scheduledStart)}
+                                    </div>
+
+                                    <div className="cl-today-content">
+                                        <strong>
+                                            {booking.customerName || 'Khách hàng'}
+                                        </strong>
+
+                                        <span>
+                                            {booking.items?.length
+                                                ? booking.items
+                                                    .map((item) => item.serviceName)
+                                                    .filter(Boolean)
+                                                    .join(', ')
+                                                : 'Chưa có thông tin dịch vụ'}
+                                        </span>
+
+                                        <small>
+                                            {formatDateTime(booking.scheduledStart)}
+                                        </small>
+
+                                        <span
+                                            className={`cl-today-status cl-today-status-${getStatusInfo(
+                                                getAssignmentStatus(booking)
+                                            ).className}`}
+                                        >
+                                            {getStatusInfo(
+                                                getAssignmentStatus(booking)
+                                            ).label}
+                                        </span>
+                                    </div>
+
+                                    <span className="cl-today-code">
+                                        {booking.bookingCode || `#${booking.id}`}
+                                    </span>
+                                </div>
+                            ))}
+                    </div>
+                )}
+            </section>
+
             <div className="cl-info-note">
                 <span className="cl-info-note-icon">i</span>
+
                 <p>
-                    <strong>Lưu ý:</strong> Số liệu trên trang tổng quan được
-                    lấy từ các đơn hàng đã phân công cho tài khoản Cleaner
-                    hiện tại.
+                    <strong>Lưu ý:</strong> Đây là thông tin công việc
+                    được phân công cho tài khoản Cleaner hiện tại.
+                    Trạng thái nộp kết quả không đồng nghĩa với việc
+                    Booking đã được khách hàng xác nhận hoàn thành.
                 </p>
             </div>
         </div>
