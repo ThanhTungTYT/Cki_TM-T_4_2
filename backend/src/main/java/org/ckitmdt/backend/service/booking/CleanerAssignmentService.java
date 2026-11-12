@@ -16,6 +16,7 @@ import org.ckitmdt.backend.repository.BookingAssignmentRepository;
 import org.ckitmdt.backend.repository.BookingItemRepository;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.BookingStatusHistoryRepository;
+import org.ckitmdt.backend.repository.CleanerWorkLogRepository;
 import org.ckitmdt.backend.repository.EmployeeRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
@@ -44,6 +45,7 @@ public class CleanerAssignmentService {
     private final BookingStateEngine bookingStateEngine;
     private final AdminNotificationRepository adminNotificationRepository;
     private final BookingItemRepository bookingItemRepository;
+    private final CleanerWorkLogRepository cleanerWorkLogRepository;
 
     /**
      * Cleaner thực hiện hành động trên một Assignment cụ thể.
@@ -207,7 +209,25 @@ public class CleanerAssignmentService {
             );
         }
 
-        // 8. Kiểm tra Booking có cho phép hành động không
+        // 8. SUBMIT_COMPLETION chỉ được phép khi Cleaner đã lưu FINAL_REPORT.
+        // Kiểm tra ở Backend để không thể bỏ qua bước báo cáo bằng cách gọi API trực tiếp.
+        if ("SUBMIT_COMPLETION".equals(normalizedAction)) {
+            boolean hasFinalReport = cleanerWorkLogRepository
+                    .findByAssignment_IdOrderByCreatedAtDesc(assignmentId)
+                    .stream()
+                    .anyMatch(workLog ->
+                            "FINAL_REPORT".equalsIgnoreCase(workLog.getLogType())
+                    );
+
+            if (!hasFinalReport) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Bạn phải gửi báo cáo tổng kết trước khi nộp kết quả công việc."
+                );
+            }
+        }
+
+        // 9. Kiểm tra Booking có cho phép hành động không
         validateBookingStatus(
                 currentBookingStatus,
                 normalizedAction
@@ -215,12 +235,12 @@ public class CleanerAssignmentService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 9. Nếu bắt đầu công việc, phải kiểm tra đủ nhân viên đã nhận việc
+        // 10. Nếu bắt đầu công việc, phải kiểm tra đủ nhân viên đã nhận việc
         if ("START_JOB".equals(normalizedAction)) {
             validateEnoughAcceptedEmployees(booking);
         }
 
-        // 10. Xác định trạng thái Assignment tiếp theo
+        // 11. Xác định trạng thái Assignment tiếp theo
         String nextAssignmentStatus = determineNextAssignmentStatus(
                 currentAssignmentStatus,
                 normalizedAction
@@ -230,7 +250,7 @@ public class CleanerAssignmentService {
 
         assignment.setStatus(nextAssignmentStatus);
 
-        // 11. Cập nhật thời gian và ghi chú
+        // 12. Cập nhật thời gian và ghi chú
         switch (normalizedAction) {
 
             case "ACCEPT" -> {

@@ -2,11 +2,13 @@
 package org.ckitmdt.backend.service.booking;
 
 import lombok.RequiredArgsConstructor;
+import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.BookingAssignment;
 import org.ckitmdt.backend.entity.CleanerWorkLog;
 import org.ckitmdt.backend.entity.Employee;
 import org.ckitmdt.backend.entity.User;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.ckitmdt.backend.repository.BookingAssignmentRepository;
 import org.ckitmdt.backend.repository.CleanerWorkLogRepository;
 import org.ckitmdt.backend.repository.EmployeeRepository;
@@ -15,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,9 +33,11 @@ public class CleanerWorkLogService {
     private final BookingAssignmentRepository assignmentRepository;
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
+    private final AdminNotificationRepository adminNotificationRepository;
+
 
     private static final List<String> LOG_TYPES =
-            List.of("PROGRESS", "INCIDENT");
+            List.of("PROGRESS", "INCIDENT", "FINAL_REPORT");
 
     private static final List<String> INCIDENT_SEVERITIES =
             List.of("LOW", "MEDIUM", "HIGH", "CRITICAL");
@@ -48,7 +53,8 @@ public class CleanerWorkLogService {
             );
 
     /**
-     * Cleaner tạo nhật ký tiến độ hoặc báo cáo sự cố.
+     * Cleaner tạo nhật ký tiến độ, báo cáo sự cố
+     * hoặc báo cáo tổng kết.
      */
     @Transactional
     public Map<String, Object> createLog(
@@ -93,15 +99,45 @@ public class CleanerWorkLogService {
             );
         }
 
-        String logType = normalize(text(
-                body.containsKey("logType") ? body.get("logType") : body.get("type")
-        ));
+        // Hỗ trợ cả tên trường logType và type
+        // để tương thích với payload CleanerJobs hiện tại.
+        String rawLogType = text(body.get("logType"));
+
+        if (rawLogType.isBlank()) {
+            rawLogType = text(body.get("type"));
+        }
+
+        String logType = normalize(rawLogType);
 
         if (!LOG_TYPES.contains(logType)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Loại nhật ký chỉ được là PROGRESS hoặc INCIDENT."
+                    "Loại nhật ký chỉ được là PROGRESS, INCIDENT hoặc FINAL_REPORT."
             );
+        }
+
+        // Báo cáo tổng kết chỉ được gửi khi đang thực hiện công việc.
+        if ("FINAL_REPORT".equals(logType)) {
+            if (!"IN_PROGRESS".equals(assignmentStatus)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Chỉ có thể nộp báo cáo tổng kết khi công việc đang được thực hiện."
+                );
+            }
+
+            boolean alreadySubmitted = workLogRepository
+                    .findByAssignment_IdOrderByCreatedAtDesc(assignmentId)
+                    .stream()
+                    .anyMatch(log ->
+                            "FINAL_REPORT".equalsIgnoreCase(log.getLogType())
+                    );
+
+            if (alreadySubmitted) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Bạn đã nộp báo cáo tổng kết cho công việc này."
+                );
+            }
         }
 
         String note = text(body.get("note"));
@@ -175,6 +211,35 @@ public class CleanerWorkLogService {
                 .build();
 
         CleanerWorkLog saved = workLogRepository.save(workLog);
+
+        // Gửi thông báo đến đúng Provider của Assignment.
+        if ("FINAL_REPORT".equals(logType)) {
+            User providerUser = assignment.getPartner().getUser();
+
+            String bookingCode = booking.getBookingCode() == null
+                    ? "#" + booking.getId()
+                    : booking.getBookingCode();
+
+            String cleanerName = cleaner.getFullName() == null
+                    ? "Cleaner"
+                    : cleaner.getFullName();
+
+            adminNotificationRepository.save(
+                    AdminNotification.builder()
+                            .recipient(providerUser)
+                            .type("CLEANER_FINAL_REPORT_SUBMITTED")
+                            .title("Cleaner đã nộp báo cáo kết quả")
+                            .message(
+                                    cleanerName
+                                            + " đã nộp báo cáo tổng kết cho đơn "
+                                            + bookingCode
+                                            + ". Vui lòng mở đơn để xem nội dung và ảnh minh chứng."
+                            )
+                            .referenceType("BOOKING")
+                            .referenceId(booking.getId())
+                            .build()
+            );
+        }
 
         return toResponse(saved);
     }
@@ -389,7 +454,6 @@ public class CleanerWorkLogService {
         result.put("cleanerId", log.getCleaner().getId());
         result.put("cleanerName", log.getCleaner().getFullName());
         result.put("logType", log.getLogType());
-        result.put("type", log.getLogType());
         result.put("note", log.getNote());
         result.put("imageUrls", imageUrls);
         result.put("createdAt", log.getCreatedAt());

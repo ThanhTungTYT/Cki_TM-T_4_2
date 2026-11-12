@@ -6,31 +6,20 @@ import './CleanerJobs.css';
 const STATUS_CONFIG = {
     ASSIGNED: { label: 'Chờ nhận việc', type: 'assigned' },
     ACCEPTED: { label: 'Đã nhận việc', type: 'confirmed' },
+    ON_THE_WAY: { label: 'Đang di chuyển', type: 'progress' },
     EN_ROUTE: { label: 'Đang di chuyển', type: 'progress' },
     IN_PROGRESS: { label: 'Đang thực hiện', type: 'progress' },
-    WORK_SUBMITTED: { label: 'Đã gửi kết quả', type: 'waiting' },
-    PENDING_COMPLETION: { label: 'Chờ nghiệm thu', type: 'waiting' },
-    COMPLETED: { label: 'Hoàn thành', type: 'completed' },
+    WORK_SUBMITTED: { label: 'Đã gửi kết quả', type: 'completed' },
     DECLINED: { label: 'Đã từ chối', type: 'cancelled' },
-    CANCELLED: { label: 'Đã hủy', type: 'cancelled' },
-    REJECTED: { label: 'Bị từ chối', type: 'cancelled' },
-    EXPIRED: { label: 'Hết hạn', type: 'cancelled' }
+    EXPIRED: { label: 'Đã hết hạn', type: 'cancelled' },
+    CANCELLED: { label: 'Đã hủy', type: 'cancelled' }
 };
 
-const FILTERS = [
-    { value: 'ALL', label: 'Tất cả' },
-    { value: 'UPCOMING', label: 'Sắp thực hiện' },
-    { value: 'IN_PROGRESS', label: 'Đang thực hiện' },
-    { value: 'COMPLETED', label: 'Hoàn thành' },
-    { value: 'CANCELLED', label: 'Đã hủy' }
-];
-
 const INCIDENT_CATEGORIES = [
+    { value: 'CUSTOMER_REQUEST', label: 'Yêu cầu từ khách hàng' },
     { value: 'PROPERTY_DAMAGE', label: 'Hư hỏng tài sản' },
-    { value: 'MISSING_EQUIPMENT', label: 'Thiếu dụng cụ' },
     { value: 'SAFETY', label: 'Vấn đề an toàn' },
-    { value: 'CUSTOMER_ISSUE', label: 'Vấn đề với khách hàng' },
-    { value: 'SERVICE_PROBLEM', label: 'Vấn đề dịch vụ' },
+    { value: 'EQUIPMENT', label: 'Thiết bị / dụng cụ' },
     { value: 'OTHER', label: 'Khác' }
 ];
 
@@ -48,84 +37,52 @@ const SEVERITY_LABELS = {
     CRITICAL: 'Nghiêm trọng'
 };
 
-const CATEGORY_LABELS = Object.fromEntries(
-    INCIDENT_CATEGORIES.map((item) => [item.value, item.label])
-);
+const CATEGORY_LABELS = {
+    CUSTOMER_REQUEST: 'Yêu cầu từ khách hàng',
+    PROPERTY_DAMAGE: 'Hư hỏng tài sản',
+    SAFETY: 'Vấn đề an toàn',
+    EQUIPMENT: 'Thiết bị / dụng cụ',
+    OTHER: 'Khác'
+};
 
-// Nhận diện Assignment đã gửi báo cáo không thể thực hiện.
+function formatDate(value) {
+    if (!value) return 'Chưa cập nhật';
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return String(value);
+
+    return date.toLocaleString('vi-VN', {
+        dateStyle: 'short',
+        timeStyle: 'short'
+    });
+}
+
+function formatCurrency(value) {
+    const amount = Number(value);
+
+    if (!Number.isFinite(amount)) return 'Chưa cập nhật';
+
+    return amount.toLocaleString('vi-VN') + 'đ';
+}
+
+function getStatus(status) {
+    return STATUS_CONFIG[String(status || '').toUpperCase()] || {
+        label: status || 'Chưa xác định',
+        type: 'assigned'
+    };
+}
+
 function hasReportedUnable(assignment) {
     return String(assignment?.assignmentNote || '').includes(
         'BÁO KHÔNG THỂ THỰC HIỆN ['
     );
 }
 
-function formatDate(value) {
-    if (!value) return 'Chưa có thời gian';
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) return '—';
-
-    return date.toLocaleString('vi-VN', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-function getStatus(status) {
-    const key = String(status || '').toUpperCase();
-
-    return STATUS_CONFIG[key] || {
-        label: status || 'Chưa xác định',
-        type: 'pending'
-    };
-}
-
-function getFilterGroup(status) {
-    const key = String(status || '').toUpperCase();
-
-    if (key === 'COMPLETED') return 'COMPLETED';
-
-    if (
-        ['CANCELLED', 'REJECTED', 'EXPIRED', 'DECLINED'].includes(key)
-    ) {
-        return 'CANCELLED';
-    }
-
-    if (
-        [
-            'ACCEPTED',
-            'EN_ROUTE',
-            'IN_PROGRESS',
-            'WORK_SUBMITTED',
-            'PENDING_COMPLETION'
-        ].includes(key)
-    ) {
-        return 'IN_PROGRESS';
-    }
-
-    return 'UPCOMING';
-}
-
-function getServiceNames(booking) {
-    const items = Array.isArray(booking?.items)
-        ? booking.items
-        : [];
-
-    const names = items
-        .map((item) => item?.serviceName)
-        .filter(Boolean);
-
-    return names.length
-        ? [...new Set(names)].join(', ')
-        : 'Chưa có thông tin dịch vụ';
-}
-
 function getImageUrls(log) {
-    if (Array.isArray(log?.imageUrls)) return log.imageUrls;
+    if (Array.isArray(log?.imageUrls)) {
+        return log.imageUrls.filter(Boolean);
+    }
 
     if (typeof log?.imageUrls === 'string') {
         return log.imageUrls
@@ -187,27 +144,37 @@ function CleanerJobs() {
     }, [fetchBookings]);
 
     useEffect(() => {
-        let cancelled = false;
+        loadBookings();
+    }, [loadBookings]);
 
-        fetchBookings()
-            .then((data) => {
-                if (!cancelled) setBookings(data);
-            })
-            .catch((err) => {
-                if (!cancelled) {
-                    setError(
-                        err?.message || 'Không thể tải danh sách công việc.'
-                    );
-                }
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
+    const filteredBookings = useMemo(() => {
+        const keyword = search.trim().toLowerCase();
 
-        return () => {
-            cancelled = true;
-        };
-    }, [fetchBookings]);
+        return bookings.filter((booking) => {
+            const assignment = booking.cleanerAssignment || {};
+
+            const status = String(
+                assignment.assignmentStatus || booking.status || ''
+            ).toUpperCase();
+
+            const matchesFilter =
+                filter === 'ALL' ||
+                (filter === 'PENDING' &&
+                    ['ASSIGNED', 'ACCEPTED'].includes(status)) ||
+                (filter === 'IN_PROGRESS' &&
+                    ['IN_PROGRESS', 'ON_THE_WAY', 'EN_ROUTE'].includes(status)) ||
+                (filter === 'COMPLETED' &&
+                    status === 'WORK_SUBMITTED');
+
+            const matchesSearch =
+                !keyword ||
+                String(booking.bookingCode || '').toLowerCase().includes(keyword) ||
+                String(booking.customerName || '').toLowerCase().includes(keyword) ||
+                String(booking.address || '').toLowerCase().includes(keyword);
+
+            return matchesFilter && matchesSearch;
+        });
+    }, [bookings, filter, search]);
 
     function setLogMessage(assignmentId, type, message) {
         setLogFeedback((prev) => ({
@@ -239,7 +206,7 @@ function CleanerJobs() {
             setLogMessage(
                 assignmentId,
                 'error',
-                'Mỗi nhật ký chỉ được gửi tối đa 5 ảnh.'
+                'Mỗi báo cáo chỉ được gửi tối đa 5 ảnh.'
             );
             event.target.value = '';
             return;
@@ -263,7 +230,7 @@ function CleanerJobs() {
             setLogMessage(
                 assignmentId,
                 'error',
-                'Ảnh phải có định dạng JPG, PNG hoặc WEBP và không vượt quá 5 MB.'
+                'Ảnh phải là JPG, PNG hoặc WEBP và không vượt quá 5MB mỗi ảnh.'
             );
         }
 
@@ -328,11 +295,37 @@ function CleanerJobs() {
         const type = logType[assignmentId] || 'PROGRESS';
         const images = selectedImages[assignmentId] || [];
 
+        const existingLogs = workLogs[assignmentId] || [];
+
+        const hasFinalReport = existingLogs.some(
+            (log) =>
+                String(log.logType || log.type || '').toUpperCase() ===
+                'FINAL_REPORT'
+        );
+
+        if (type === 'FINAL_REPORT' && hasFinalReport) {
+            setLogMessage(
+                assignmentId,
+                'error',
+                'Bạn đã gửi báo cáo tổng kết cho công việc này.'
+            );
+            return;
+        }
+
         if (!note) {
             setLogMessage(
                 assignmentId,
                 'error',
-                'Vui lòng nhập nội dung nhật ký.'
+                'Vui lòng nhập nội dung báo cáo.'
+            );
+            return;
+        }
+
+        if (type === 'FINAL_REPORT' && note.length < 10) {
+            setLogMessage(
+                assignmentId,
+                'error',
+                'Báo cáo tổng kết cần có ít nhất 10 ký tự.'
             );
             return;
         }
@@ -341,7 +334,7 @@ function CleanerJobs() {
             setLogMessage(
                 assignmentId,
                 'error',
-                'Mỗi nhật ký chỉ được gửi tối đa 5 ảnh.'
+                'Mỗi báo cáo chỉ được gửi tối đa 5 ảnh.'
             );
             return;
         }
@@ -420,7 +413,9 @@ function CleanerJobs() {
                 'success',
                 type === 'INCIDENT'
                     ? 'Đã gửi báo cáo sự cố. Nhà cung cấp cần tiếp nhận và xử lý.'
-                    : 'Đã gửi nhật ký tiến độ.'
+                    : type === 'FINAL_REPORT'
+                        ? 'Đã gửi báo cáo tổng kết và ảnh minh chứng cho Provider.'
+                        : 'Đã gửi nhật ký tiến độ.'
             );
 
             await loadWorkLogs(assignmentId);
@@ -456,7 +451,6 @@ function CleanerJobs() {
             return;
         }
 
-        // Không cho phép bắt đầu nếu đã báo không thể thực hiện.
         if (
             action === 'START_JOB' &&
             hasReportedUnable(assignment)
@@ -470,6 +464,28 @@ function CleanerJobs() {
                 }
             }));
             return;
+        }
+
+        if (action === 'SUBMIT_COMPLETION') {
+            const logs = workLogs[assignmentId] || [];
+
+            const hasFinalReport = logs.some(
+                (log) =>
+                    String(log.logType || log.type || '').toUpperCase() ===
+                    'FINAL_REPORT'
+            );
+
+            if (!hasFinalReport) {
+                setActionFeedback((prev) => ({
+                    ...prev,
+                    [booking.id]: {
+                        type: 'error',
+                        message:
+                            'Vui lòng gửi báo cáo tổng kết trước khi nộp kết quả công việc.'
+                    }
+                }));
+                return;
+            }
         }
 
         const messages = {
@@ -544,7 +560,7 @@ function CleanerJobs() {
                 ...prev,
                 [booking.id]: {
                     type: 'success',
-                    message: 'Đã gửi yêu cầu từ chối phân công.'
+                    message: 'Đã từ chối công việc.'
                 }
             }));
 
@@ -554,11 +570,9 @@ function CleanerJobs() {
                 ...prev,
                 [booking.id]: {
                     type: 'error',
-                    message: err?.message || 'Không thể từ chối phân công.'
+                    message: err?.message || 'Không thể từ chối công việc.'
                 }
             }));
-
-            await loadBookings();
         } finally {
             setProcessingId(null);
         }
@@ -571,38 +585,27 @@ function CleanerJobs() {
         const assignmentId =
             assignment?.assignmentId || assignment?.id;
 
-        if (!assignmentId) {
-            setActionFeedback((prev) => ({
-                ...prev,
-                [booking.id]: {
-                    type: 'error',
-                    message: 'Không tìm thấy phân công của bạn.'
-                }
-            }));
-            return;
-        }
+        if (!assignmentId) return;
 
-        // Chặn gửi báo cáo lần thứ hai.
         if (hasReportedUnable(assignment)) {
             setActionFeedback((prev) => ({
                 ...prev,
                 [booking.id]: {
                     type: 'error',
-                    message:
-                        'Bạn đã gửi báo cáo trước đó. Vui lòng chờ Provider/Staff điều phối nhân viên thay thế.'
+                    message: 'Bạn đã gửi báo cáo không thể thực hiện công việc này.'
                 }
             }));
             return;
         }
 
         const note = window.prompt(
-            'Nhập lý do bạn không thể thực hiện công việc. Nhà cung cấp sẽ nhận được thông báo để điều phối nhân viên thay thế:'
+            'Nhập lý do bạn không thể tiếp tục thực hiện công việc:'
         );
 
         if (note === null) return;
 
         if (!note.trim()) {
-            window.alert('Vui lòng nhập lý do không thể thực hiện công việc.');
+            window.alert('Vui lòng nhập lý do.');
             return;
         }
 
@@ -620,7 +623,7 @@ function CleanerJobs() {
                 [booking.id]: {
                     type: 'success',
                     message:
-                        'Đã gửi thông báo đến nhà cung cấp. Vui lòng chờ điều phối nhân viên thay thế.'
+                        'Đã gửi báo cáo. Vui lòng chờ Provider/Staff điều phối.'
                 }
             }));
 
@@ -630,72 +633,22 @@ function CleanerJobs() {
                 ...prev,
                 [booking.id]: {
                     type: 'error',
-                    message: err?.message || 'Không thể gửi thông báo.'
+                    message:
+                        err?.message || 'Không thể gửi báo cáo.'
                 }
             }));
-
-            await loadBookings();
         } finally {
             setProcessingId(null);
         }
     }
 
-    const stats = useMemo(() => ({
-        total: bookings.length,
-        upcoming: bookings.filter((booking) =>
-            getFilterGroup(
-                booking.cleanerAssignment?.assignmentStatus
-            ) === 'UPCOMING'
-        ).length,
-        inProgress: bookings.filter((booking) =>
-            getFilterGroup(
-                booking.cleanerAssignment?.assignmentStatus
-            ) === 'IN_PROGRESS'
-        ).length,
-        completed: bookings.filter((booking) =>
-            getFilterGroup(
-                booking.cleanerAssignment?.assignmentStatus
-            ) === 'COMPLETED'
-        ).length
-    }), [bookings]);
-
-    const filteredBookings = useMemo(() => {
-        const keyword = search.trim().toLowerCase();
-
-        return bookings.filter((booking) => {
-            const status = String(
-                booking.cleanerAssignment?.assignmentStatus ||
-                booking.status ||
-                ''
-            ).toUpperCase();
-
-            const matchFilter =
-                filter === 'ALL' ||
-                getFilterGroup(status) === filter;
-
-            const searchableText = [
-                booking.bookingCode,
-                booking.customerName,
-                booking.customerPhone,
-                booking.fullAddress,
-                getServiceNames(booking)
-            ]
-                .filter(Boolean)
-                .join(' ')
-                .toLowerCase();
-
-            return matchFilter &&
-                (!keyword || searchableText.includes(keyword));
-        });
-    }, [bookings, filter, search]);
-
     return (
-        <div className="cj-page">
-            <div className="cj-header">
+        <div className="cleaner-jobs-page">
+            <div className="cj-page-heading">
                 <div>
-                    <h1>Công việc của tôi</h1>
+                    <h2>Công việc của tôi</h2>
                     <p>
-                        Danh sách công việc được nhà cung cấp phân công cho bạn.
+                        Theo dõi phân công, cập nhật tiến độ và gửi kết quả công việc.
                     </p>
                 </div>
 
@@ -705,88 +658,39 @@ function CleanerJobs() {
                     onClick={loadBookings}
                     disabled={loading}
                 >
-                    ↻ Làm mới
+                    {loading ? 'Đang tải...' : 'Làm mới'}
                 </button>
             </div>
 
-            <div className="cj-stats">
-                <div className="cj-stat-card">
-                    <div className="cj-stat-icon cj-icon-blue">▤</div>
-                    <div>
-                        <span>Tổng công việc</span>
-                        <strong>{stats.total}</strong>
-                    </div>
-                </div>
-
-                <div className="cj-stat-card">
-                    <div className="cj-stat-icon cj-icon-orange">◷</div>
-                    <div>
-                        <span>Sắp thực hiện</span>
-                        <strong>{stats.upcoming}</strong>
-                    </div>
-                </div>
-
-                <div className="cj-stat-card">
-                    <div className="cj-stat-icon cj-icon-green">✓</div>
-                    <div>
-                        <span>Đang thực hiện</span>
-                        <strong>{stats.inProgress}</strong>
-                    </div>
-                </div>
-
-                <div className="cj-stat-card">
-                    <div className="cj-stat-icon cj-icon-purple">★</div>
-                    <div>
-                        <span>Hoàn thành</span>
-                        <strong>{stats.completed}</strong>
-                    </div>
-                </div>
-            </div>
-
             <div className="cj-toolbar">
-                <div className="cj-search">
-                    <span>⌕</span>
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Tìm mã đơn, khách hàng, địa chỉ..."
-                    />
-                </div>
+                <input
+                    type="text"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Tìm theo mã đơn, khách hàng hoặc địa chỉ..."
+                />
 
-                <div className="cj-filters">
-                    {FILTERS.map((item) => (
-                        <button
-                            type="button"
-                            key={item.value}
-                            className={
-                                filter === item.value
-                                    ? 'active'
-                                    : ''
-                            }
-                            onClick={() => setFilter(item.value)}
-                        >
-                            {item.label}
-                        </button>
-                    ))}
-                </div>
+                <select
+                    value={filter}
+                    onChange={(event) => setFilter(event.target.value)}
+                >
+                    <option value="ALL">Tất cả công việc</option>
+                    <option value="PENDING">Chờ nhận / Đã nhận</option>
+                    <option value="IN_PROGRESS">Đang thực hiện</option>
+                    <option value="COMPLETED">Đã gửi kết quả</option>
+                </select>
             </div>
 
             {loading && (
                 <div className="cj-state">
-                    <div className="cj-spinner" />
                     <p>Đang tải danh sách công việc...</p>
                 </div>
             )}
 
             {!loading && error && (
-                <div className="cj-state cj-state-error">
-                    <h3>Không thể tải công việc</h3>
+                <div className="cj-state error">
                     <p>{error}</p>
-                    <button
-                        type="button"
-                        onClick={loadBookings}
-                    >
+                    <button type="button" onClick={loadBookings}>
                         Thử lại
                     </button>
                 </div>
@@ -840,6 +744,14 @@ function CleanerJobs() {
                             'IN_PROGRESS'
                         ].includes(assignmentStatus);
 
+                        const hasFinalReport = (
+                            workLogs[assignmentId] || []
+                        ).some(
+                            (log) =>
+                                String(log.logType || log.type || '').toUpperCase() ===
+                                'FINAL_REPORT'
+                        );
+
                         return (
                             <article
                                 className="cj-booking-card"
@@ -880,34 +792,26 @@ function CleanerJobs() {
                                             Địa chỉ làm việc
                                         </span>
                                         <strong>
-                                            {booking.fullAddress || 'Chưa có địa chỉ'}
+                                            {booking.address ||
+                                                booking.serviceAddress ||
+                                                'Chưa cập nhật'}
                                         </strong>
                                     </div>
 
                                     <div>
                                         <span className="cj-info-label">
-                                            Dịch vụ
-                                        </span>
-                                        <strong>{getServiceNames(booking)}</strong>
-                                    </div>
-
-                                    <div>
-                                        <span className="cj-info-label">
-                                            Thời lượng
+                                            Giá trị đơn hàng
                                         </span>
                                         <strong>
-                                            {booking.durationMinutes
-                                                ? `${booking.durationMinutes} phút`
-                                                : 'Theo lịch phân công'}
+                                            {formatCurrency(
+                                                booking.totalAmount ||
+                                                booking.totalPrice
+                                            )}
                                         </strong>
                                     </div>
                                 </div>
 
-                                <div className="cj-card-bottom">
-                                    <span>
-                                        {booking.items?.length || 0} hạng mục dịch vụ
-                                    </span>
-
+                                <div className="cj-card-toggle">
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -995,18 +899,28 @@ function CleanerJobs() {
                                     )}
 
                                     {assignmentStatus === 'IN_PROGRESS' && (
-                                        <button
-                                            type="button"
-                                            disabled={busy}
-                                            onClick={() =>
-                                                handleBookingAction(
-                                                    booking,
-                                                    'SUBMIT_COMPLETION'
-                                                )
-                                            }
-                                        >
-                                            Gửi kết quả hoàn thành
-                                        </button>
+                                        hasFinalReport ? (
+                                            <button
+                                                type="button"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                    handleBookingAction(
+                                                        booking,
+                                                        'SUBMIT_COMPLETION'
+                                                    )
+                                                }
+                                            >
+                                                {busy
+                                                    ? 'Đang gửi...'
+                                                    : 'Gửi kết quả hoàn thành'}
+                                            </button>
+                                        ) : (
+                                            <p className="cj-action-feedback">
+                                                Hãy mở thông tin công việc, gửi báo cáo
+                                                tổng kết và ảnh minh chứng trước khi
+                                                nộp kết quả.
+                                            </p>
+                                        )
                                     )}
                                 </div>
 
@@ -1062,13 +976,18 @@ function CleanerJobs() {
 
                                         {canWriteLog && (
                                             <div className="cj-work-log-form">
-                                                <h4>Cập nhật tiến độ công việc</h4>
+                                                <h4>
+                                                    {assignmentStatus === 'IN_PROGRESS'
+                                                        ? 'Nhật ký và báo cáo công việc'
+                                                        : 'Cập nhật tiến độ công việc'}
+                                                </h4>
 
                                                 <div className="cj-log-type">
                                                     <button
                                                         type="button"
                                                         className={
-                                                            (logType[assignmentId] || 'PROGRESS') === 'PROGRESS'
+                                                            (logType[assignmentId] ||
+                                                                'PROGRESS') === 'PROGRESS'
                                                                 ? 'active'
                                                                 : ''
                                                         }
@@ -1085,7 +1004,8 @@ function CleanerJobs() {
                                                     <button
                                                         type="button"
                                                         className={
-                                                            logType[assignmentId] === 'INCIDENT'
+                                                            logType[assignmentId] ===
+                                                            'INCIDENT'
                                                                 ? 'active'
                                                                 : ''
                                                         }
@@ -1098,57 +1018,111 @@ function CleanerJobs() {
                                                     >
                                                         Báo cáo sự cố
                                                     </button>
+
+                                                    {assignmentStatus === 'IN_PROGRESS' && (
+                                                        <button
+                                                            type="button"
+                                                            className={
+                                                                logType[assignmentId] ===
+                                                                'FINAL_REPORT'
+                                                                    ? 'active'
+                                                                    : ''
+                                                            }
+                                                            disabled={hasFinalReport}
+                                                            onClick={() =>
+                                                                setLogType((prev) => ({
+                                                                    ...prev,
+                                                                    [assignmentId]: 'FINAL_REPORT'
+                                                                }))
+                                                            }
+                                                        >
+                                                            Báo cáo tổng kết
+                                                        </button>
+                                                    )}
                                                 </div>
+
+                                                {logType[assignmentId] === 'FINAL_REPORT' && (
+                                                    <p className="cj-log-hint">
+                                                        Báo cáo tổng kết sẽ được gửi cho
+                                                        Provider kèm ảnh minh chứng. Sau
+                                                        khi gửi, bạn mới có thể nộp kết
+                                                        quả công việc.
+                                                    </p>
+                                                )}
+
+                                                {hasFinalReport &&
+                                                    assignmentStatus === 'IN_PROGRESS' && (
+                                                        <p className="cj-log-feedback success">
+                                                            Bạn đã gửi báo cáo tổng kết.
+                                                            Có thể gửi kết quả hoàn thành.
+                                                        </p>
+                                                    )}
 
                                                 {logType[assignmentId] === 'INCIDENT' && (
                                                     <div className="cj-incident-fields">
                                                         <label>
                                                             Loại sự cố
                                                             <select
-                                                                value={incidentCategory[assignmentId] || ''}
+                                                                value={
+                                                                    incidentCategory[assignmentId] ||
+                                                                    ''
+                                                                }
                                                                 onChange={(event) =>
-                                                                    setIncidentCategory((prev) => ({
-                                                                        ...prev,
-                                                                        [assignmentId]: event.target.value
-                                                                    }))
+                                                                    setIncidentCategory(
+                                                                        (prev) => ({
+                                                                            ...prev,
+                                                                            [assignmentId]:
+                                                                            event.target.value
+                                                                        })
+                                                                    )
                                                                 }
                                                             >
                                                                 <option value="">
                                                                     Chọn loại sự cố
                                                                 </option>
-                                                                {INCIDENT_CATEGORIES.map((item) => (
-                                                                    <option
-                                                                        key={item.value}
-                                                                        value={item.value}
-                                                                    >
-                                                                        {item.label}
-                                                                    </option>
-                                                                ))}
+                                                                {INCIDENT_CATEGORIES.map(
+                                                                    (item) => (
+                                                                        <option
+                                                                            key={item.value}
+                                                                            value={item.value}
+                                                                        >
+                                                                            {item.label}
+                                                                        </option>
+                                                                    )
+                                                                )}
                                                             </select>
                                                         </label>
 
                                                         <label>
                                                             Mức độ
                                                             <select
-                                                                value={incidentSeverity[assignmentId] || ''}
+                                                                value={
+                                                                    incidentSeverity[assignmentId] ||
+                                                                    ''
+                                                                }
                                                                 onChange={(event) =>
-                                                                    setIncidentSeverity((prev) => ({
-                                                                        ...prev,
-                                                                        [assignmentId]: event.target.value
-                                                                    }))
+                                                                    setIncidentSeverity(
+                                                                        (prev) => ({
+                                                                            ...prev,
+                                                                            [assignmentId]:
+                                                                            event.target.value
+                                                                        })
+                                                                    )
                                                                 }
                                                             >
                                                                 <option value="">
                                                                     Chọn mức độ
                                                                 </option>
-                                                                {INCIDENT_SEVERITIES.map((item) => (
-                                                                    <option
-                                                                        key={item.value}
-                                                                        value={item.value}
-                                                                    >
-                                                                        {item.label}
-                                                                    </option>
-                                                                ))}
+                                                                {INCIDENT_SEVERITIES.map(
+                                                                    (item) => (
+                                                                        <option
+                                                                            key={item.value}
+                                                                            value={item.value}
+                                                                        >
+                                                                            {item.label}
+                                                                        </option>
+                                                                    )
+                                                                )}
                                                             </select>
                                                         </label>
                                                     </div>
@@ -1157,17 +1131,24 @@ function CleanerJobs() {
                                                 <label className="cj-log-note">
                                                     Nội dung
                                                     <textarea
-                                                        value={logNote[assignmentId] || ''}
+                                                        value={
+                                                            logNote[assignmentId] || ''
+                                                        }
                                                         onChange={(event) =>
                                                             setLogNote((prev) => ({
                                                                 ...prev,
-                                                                [assignmentId]: event.target.value
+                                                                [assignmentId]:
+                                                                event.target.value
                                                             }))
                                                         }
                                                         placeholder={
-                                                            logType[assignmentId] === 'INCIDENT'
+                                                            logType[assignmentId] ===
+                                                            'INCIDENT'
                                                                 ? 'Mô tả sự cố, tình trạng và cách xử lý hiện tại...'
-                                                                : 'Mô tả tiến độ công việc đã thực hiện...'
+                                                                : logType[assignmentId] ===
+                                                                'FINAL_REPORT'
+                                                                    ? 'Tổng kết công việc đã thực hiện, kết quả, các hạng mục hoàn thành và lưu ý cho Provider...'
+                                                                    : 'Mô tả tiến độ công việc đã thực hiện...'
                                                         }
                                                         rows={4}
                                                         maxLength={5000}
@@ -1176,7 +1157,11 @@ function CleanerJobs() {
 
                                                 <div className="cj-image-upload">
                                                     <label>
-                                                        Ảnh minh chứng (tối đa 5 ảnh)
+                                                        {logType[assignmentId] ===
+                                                        'FINAL_REPORT'
+                                                            ? 'Ảnh minh chứng báo cáo tổng kết (tối đa 5 ảnh)'
+                                                            : 'Ảnh minh chứng (tối đa 5 ảnh)'}
+
                                                         <input
                                                             type="file"
                                                             accept="image/jpeg,image/png,image/webp"
@@ -1190,7 +1175,8 @@ function CleanerJobs() {
                                                         />
                                                     </label>
 
-                                                    {(selectedImages[assignmentId] || []).length > 0 && (
+                                                    {(selectedImages[assignmentId] || [])
+                                                        .length > 0 && (
                                                         <div className="cj-selected-images">
                                                             {selectedImages[assignmentId].map(
                                                                 (image, index) => (
@@ -1202,6 +1188,7 @@ function CleanerJobs() {
                                                                             src={image.preview}
                                                                             alt={`Ảnh đã chọn ${index + 1}`}
                                                                         />
+
                                                                         <button
                                                                             type="button"
                                                                             onClick={() =>
@@ -1223,16 +1210,27 @@ function CleanerJobs() {
                                                 <button
                                                     type="button"
                                                     className="cj-submit-log"
-                                                    disabled={Boolean(logLoading[assignmentId])}
+                                                    disabled={
+                                                        Boolean(logLoading[assignmentId]) ||
+                                                        (
+                                                            logType[assignmentId] ===
+                                                            'FINAL_REPORT' &&
+                                                            hasFinalReport
+                                                        )
+                                                    }
                                                     onClick={() =>
                                                         handleSubmitWorkLog(assignmentId)
                                                     }
                                                 >
                                                     {logLoading[assignmentId]
                                                         ? 'Đang gửi...'
-                                                        : logType[assignmentId] === 'INCIDENT'
+                                                        : logType[assignmentId] ===
+                                                        'INCIDENT'
                                                             ? 'Gửi báo cáo sự cố'
-                                                            : 'Gửi nhật ký tiến độ'}
+                                                            : logType[assignmentId] ===
+                                                            'FINAL_REPORT'
+                                                                ? 'Gửi báo cáo tổng kết'
+                                                                : 'Gửi nhật ký tiến độ'}
                                                 </button>
 
                                                 {logFeedback[assignmentId] && (
@@ -1248,6 +1246,7 @@ function CleanerJobs() {
                                         <div className="cj-work-log-history">
                                             <div className="cj-log-history-heading">
                                                 <h4>Lịch sử cập nhật công việc</h4>
+
                                                 <button
                                                     type="button"
                                                     onClick={() =>
@@ -1272,26 +1271,46 @@ function CleanerJobs() {
                                                 <div className="cj-log-list">
                                                     {workLogs[assignmentId].map((log) => {
                                                         const imageUrls = getImageUrls(log);
+
+                                                        const currentLogType = String(
+                                                            log.logType || log.type || ''
+                                                        ).toUpperCase();
+
                                                         const isIncident =
-                                                            String(log.type || '').toUpperCase() === 'INCIDENT';
+                                                            currentLogType === 'INCIDENT';
+
+                                                        const isFinalReport =
+                                                            currentLogType === 'FINAL_REPORT';
 
                                                         return (
                                                             <div
-                                                                className={`cj-log-item ${isIncident ? 'incident' : ''}`}
+                                                                className={`cj-log-item ${
+                                                                    isIncident ? 'incident' : ''
+                                                                } ${
+                                                                    isFinalReport
+                                                                        ? 'final-report'
+                                                                        : ''
+                                                                }`}
                                                                 key={log.id}
                                                             >
                                                                 <div className="cj-log-item-heading">
                                                                     <strong>
                                                                         {isIncident
                                                                             ? 'Báo cáo sự cố'
-                                                                            : 'Cập nhật tiến độ'}
+                                                                            : isFinalReport
+                                                                                ? 'Báo cáo tổng kết'
+                                                                                : 'Cập nhật tiến độ'}
                                                                     </strong>
 
                                                                     {isIncident && (
                                                                         <span>
                                                                             {SEVERITY_LABELS[
-                                                                                String(log.severity || '').toUpperCase()
-                                                                                ] || log.severity || 'Chưa xác định'}
+                                                                                    String(
+                                                                                        log.severity || ''
+                                                                                    ).toUpperCase()
+                                                                                    ] ||
+                                                                                log.severity ||
+                                                                                'Chưa xác định'}
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -1300,8 +1319,12 @@ function CleanerJobs() {
                                                                     <p className="cj-log-category">
                                                                         Loại sự cố:{' '}
                                                                         {CATEGORY_LABELS[
-                                                                            String(log.category || '').toUpperCase()
-                                                                            ] || log.category || 'Khác'}
+                                                                                String(
+                                                                                    log.category || ''
+                                                                                ).toUpperCase()
+                                                                                ] ||
+                                                                            log.category ||
+                                                                            'Khác'}
                                                                     </p>
                                                                 )}
 
