@@ -93,6 +93,31 @@ export default function CustomerBookingHistory() {
         loadBookings();
     }, []);
 
+    useEffect(() => {
+        const refreshBookingStatuses = async () => {
+            try {
+                const result = await bookingApi.getMyBookings();
+                if (Array.isArray(result)) setBookings(result);
+            } catch {
+                // Keep the currently displayed history if the background refresh fails.
+            }
+        };
+        const onCustomerNotification = event => {
+            if (String(event.detail?.referenceType || '').toUpperCase() === 'BOOKING') {
+                refreshBookingStatuses();
+            }
+        };
+        const timer = window.setInterval(refreshBookingStatuses, 60_000);
+        window.addEventListener('focus', refreshBookingStatuses);
+        window.addEventListener('cleanmate:customer-notification', onCustomerNotification);
+
+        return () => {
+            window.clearInterval(timer);
+            window.removeEventListener('focus', refreshBookingStatuses);
+            window.removeEventListener('cleanmate:customer-notification', onCustomerNotification);
+        };
+    }, []);
+
     const historyBookings = useMemo(() => {
         const history = bookings.filter(booking =>
             HISTORY_STATUSES.includes(String(booking.status || '').toUpperCase())

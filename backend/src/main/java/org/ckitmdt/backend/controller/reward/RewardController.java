@@ -185,13 +185,13 @@ public class RewardController {
             return new RewardPolicyResponse(
                     BigDecimal.valueOf(1000),
                     1,
+                    BigDecimal.ONE,
                     BigDecimal.valueOf(100),
-                    BigDecimal.valueOf(20),
-                    100,
-                    5000,
+                    1000,
+                    Integer.MAX_VALUE,
                     12,
                     true,
-                    false
+                    true
             );
         }
 

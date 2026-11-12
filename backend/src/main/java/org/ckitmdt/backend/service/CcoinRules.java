@@ -143,13 +143,6 @@ public final class CcoinRules {
             );
         }
 
-        if (requested > maximum) {
-            throw new IllegalArgumentException(
-                    "Mỗi đơn hàng chỉ được sử dụng tối đa "
-                            + maximum + " Ccoin."
-            );
-        }
-
         BigDecimal maxDiscountAmount = availableAmount
                 .multiply(maxRedeemPercent)
                 .divide(BigDecimal.valueOf(100), 2, RoundingMode.DOWN);
@@ -159,15 +152,16 @@ public final class CcoinRules {
                 .min(BigDecimal.valueOf(Integer.MAX_VALUE))
                 .intValue();
 
-        if (requested > pointsAllowedByAmount) {
+        int allowedPoints = Math.min(maximum, pointsAllowedByAmount);
+        if (allowedPoints < minimum) {
             throw new IllegalArgumentException(
-                    "Số điểm sử dụng vượt giới hạn giảm giá của đơn hàng. "
-                            + "Tối đa có thể sử dụng "
-                            + pointsAllowedByAmount + " Ccoin."
+                    "Giá trị đơn hàng chưa đủ để áp dụng mức đổi Ccoin tối thiểu."
             );
         }
 
-        return requested;
+        // The checkout control means “use Ccoin”, so cap the requested balance
+        // to the policy and order limits instead of rejecting the whole quote.
+        return Math.min(requested, allowedPoints);
     }
 
     public static BigDecimal pointsToMoney(

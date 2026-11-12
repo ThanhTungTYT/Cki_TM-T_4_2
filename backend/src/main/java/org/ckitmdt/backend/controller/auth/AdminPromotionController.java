@@ -40,11 +40,11 @@ public class AdminPromotionController {
             BigDecimal.valueOf(1000);
     private static final int DEFAULT_EARN_POINTS = 1;
     private static final BigDecimal DEFAULT_POINT_VALUE =
-            BigDecimal.valueOf(100);
+            BigDecimal.ONE;
     private static final BigDecimal DEFAULT_MAX_REDEEM_PERCENT =
-            BigDecimal.valueOf(20);
-    private static final int DEFAULT_MIN_REDEEM_POINTS = 100;
-    private static final int DEFAULT_MAX_REDEEM_POINTS = 5000;
+            BigDecimal.valueOf(100);
+    private static final int DEFAULT_MIN_REDEEM_POINTS = 1000;
+    private static final int DEFAULT_MAX_REDEEM_POINTS = Integer.MAX_VALUE;
     private static final int DEFAULT_EXPIRY_MONTHS = 12;
 
     private final PromotionRepository promotionRepository;
@@ -544,7 +544,7 @@ public class AdminPromotionController {
                     DEFAULT_MAX_REDEEM_POINTS,
                     DEFAULT_EXPIRY_MONTHS,
                     true,
-                    false,
+                    true,
                     null
             );
         }

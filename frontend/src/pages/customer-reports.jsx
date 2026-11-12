@@ -18,6 +18,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import ReportEvidencePreview from '../components/ReportEvidencePreview';
 import './profile.css';
 import './customer-bookings.css';
 import './customer-reports-conversation.css';
@@ -126,7 +127,18 @@ export default function CustomerReports() {
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [evidenceFile, setEvidenceFile] = useState(null);
+    const [evidencePreviewUrl, setEvidencePreviewUrl] = useState('');
     const [downloadingEvidenceId, setDownloadingEvidenceId] = useState(null);
+
+    useEffect(() => {
+        if (!evidenceFile) {
+            setEvidencePreviewUrl('');
+            return undefined;
+        }
+        const previewUrl = URL.createObjectURL(evidenceFile);
+        setEvidencePreviewUrl(previewUrl);
+        return () => URL.revokeObjectURL(previewUrl);
+    }, [evidenceFile]);
 
     const [expandedReportId, setExpandedReportId] = useState(null);
     const [responses, setResponses] = useState({});
@@ -563,6 +575,9 @@ export default function CustomerReports() {
                                             disabled={submitting}
                                         />
                                         <small>{evidenceFile ? `${evidenceFile.name} · ${(evidenceFile.size / (1024 * 1024)).toFixed(2)} MB` : 'JPG, PNG hoặc WEBP; tối đa 5 MB.'}</small>
+                                        {evidencePreviewUrl && (
+                                            <img className="customer-report-upload-preview" src={evidencePreviewUrl} alt="Xem trước ảnh bằng chứng" />
+                                        )}
                                     </div>
                                 </div>
 
@@ -686,14 +701,17 @@ export default function CustomerReports() {
                                                 </p>
 
                                                 {report.evidenceUrl && (
-                                                    <button
-                                                        type="button"
-                                                        className="customer-report-evidence-link"
-                                                        onClick={() => downloadEvidence(report.id)}
-                                                        disabled={downloadingEvidenceId === report.id}
-                                                    >
-                                                        {downloadingEvidenceId === report.id ? 'Đang tải bằng chứng...' : 'Tải ảnh bằng chứng'}
-                                                    </button>
+                                                    <div className="customer-report-evidence-block">
+                                                        <ReportEvidencePreview reportId={report.id} />
+                                                        <button
+                                                            type="button"
+                                                            className="customer-report-evidence-link"
+                                                            onClick={() => downloadEvidence(report.id)}
+                                                            disabled={downloadingEvidenceId === report.id}
+                                                        >
+                                                            {downloadingEvidenceId === report.id ? 'Đang tải bằng chứng...' : 'Tải ảnh bằng chứng'}
+                                                        </button>
+                                                    </div>
                                                 )}
 
                                                 {report.status === 'RESOLVED' && (

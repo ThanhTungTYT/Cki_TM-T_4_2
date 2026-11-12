@@ -179,6 +179,7 @@ export default function Checkout() {
     const [quote, setQuote] = useState(null);
     const [quoteLoading, setQuoteLoading] = useState(false);
     const [quoteError, setQuoteError] = useState('');
+    const [ccoinMessage, setCcoinMessage] = useState('');
     const [voucherMessage, setVoucherMessage] = useState({ type: '', text: '' });
     const [agreePolicy, setAgreePolicy] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -312,16 +313,16 @@ export default function Checkout() {
         setQuoteLoading(true);
         const timer = setTimeout(async () => {
             setQuoteError('');
+            const quoteRequest = {
+                partnerId,
+                addressId: defaultAddressId ? Number(defaultAddressId) : null,
+                items: quoteItems,
+                scheduledStart: `${selectedDate}T${selectedTimeSlot}:00`,
+                voucherCode: appliedVoucherCode || null,
+                redeemPoints: Number(redeemPoints) || 0
+            };
 
             try {
-                const quoteRequest = {
-                    partnerId,
-                    addressId: defaultAddressId ? Number(defaultAddressId) : null,
-                    items: quoteItems,
-                    scheduledStart: `${selectedDate}T${selectedTimeSlot}:00`,
-                    voucherCode: appliedVoucherCode || null,
-                    redeemPoints: Number(redeemPoints) || 0
-                };
                 const result = await bookingApi.getQuote(quoteRequest);
 
                 if (cancelled) return;
@@ -340,10 +341,46 @@ export default function Checkout() {
                         text: `Áp dụng mã ${result.promotionCode || appliedVoucherCode} thành công. Giảm ${formatPrice(result.discountAmount || 0)}.`
                     });
                 } else {
-                    setVoucherMessage({ type: '', text: '' });
+                    setVoucherMessage(current => current.type === 'error'
+                        ? current
+                        : { type: '', text: '' });
                 }
             } catch (error) {
                 if (cancelled) return;
+
+                if (Number(redeemPoints) > 0) {
+                    const withoutCoinsRequest = { ...quoteRequest, redeemPoints: 0 };
+                    try {
+                        let fallbackQuote;
+                        let rejectedVoucherMessage = '';
+                        try {
+                            fallbackQuote = await bookingApi.getQuote(withoutCoinsRequest);
+                        } catch (voucherError) {
+                            if (!appliedVoucherCode) throw voucherError;
+                            fallbackQuote = await bookingApi.getQuote({
+                                ...withoutCoinsRequest,
+                                voucherCode: null
+                            });
+                            rejectedVoucherMessage = voucherError.message || 'Mã khuyến mãi không hợp lệ.';
+                        }
+
+                        if (cancelled) return;
+                        setQuote(fallbackQuote);
+                        setCcoinBalance(Number(fallbackQuote.rewardBalance || 0));
+                        setRedeemPoints(0);
+                        setQuoteError('');
+                        setCcoinMessage(error.message || 'Không thể áp dụng Ccoin cho đơn hàng này.');
+                        if (rejectedVoucherMessage) {
+                            setAppliedVoucherCode('');
+                            setVoucherMessage({ type: 'error', text: rejectedVoucherMessage });
+                        }
+                    } catch (fallbackError) {
+                        if (cancelled) return;
+                        setQuote(null);
+                        setQuoteError(fallbackError.message || 'Không thể tính báo giá.');
+                    }
+                    return;
+                }
 
                 if (appliedVoucherCode) {
                     // A rejected voucher should not hide the normal checkout quote.
@@ -369,6 +406,9 @@ export default function Checkout() {
                         setQuoteError(fallbackError.message || 'Không thể tính báo giá.');
                     }
 
+                    // The fallback quote is the base price; do not submit a rejected
+                    // voucher again when the customer confirms the booking.
+                    setAppliedVoucherCode('');
                     setVoucherMessage({
                         type: 'error',
                         text: error.message || 'Mã khuyến mãi không hợp lệ.'
@@ -893,7 +933,6 @@ export default function Checkout() {
                                     {defaultAddressError} <Link to="/profile">Mở hồ sơ</Link>
                                 </p>
                             )}
-                            {defaultAddressId && <p>Địa chỉ đang dùng được lấy từ địa chỉ mặc định trong hồ sơ.</p>}
 
                             <div className="form-grid-2">
                                 <div className="form-group">
@@ -1187,7 +1226,12 @@ export default function Checkout() {
                                         type="text"
                                         placeholder="Nhập mã khuyến mãi"
                                         value={voucherCode}
-                                        onChange={event => setVoucherCode(event.target.value)}
+                                        onChange={event => {
+                                            setVoucherCode(event.target.value);
+                                            if (voucherMessage.type === 'error') {
+                                                setVoucherMessage({ type: '', text: '' });
+                                            }
+                                        }}
                                     />
                                     <button
                                         type="button"
@@ -1211,6 +1255,7 @@ export default function Checkout() {
                                         onClick={() => {
                                             setVoucherCode('');
                                             setAppliedVoucherCode('');
+                                            setVoucherMessage({ type: '', text: '' });
                                         }}
                                     >
                                         Bỏ mã {appliedVoucherCode}
@@ -1230,11 +1275,13 @@ export default function Checkout() {
                                     disabled={rewardBalance < 1000}
                                     onChange={event => {
                                         setQuoteLoading(true);
+                                        setCcoinMessage('');
                                         setRedeemPoints(event.target.checked ? rewardBalance : 0);
                                     }}
                                 />
                                 Dùng Ccoin giảm giá
                             </label>
+                            {ccoinMessage && <div className="voucher-msg error">{ccoinMessage}</div>}
 
                             <div className="pricing-rows">
                                 <div className="price-row">

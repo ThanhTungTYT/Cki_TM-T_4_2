@@ -1,0 +1,36 @@
+.report-evidence-preview {
+    display: inline-flex;
+    width: fit-content;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 9px;
+    color: #2563eb;
+    font-size: 12px;
+    font-weight: 650;
+    text-decoration: none;
+}
+
+.report-evidence-preview img {
+    display: block;
+    width: min(220px, 100%);
+    max-height: 160px;
+    object-fit: cover;
+    border: 1px solid #dbe5f2;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.report-evidence-preview:hover img {
+    border-color: #60a5fa;
+}
+
+.report-evidence-preview-loading,
+.report-evidence-preview-error {
+    margin: 8px 0 0;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.report-evidence-preview-error {
+    color: #b91c1c;
+}
