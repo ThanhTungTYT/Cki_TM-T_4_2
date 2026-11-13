@@ -643,7 +643,7 @@ function CleanerJobs() {
     }
 
     return (
-        <div className="cleaner-jobs-page">
+        <div className="cj-page cleaner-jobs-page">
             <div className="cj-page-heading">
                 <div>
                     <h2>Công việc của tôi</h2>

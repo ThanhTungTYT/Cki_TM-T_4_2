@@ -519,6 +519,133 @@
         padding: 13px;
     }
 }
+
+/* Current CleanerJobs markup */
+.cj-page-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.cj-page-heading h2 {
+    margin: 0 0 5px;
+    color: #1e385c;
+    font-size: 23px;
+    font-weight: 750;
+}
+
+.cj-page-heading p {
+    margin: 0;
+    color: #718096;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.cj-toolbar > input,
+.cj-toolbar > select {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 12px;
+    border: 1px solid #dbe3ef;
+    border-radius: 9px;
+    color: #243247;
+    background: #fff;
+    font: inherit;
+    font-size: 13px;
+    box-sizing: border-box;
+    transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.cj-toolbar > input::placeholder {
+    color: #94a3b8;
+}
+
+.cj-toolbar > input:focus,
+.cj-toolbar > select:focus {
+    border-color: #7aa7f8;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .1);
+}
+
+.cj-state {
+    padding: 42px 20px;
+    text-align: center;
+    background: #fff;
+    border: 1px solid #e8edf5;
+    border-radius: 13px;
+    color: #475569;
+}
+
+.cj-state p {
+    margin: 0 0 12px;
+    color: #718096;
+    line-height: 1.6;
+}
+
+.cj-state.error {
+    border-color: #fecaca;
+    background: #fffafa;
+    color: #b91c1c;
+}
+
+.cj-state.error p {
+    color: #b91c1c;
+}
+
+.cj-card-toggle {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+}
+
+.cj-card-toggle button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 7px;
+    color: #2563eb;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: color .18s ease, background-color .18s ease;
+}
+
+.cj-card-toggle button:hover {
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+.cj-card-toggle button span {
+    font-size: 15px;
+    line-height: 1;
+}
+
+.cj-card-details > p {
+    margin: 0;
+    color: #718096;
+    font-size: 13px;
+}
+
+@media (max-width: 650px) {
+    .cj-page-heading {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cj-page-heading .cj-refresh-btn {
+        align-self: flex-start;
+    }
+
+    .cj-card-toggle {
+        justify-content: flex-start;
+    }
+}
 /* =========================
    CLEANER BOOKING ACTIONS
 ========================= */
