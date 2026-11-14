@@ -50,6 +50,7 @@ import CleanerCalendar from './pages/cleaner-portal/CleanerCalendar';
 import CleanerHistory from './pages/cleaner-portal/CleanerHistory';
 import CleanerNotifications from './pages/cleaner-portal/CleanerNotifications';
 import CleanerJobs from './pages/cleaner-portal/CleanerJobs';
+import CleanerJobDetail from './pages/cleaner-portal/CleanerJobDetail';
 import CleanerProfile from './pages/cleaner-portal/CleanerProfile';
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -328,16 +329,46 @@ function App() {
                         index
                         element={<Navigate to="dashboard" replace />}
                     />
-                    <Route path="dashboard" element={<CleanerDashboard />} />
-                    <Route path="jobs" element={<CleanerJobs />} />
-                    <Route path="calendar" element={<CleanerCalendar />} />
-                    <Route path="history" element={<CleanerHistory />} />
+
+                    <Route
+                        path="dashboard"
+                        element={<CleanerDashboard />}
+                    />
+
+                    <Route
+                        path="jobs"
+                        element={<CleanerJobs />}
+                    />
+
+                    <Route
+                        path="jobs/:id"
+                        element={<CleanerJobDetail />}
+                    />
+
+                    <Route
+                        path="calendar"
+                        element={<CleanerCalendar />}
+                    />
+
+                    <Route
+                        path="history"
+                        element={<CleanerHistory />}
+                    />
+
                     <Route
                         path="notifications"
                         element={<CleanerNotifications />}
                     />
-                    <Route path="profile" element={<CleanerProfile />} />
-                    <Route path="*" element={<CleanerPlaceholder />} />
+
+                    <Route
+                        path="profile"
+                        element={<CleanerProfile />}
+                    />
+
+                    <Route
+                        path="*"
+                        element={<CleanerPlaceholder />}
+                    />
                 </Route>
 
                 <Route path="/provider-portal" element={<ProviderLayout />}>
@@ -345,38 +376,47 @@ function App() {
                         index
                         element={<Navigate to="dashboard" replace />}
                     />
+
                     <Route
                         path="dashboard"
                         element={<ProviderDashboard />}
                     />
+
                     <Route
                         path="bookings"
                         element={<ProviderBookings />}
                     />
+
                     <Route
                         path="bookings/:id"
                         element={<ProviderBookingDetail />}
                     />
+
                     <Route
                         path="services"
                         element={<ProviderServices />}
                     />
+
                     <Route
                         path="employees"
                         element={<ProviderEmployees />}
                     />
+
                     <Route
                         path="schedule"
                         element={<ProviderSchedule />}
                     />
+
                     <Route
                         path="complaints"
                         element={<ProviderComplaints />}
                     />
+
                     <Route
                         path="revenue"
                         element={<ProviderRevenue />}
                     />
+
                     <Route
                         path="reviews"
                         element={<ProviderReviews />}

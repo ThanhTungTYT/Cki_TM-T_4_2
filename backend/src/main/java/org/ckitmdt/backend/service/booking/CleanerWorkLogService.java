@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,7 +34,6 @@ public class CleanerWorkLogService {
     private final UserRepository userRepository;
     private final AdminNotificationRepository adminNotificationRepository;
 
-
     private static final List<String> LOG_TYPES =
             List.of("PROGRESS", "INCIDENT", "FINAL_REPORT");
 
@@ -44,12 +42,14 @@ public class CleanerWorkLogService {
 
     private static final List<String> INCIDENT_CATEGORIES =
             List.of(
+                    "CUSTOMER_REQUEST",
                     "PROPERTY_DAMAGE",
-                    "MISSING_EQUIPMENT",
                     "SAFETY",
+                    "EQUIPMENT",
+                    "OTHER",
+                    "MISSING_EQUIPMENT",
                     "CUSTOMER_ISSUE",
-                    "SERVICE_PROBLEM",
-                    "OTHER"
+                    "SERVICE_PROBLEM"
             );
 
     /**
@@ -99,8 +99,6 @@ public class CleanerWorkLogService {
             );
         }
 
-        // Hỗ trợ cả tên trường logType và type
-        // để tương thích với payload CleanerJobs hiện tại.
         String rawLogType = text(body.get("logType"));
 
         if (rawLogType.isBlank()) {
@@ -212,8 +210,10 @@ public class CleanerWorkLogService {
 
         CleanerWorkLog saved = workLogRepository.save(workLog);
 
-        // Gửi thông báo đến đúng Provider của Assignment.
-        if ("FINAL_REPORT".equals(logType)) {
+        // Gửi thông báo cho Provider khi có sự cố
+        // hoặc khi Cleaner nộp báo cáo tổng kết.
+        // Nhật ký tiến độ thông thường không tạo thông báo riêng.
+        if ("INCIDENT".equals(logType) || "FINAL_REPORT".equals(logType)) {
             User providerUser = assignment.getPartner().getUser();
 
             String bookingCode = booking.getBookingCode() == null
@@ -224,17 +224,36 @@ public class CleanerWorkLogService {
                     ? "Cleaner"
                     : cleaner.getFullName();
 
+            boolean isIncident = "INCIDENT".equals(logType);
+
+            String notificationType = isIncident
+                    ? "CLEANER_INCIDENT_REPORTED"
+                    : "CLEANER_FINAL_REPORT_SUBMITTED";
+
+            String notificationTitle = isIncident
+                    ? "Cleaner vừa báo cáo sự cố"
+                    : "Cleaner đã nộp báo cáo kết quả";
+
+            String notificationMessage;
+
+            if (isIncident) {
+                notificationMessage = cleanerName
+                        + " đã báo cáo sự cố cho đơn " + bookingCode
+                        + ". Mức độ: " + severity
+                        + ". Nhóm sự cố: " + category
+                        + ". Vui lòng mở đơn để xem nội dung và ảnh minh chứng.";
+            } else {
+                notificationMessage = cleanerName
+                        + " đã nộp báo cáo tổng kết cho đơn " + bookingCode
+                        + ". Vui lòng mở đơn để xem nội dung và ảnh minh chứng.";
+            }
+
             adminNotificationRepository.save(
                     AdminNotification.builder()
                             .recipient(providerUser)
-                            .type("CLEANER_FINAL_REPORT_SUBMITTED")
-                            .title("Cleaner đã nộp báo cáo kết quả")
-                            .message(
-                                    cleanerName
-                                            + " đã nộp báo cáo tổng kết cho đơn "
-                                            + bookingCode
-                                            + ". Vui lòng mở đơn để xem nội dung và ảnh minh chứng."
-                            )
+                            .type(notificationType)
+                            .title(notificationTitle)
+                            .message(notificationMessage)
                             .referenceType("BOOKING")
                             .referenceId(booking.getId())
                             .build()

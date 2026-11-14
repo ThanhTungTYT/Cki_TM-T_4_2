@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bookingApi } from '../../services/api';
 import './CleanerJobs.css';
+import { useNavigate } from 'react-router-dom';
 
 const STATUS_CONFIG = {
     ASSIGNED: { label: 'Chờ nhận việc', type: 'assigned' },
@@ -102,6 +103,7 @@ function CleanerJobs() {
     const [filter, setFilter] = useState('ALL');
     const [expandedId, setExpandedId] = useState(null);
     const [processingId, setProcessingId] = useState(null);
+    const navigate = useNavigate();
 
     const [actionFeedback, setActionFeedback] = useState({});
 
@@ -828,6 +830,13 @@ function CleanerJobs() {
                                     >
                                         {expanded ? 'Thu gọn' : 'Xem thông tin'}
                                         <span>{expanded ? '⌃' : '⌄'}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(`/cleaner/jobs/${assignmentId}`)}
+                                    >
+                                        Chi tiết đầy đủ
+                                        <span>→</span>
                                     </button>
                                 </div>
 
