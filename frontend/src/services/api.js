@@ -269,9 +269,11 @@ export const bookingApi = {
         return handleResponse(res, 'Không thể tải danh sách công việc được giao.');
     },
 
+
+    // Lấy danh sách phân công của Cleaner đang đăng nhập
     async getCleanerAssignments() {
         const res = await fetch(
-            `${BASE_URL}/bookings/cleaner/me/assignments`,
+            `${BASE_URL}/cleaner/assignments`,
             {
                 method: 'GET',
                 headers: getAuthHeaders()
@@ -280,9 +282,26 @@ export const bookingApi = {
 
         return handleResponse(
             res,
-            'Không thể tải danh sách phân công của nhân viên.'
+            'Không thể tải danh sách công việc được giao.'
         );
     },
+
+    // Lấy chi tiết một phân công cụ thể của Cleaner
+    async getCleanerAssignment(assignmentId) {
+        const res = await fetch(
+            `${BASE_URL}/cleaner/assignments/${encodeURIComponent(assignmentId)}`,
+            {
+                method: 'GET',
+                headers: getAuthHeaders()
+            }
+        );
+
+        return handleResponse(
+            res,
+            'Không thể tải chi tiết công việc được giao.'
+        );
+    },
+
 
     async getBooking(id) {
         const res = await fetch(`${BASE_URL}/bookings/${id}`, {

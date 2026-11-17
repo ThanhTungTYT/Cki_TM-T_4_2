@@ -31,12 +31,6 @@ function formatTime(value) {
     });
 }
 
-function formatCurrency(value) {
-    if (value === null || value === undefined) return '—';
-
-    return Number(value).toLocaleString('vi-VN') + ' đ';
-}
-
 function getStatusInfo(status) {
     const statusMap = {
         ASSIGNED: ['Chờ nhận việc', 'assigned'],
@@ -67,6 +61,39 @@ function getBooking(assignment) {
     return assignment?.booking || assignment;
 }
 
+// Hàm lấy thông tin phân công và lịch sử công việc
+async function fetchCleanerAssignmentDetail(id) {
+    const assignment = await bookingApi.getCleanerAssignment(id);
+
+    if (!assignment) {
+        return {
+            assignment: null,
+            workLogs: []
+        };
+    }
+
+    const assignmentId = getAssignmentId(assignment);
+
+    let workLogs = [];
+
+    if (assignmentId) {
+        try {
+            const logs = await bookingApi.getCleanerWorkLogs(
+                assignmentId
+            );
+
+            workLogs = Array.isArray(logs) ? logs : [];
+        } catch {
+            workLogs = [];
+        }
+    }
+
+    return {
+        assignment,
+        workLogs
+    };
+}
+
 function CleanerJobDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -77,111 +104,67 @@ function CleanerJobDetail() {
     const [logsLoading, setLogsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    // Tải lại thông tin khi người dùng bấm nút Làm mới
     const loadDetail = useCallback(async () => {
         setLoading(true);
+        setLogsLoading(true);
         setError('');
 
         try {
-            const data = await bookingApi.getCleanerAssignments();
-            const assignments = Array.isArray(data)
-                ? data
-                : Array.isArray(data?.items)
-                    ? data.items
-                    : [];
+            const result = await fetchCleanerAssignmentDetail(id);
 
-            const found = assignments.find((item) => {
-                return String(getAssignmentId(item)) === String(id);
-            });
-
-            if (!found) {
+            if (!result.assignment) {
                 setAssignment(null);
+                setWorkLogs([]);
                 setError(
                     'Không tìm thấy phân công hoặc bạn không có quyền xem công việc này.'
                 );
                 return;
             }
 
-            setAssignment(found);
-
-            const assignmentId = getAssignmentId(found);
-
-            if (assignmentId) {
-                setLogsLoading(true);
-
-                try {
-                    const logs = await bookingApi.getCleanerWorkLogs(
-                        assignmentId
-                    );
-
-                    setWorkLogs(Array.isArray(logs) ? logs : []);
-                } catch {
-                    setWorkLogs([]);
-                } finally {
-                    setLogsLoading(false);
-                }
-            }
+            setAssignment(result.assignment);
+            setWorkLogs(result.workLogs);
         } catch (err) {
+            setAssignment(null);
+            setWorkLogs([]);
             setError(
                 err.message || 'Không thể tải thông tin công việc.'
             );
         } finally {
             setLoading(false);
+            setLogsLoading(false);
         }
     }, [id]);
 
+    // Tải dữ liệu lần đầu khi mở trang hoặc khi ID thay đổi
     useEffect(() => {
         let active = true;
 
         async function fetchDetail() {
-            setLoading(true);
-            setError('');
-
             try {
-                const data = await bookingApi.getCleanerAssignments();
-
-                const assignments = Array.isArray(data)
-                    ? data
-                    : Array.isArray(data?.items)
-                        ? data.items
-                        : [];
-
-                const found = assignments.find((item) => {
-                    return String(getAssignmentId(item)) === String(id);
-                });
+                const result = await fetchCleanerAssignmentDetail(id);
 
                 if (!active) return;
 
-                if (!found) {
+                if (!result.assignment) {
                     setAssignment(null);
+                    setWorkLogs([]);
                     setError(
                         'Không tìm thấy phân công hoặc bạn không có quyền xem công việc này.'
                     );
-                    return;
-                }
-
-                setAssignment(found);
-
-                const assignmentId = getAssignmentId(found);
-
-                if (assignmentId) {
-                    try {
-                        const logs = await bookingApi.getCleanerWorkLogs(
-                            assignmentId
-                        );
-
-                        if (active) {
-                            setWorkLogs(Array.isArray(logs) ? logs : []);
-                        }
-                    } catch {
-                        if (active) setWorkLogs([]);
-                    }
+                } else {
+                    setAssignment(result.assignment);
+                    setWorkLogs(result.workLogs);
+                    setError('');
                 }
             } catch (err) {
-                if (active) {
-                    setError(
-                        err.message || 'Không thể tải thông tin công việc.'
-                    );
-                }
+                if (!active) return;
+
+                setAssignment(null);
+                setWorkLogs([]);
+                setError(
+                    err.message || 'Không thể tải thông tin công việc.'
+                );
             } finally {
                 if (active) {
                     setLoading(false);
@@ -223,7 +206,9 @@ function CleanerJobDetail() {
 
                         <strong>Không thể mở công việc</strong>
 
-                        <p>{error || 'Không tìm thấy thông tin phân công.'}</p>
+                        <p>
+                            {error || 'Không tìm thấy thông tin phân công.'}
+                        </p>
 
                         <button
                             type="button"
