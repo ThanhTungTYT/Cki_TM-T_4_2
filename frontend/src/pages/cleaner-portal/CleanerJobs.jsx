@@ -59,13 +59,7 @@ function formatDate(value) {
     });
 }
 
-function formatCurrency(value) {
-    const amount = Number(value);
 
-    if (!Number.isFinite(amount)) return 'Chưa cập nhật';
-
-    return amount.toLocaleString('vi-VN') + 'đ';
-}
 
 function getStatus(status) {
     return STATUS_CONFIG[String(status || '').toUpperCase()] || {
@@ -146,8 +140,34 @@ function CleanerJobs() {
     }, [fetchBookings]);
 
     useEffect(() => {
-        loadBookings();
-    }, [loadBookings]);
+        let active = true;
+
+        async function fetchInitialBookings() {
+            try {
+                const data = await fetchBookings();
+
+                if (active) {
+                    setBookings(data);
+                }
+            } catch (err) {
+                if (active) {
+                    setError(
+                        err?.message || 'Không thể tải danh sách công việc.'
+                    );
+                }
+            } finally {
+                if (active) {
+                    setLoading(false);
+                }
+            }
+        }
+
+        fetchInitialBookings();
+
+        return () => {
+            active = false;
+        };
+    }, [fetchBookings]);
 
     const filteredBookings = useMemo(() => {
         const keyword = search.trim().toLowerCase();
@@ -172,8 +192,7 @@ function CleanerJobs() {
                 !keyword ||
                 String(booking.bookingCode || '').toLowerCase().includes(keyword) ||
                 String(booking.customerName || '').toLowerCase().includes(keyword) ||
-                String(booking.address || '').toLowerCase().includes(keyword);
-
+                String(booking.fullAddress || '').toLowerCase().includes(keyword);
             return matchesFilter && matchesSearch;
         });
     }, [bookings, filter, search]);
@@ -790,25 +809,11 @@ function CleanerJobs() {
                                     </div>
 
                                     <div>
-                                        <span className="cj-info-label">
-                                            Địa chỉ làm việc
-                                        </span>
+    <span className="cj-info-label">
+        Địa chỉ làm việc
+    </span>
                                         <strong>
-                                            {booking.address ||
-                                                booking.serviceAddress ||
-                                                'Chưa cập nhật'}
-                                        </strong>
-                                    </div>
-
-                                    <div>
-                                        <span className="cj-info-label">
-                                            Giá trị đơn hàng
-                                        </span>
-                                        <strong>
-                                            {formatCurrency(
-                                                booking.totalAmount ||
-                                                booking.totalPrice
-                                            )}
+                                            {booking.fullAddress || 'Chưa cập nhật'}
                                         </strong>
                                     </div>
                                 </div>
