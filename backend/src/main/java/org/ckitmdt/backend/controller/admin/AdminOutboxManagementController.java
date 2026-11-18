@@ -1,3 +1,4 @@
+
 package org.ckitmdt.backend.controller.admin;
 
 import lombok.RequiredArgsConstructor;
@@ -22,20 +23,26 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/admin/outbox")
 @RequiredArgsConstructor
 public class AdminOutboxManagementController {
+
     private final AdminOutboxEventRepository outboxRepository;
     private final AdminAuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
 
     @GetMapping("/failed")
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> getFailedEvents(Authentication authentication) {
-        requireAdmin(authentication);
-        return outboxRepository.findTop100ByStatusOrderByCreatedAtDesc("FAILED")
+    public List<Map<String, Object>> getFailedEvents(
+            Authentication authentication
+    ) {
+        requireAdminOrStaff(authentication);
+
+        return outboxRepository
+                .findTop100ByStatusOrderByCreatedAtDesc("FAILED")
                 .stream()
                 .map(this::toRow)
                 .toList();
@@ -49,27 +56,39 @@ public class AdminOutboxManagementController {
             Authentication authentication
     ) {
         User admin = requireAdmin(authentication);
+
         String reason = body == null || body.get("reason") == null
                 ? ""
                 : String.valueOf(body.get("reason")).trim();
 
         if (reason.isBlank() || reason.length() > 2000) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do retry từ 1 đến 2000 ký tự.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Vui lòng nhập lý do retry từ 1 đến 2000 ký tự."
+            );
         }
 
         AdminOutboxEvent event = outboxRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy sự kiện Outbox."));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy sự kiện Outbox."
+                ));
 
         if (!"FAILED".equalsIgnoreCase(event.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ sự kiện FAILED mới được retry thủ công.");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Chỉ sự kiện FAILED mới được retry thủ công."
+            );
         }
 
         String previousStatus = event.getStatus();
+
         event.setStatus("PENDING");
         event.setAttempts(0);
         event.setLastError(null);
         event.setNextAttemptAt(LocalDateTime.now());
         event.setProcessedAt(null);
+
         outboxRepository.save(event);
 
         auditLogRepository.save(AdminAuditLog.builder()
@@ -86,23 +105,58 @@ public class AdminOutboxManagementController {
         return toRow(event);
     }
 
-    private User requireAdmin(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Vui lòng đăng nhập.");
-        }
+    private User requireAdminOrStaff(Authentication authentication) {
+        User user = currentUser(authentication);
 
-        User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Không tìm thấy tài khoản."));
-
-        if (!"ADMIN".equalsIgnoreCase(user.getRole())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ Admin được quản lý Outbox.");
+        if (!Set.of("ADMIN", "STAFF").contains(normalize(user.getRole()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ Admin hoặc Staff được theo dõi Outbox."
+            );
         }
 
         return user;
     }
 
+    private User requireAdmin(Authentication authentication) {
+        User user = currentUser(authentication);
+
+        if (!"ADMIN".equals(normalize(user.getRole()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ Admin được retry sự kiện Outbox."
+            );
+        }
+
+        return user;
+    }
+
+    private User currentUser(Authentication authentication) {
+        if (authentication == null
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Vui lòng đăng nhập."
+            );
+        }
+
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Không tìm thấy tài khoản."
+                ));
+    }
+
+    private String normalize(String value) {
+        return value == null
+                ? ""
+                : value.trim().toUpperCase();
+    }
+
     private Map<String, Object> toRow(AdminOutboxEvent event) {
         Map<String, Object> row = new LinkedHashMap<>();
+
         row.put("id", event.getId());
         row.put("eventKey", event.getEventKey());
         row.put("eventType", event.getEventType());
@@ -116,6 +170,7 @@ public class AdminOutboxManagementController {
         row.put("lastError", event.getLastError());
         row.put("createdAt", event.getCreatedAt());
         row.put("processedAt", event.getProcessedAt());
+
         return row;
     }
 }

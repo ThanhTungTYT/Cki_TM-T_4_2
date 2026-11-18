@@ -12,7 +12,7 @@ import {
     faFileInvoiceDollar
 } from '@fortawesome/free-solid-svg-icons';
 
-import AdminLayout from "./AdminLayout.jsx";
+import AdminLayout from './AdminLayout.jsx';
 import { refundApi } from '../../services/api.js';
 import './AdminRefundManagement.css';
 
@@ -29,6 +29,25 @@ const STATUS_LABELS = {
     REJECTED: 'Đã từ chối'
 };
 
+function getCurrentUser() {
+    try {
+        return JSON.parse(
+            sessionStorage.getItem('user') ||
+            localStorage.getItem('user') ||
+            '{}'
+        );
+    } catch {
+        return {};
+    }
+}
+
+function normalizeRole(role) {
+    return String(role || '')
+        .trim()
+        .toUpperCase()
+        .replace(/^ROLE_/, '');
+}
+
 function formatMoney(value) {
     return `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 }
@@ -44,6 +63,8 @@ function formatDate(value) {
 }
 
 export default function AdminRefundManagement() {
+    const isAdmin = normalizeRole(getCurrentUser().role) === 'ADMIN';
+
     const [refunds, setRefunds] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -102,23 +123,17 @@ export default function AdminRefundManagement() {
 
     const stats = useMemo(() => ({
         total: refunds.length,
-        pending: refunds.filter(
-            r => r.status === 'PENDING_REVIEW'
-        ).length,
-        approved: refunds.filter(
-            r => r.status === 'APPROVED'
-        ).length,
-        rejected: refunds.filter(
-            r => r.status === 'REJECTED'
-        ).length
+        pending: refunds.filter(r => r.status === 'PENDING_REVIEW').length,
+        approved: refunds.filter(r => r.status === 'APPROVED').length,
+        rejected: refunds.filter(r => r.status === 'REJECTED').length
     }), [refunds]);
 
     function openReview(refund, nextDecision) {
+        if (!isAdmin) return;
+
         setSelectedRefund(refund);
         setDecision(nextDecision);
-        setApprovedAmount(
-            String(refund.requestedAmount ?? '')
-        );
+        setApprovedAmount(String(refund.requestedAmount ?? ''));
         setDecisionNote('');
         setError('');
         setNotice('');
@@ -126,6 +141,11 @@ export default function AdminRefundManagement() {
 
     async function handleSubmitReview(event) {
         event.preventDefault();
+
+        if (!isAdmin) {
+            setError('Chỉ Admin mới có quyền duyệt hoặc từ chối hoàn tiền.');
+            return;
+        }
 
         if (!selectedRefund) return;
 
@@ -148,12 +168,9 @@ export default function AdminRefundManagement() {
 
         if (
             decision === 'APPROVED' &&
-            Number(approvedAmount) >
-            Number(selectedRefund.requestedAmount)
+            Number(approvedAmount) > Number(selectedRefund.requestedAmount)
         ) {
-            setError(
-                'Số tiền duyệt không được lớn hơn số tiền yêu cầu.'
-            );
+            setError('Số tiền duyệt không được lớn hơn số tiền yêu cầu.');
             return;
         }
 
@@ -170,10 +187,7 @@ export default function AdminRefundManagement() {
         setError('');
 
         try {
-            await refundApi.reviewRefund(
-                selectedRefund.id,
-                payload
-            );
+            await refundApi.reviewRefund(selectedRefund.id, payload);
 
             setSelectedRefund(null);
             setNotice(
@@ -184,9 +198,7 @@ export default function AdminRefundManagement() {
 
             await loadRefunds(false);
         } catch (err) {
-            setError(
-                err.message || 'Không thể xử lý yêu cầu hoàn tiền.'
-            );
+            setError(err.message || 'Không thể xử lý yêu cầu hoàn tiền.');
         } finally {
             setSubmitting(false);
         }
@@ -194,17 +206,31 @@ export default function AdminRefundManagement() {
 
     async function handleRecordTransfer(event) {
         event.preventDefault();
+
+        if (!isAdmin) {
+            setError('Chỉ Admin mới có quyền xác nhận chuyển tiền hoàn lại.');
+            return;
+        }
+
         if (!selectedRefund || !transferReference.trim()) {
             setError('Nhập mã giao dịch chuyển khoản để tiếp tục.');
             return;
         }
+
+        if (!transferEvidenceUrl.trim()) {
+            setError('Vui lòng nhập liên kết chứng từ chuyển khoản.');
+            return;
+        }
+
         setSubmitting(true);
         setError('');
+
         try {
             const updated = await refundApi.recordTransfer(selectedRefund.id, {
                 transferReference: transferReference.trim(),
                 evidenceUrl: transferEvidenceUrl.trim()
             });
+
             setSelectedRefund(updated);
             setNotice('Đã ghi nhận chuyển tiền hoàn lại.');
             await loadRefunds(false);
@@ -213,6 +239,23 @@ export default function AdminRefundManagement() {
         } finally {
             setSubmitting(false);
         }
+    }
+
+    function openDetail(refund) {
+        setSelectedRefund(refund);
+        setDecision(refund.status === 'REJECTED' ? 'REJECTED' : 'APPROVED');
+        setApprovedAmount(String(refund.requestedAmount ?? ''));
+        setDecisionNote('');
+        setTransferReference('');
+        setTransferEvidenceUrl('');
+        setError('');
+        setNotice('');
+    }
+
+    function closeDetail() {
+        if (submitting) return;
+        setSelectedRefund(null);
+        setError('');
     }
 
     return (
@@ -279,7 +322,6 @@ export default function AdminRefundManagement() {
                 <div className="refund-toolbar">
                     <div className="refund-search">
                         <FontAwesomeIcon icon={faSearch} />
-
                         <input
                             value={keyword}
                             onChange={e => setKeyword(e.target.value)}
@@ -292,10 +334,7 @@ export default function AdminRefundManagement() {
                         onChange={e => setStatusFilter(e.target.value)}
                     >
                         {STATUS_OPTIONS.map(option => (
-                            <option
-                                key={option.value}
-                                value={option.value}
-                            >
+                            <option key={option.value} value={option.value}>
                                 {option.label}
                             </option>
                         ))}
@@ -332,9 +371,7 @@ export default function AdminRefundManagement() {
                                             {refund.bookingCode ||
                                                 `Đơn #${refund.bookingId}`}
                                         </strong>
-                                        <small>
-                                            Yêu cầu #{refund.id}
-                                        </small>
+                                        <small>Yêu cầu #{refund.id}</small>
                                     </td>
 
                                     <td>
@@ -349,32 +386,24 @@ export default function AdminRefundManagement() {
 
                                     <td>
                                         <strong>
-                                            {formatMoney(
-                                                refund.requestedAmount
-                                            )}
+                                            {formatMoney(refund.requestedAmount)}
                                         </strong>
 
                                         {refund.status === 'APPROVED' && (
                                             <small>
                                                 Duyệt:{' '}
-                                                {formatMoney(
-                                                    refund.approvedAmount
-                                                )}
+                                                {formatMoney(refund.approvedAmount)}
                                             </small>
                                         )}
                                     </td>
 
-                                    <td>
-                                        {formatDate(refund.requestedAt)}
-                                    </td>
+                                    <td>{formatDate(refund.requestedAt)}</td>
 
                                     <td>
                                             <span
-                                                className={
-                                                    `refund-status status-${String(
-                                                        refund.status || ''
-                                                    ).toLowerCase()}`
-                                                }
+                                                className={`refund-status status-${String(
+                                                    refund.status || ''
+                                                ).toLowerCase()}`}
                                             >
                                                 {STATUS_LABELS[refund.status] ||
                                                     refund.status}
@@ -386,37 +415,20 @@ export default function AdminRefundManagement() {
                                             <button
                                                 type="button"
                                                 className="refund-view-btn"
-                                                onClick={() => {
-                                                    setSelectedRefund(refund);
-                                                    setDecision(
-                                                        refund.status === 'REJECTED'
-                                                            ? 'REJECTED'
-                                                            : 'APPROVED'
-                                                    );
-                                                    setApprovedAmount(
-                                                        String(
-                                                            refund.requestedAmount ?? ''
-                                                        )
-                                                    );
-                                                    setDecisionNote('');
-                                                    setError('');
-                                                }}
+                                                onClick={() => openDetail(refund)}
                                                 title="Xem chi tiết"
                                             >
                                                 <FontAwesomeIcon icon={faEye} />
                                             </button>
 
-                                            {refund.status ===
-                                                'PENDING_REVIEW' && (
+                                            {isAdmin &&
+                                                refund.status === 'PENDING_REVIEW' && (
                                                     <>
                                                         <button
                                                             type="button"
                                                             className="refund-approve-btn"
                                                             onClick={() =>
-                                                                openReview(
-                                                                    refund,
-                                                                    'APPROVED'
-                                                                )
+                                                                openReview(refund, 'APPROVED')
                                                             }
                                                             title="Duyệt yêu cầu"
                                                         >
@@ -427,10 +439,7 @@ export default function AdminRefundManagement() {
                                                             type="button"
                                                             className="refund-reject-btn"
                                                             onClick={() =>
-                                                                openReview(
-                                                                    refund,
-                                                                    'REJECTED'
-                                                                )
+                                                                openReview(refund, 'REJECTED')
                                                             }
                                                             title="Từ chối yêu cầu"
                                                         >
@@ -455,8 +464,7 @@ export default function AdminRefundManagement() {
                                 event.target === event.currentTarget &&
                                 !submitting
                             ) {
-                                setSelectedRefund(null);
-                                setError('');
+                                closeDetail();
                             }
                         }}
                     >
@@ -473,12 +481,7 @@ export default function AdminRefundManagement() {
 
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        if (!submitting) {
-                                            setSelectedRefund(null);
-                                            setError('');
-                                        }
-                                    }}
+                                    onClick={closeDetail}
                                     disabled={submitting}
                                     aria-label="Đóng"
                                 >
@@ -520,9 +523,7 @@ export default function AdminRefundManagement() {
                                 <div>
                                     <span>Số tiền yêu cầu</span>
                                     <strong>
-                                        {formatMoney(
-                                            selectedRefund.requestedAmount
-                                        )}
+                                        {formatMoney(selectedRefund.requestedAmount)}
                                     </strong>
                                 </div>
 
@@ -545,9 +546,7 @@ export default function AdminRefundManagement() {
                             {selectedRefund.status !== 'PENDING_REVIEW' && (
                                 <div className="refund-reason-box">
                                     <strong>Kết quả xử lý</strong>
-                                    <p>
-                                        {selectedRefund.decisionNote || '—'}
-                                    </p>
+                                    <p>{selectedRefund.decisionNote || '—'}</p>
                                     <p>
                                         Người xử lý:{' '}
                                         {selectedRefund.reviewedBy || '—'}
@@ -562,64 +561,96 @@ export default function AdminRefundManagement() {
                             {selectedRefund.status === 'APPROVED' && (
                                 <div className="refund-reason-box">
                                     <strong>Trạng thái chuyển tiền</strong>
-                                    <p>{selectedRefund.refundTransferStatus === 'TRANSFERRED'
-                                        ? `Đã chuyển ${formatDate(selectedRefund.transferredAt)} · ${selectedRefund.transferReference || ''}`
-                                        : 'Đã duyệt, đang chờ ghi nhận giao dịch chuyển khoản.'}</p>
+                                    <p>
+                                        {selectedRefund.refundTransferStatus === 'TRANSFERRED'
+                                            ? `Đã chuyển ${formatDate(
+                                                selectedRefund.transferredAt
+                                            )} · ${selectedRefund.transferReference || ''}`
+                                            : 'Đã duyệt, đang chờ ghi nhận giao dịch chuyển khoản.'}
+                                    </p>
+
                                     {selectedRefund.transferEvidenceUrl && (
-                                        <p><a href={selectedRefund.transferEvidenceUrl} target="_blank" rel="noreferrer">Xem chứng từ chuyển khoản</a></p>
+                                        <p>
+                                            <a
+                                                href={selectedRefund.transferEvidenceUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                            >
+                                                Xem chứng từ chuyển khoản
+                                            </a>
+                                        </p>
                                     )}
                                 </div>
                             )}
 
-                            {selectedRefund.status === 'APPROVED'
-                                && selectedRefund.refundTransferStatus !== 'TRANSFERRED' && (
-                                <form onSubmit={handleRecordTransfer}>
-                                    <div className="refund-form-group">
-                                        <label htmlFor="transfer-reference">Mã giao dịch chuyển khoản</label>
-                                        <input id="transfer-reference" value={transferReference}
-                                            onChange={e => setTransferReference(e.target.value)}
-                                            maxLength={150} required disabled={submitting} />
-                                    </div>
+                            {isAdmin &&
+                                selectedRefund.status === 'APPROVED' &&
+                                selectedRefund.refundTransferStatus !== 'TRANSFERRED' && (
+                                    <form onSubmit={handleRecordTransfer}>
+                                        <div className="refund-form-group">
+                                            <label htmlFor="transfer-reference">
+                                                Mã giao dịch chuyển khoản
+                                            </label>
+                                            <input
+                                                id="transfer-reference"
+                                                value={transferReference}
+                                                onChange={e =>
+                                                    setTransferReference(e.target.value)
+                                                }
+                                                maxLength={150}
+                                                required
+                                                disabled={submitting}
+                                            />
+                                        </div>
 
-                                    <div className="refund-form-group">
-                                        <label htmlFor="transfer-evidence">
-                                            Liên kết chứng từ chuyển khoản
-                                        </label>
-                                        <input
-                                            id="transfer-evidence"
-                                            type="url"
-                                            value={transferEvidenceUrl}
-                                            onChange={e => setTransferEvidenceUrl(e.target.value)}
-                                            placeholder="https://..."
-                                            maxLength={1000}
-                                            required
-                                            disabled={submitting}
-                                        />
-                                        <small>
-                                            Bắt buộc có chứng từ trước khi xác nhận đã chuyển tiền.
-                                        </small>
-                                    </div>
+                                        <div className="refund-form-group">
+                                            <label htmlFor="transfer-evidence">
+                                                Liên kết chứng từ chuyển khoản
+                                            </label>
+                                            <input
+                                                id="transfer-evidence"
+                                                type="url"
+                                                value={transferEvidenceUrl}
+                                                onChange={e =>
+                                                    setTransferEvidenceUrl(e.target.value)
+                                                }
+                                                placeholder="https://..."
+                                                maxLength={1000}
+                                                required
+                                                disabled={submitting}
+                                            />
+                                            <small>
+                                                Bắt buộc có chứng từ trước khi xác nhận
+                                                đã chuyển tiền.
+                                            </small>
+                                        </div>
 
-                                    {error && <div className="refund-alert refund-alert-error">{error}</div>}
-                                    <div className="refund-modal-footer">
+                                        {error && (
+                                            <div className="refund-alert refund-alert-error">
+                                                {error}
+                                            </div>
+                                        )}
 
-                                        <button
-                                            className="refund-submit-btn"
-                                            type="submit"
-                                            disabled={
-                                                submitting ||
-                                                !transferReference.trim() ||
-                                                !transferEvidenceUrl.trim()
-                                            }
-                                        >
-                                            {submitting ? 'Đang lưu...' : 'Xác nhận đã chuyển tiền'}
-                                        </button>
+                                        <div className="refund-modal-footer">
+                                            <button
+                                                className="refund-submit-btn"
+                                                type="submit"
+                                                disabled={
+                                                    submitting ||
+                                                    !transferReference.trim() ||
+                                                    !transferEvidenceUrl.trim()
+                                                }
+                                            >
+                                                {submitting
+                                                    ? 'Đang lưu...'
+                                                    : 'Xác nhận đã chuyển tiền'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
 
-                                    </div>
-                                </form>
-                            )}
-
-                            {selectedRefund.status === 'PENDING_REVIEW' ? (
+                            {isAdmin &&
+                            selectedRefund.status === 'PENDING_REVIEW' ? (
                                 <form onSubmit={handleSubmitReview}>
                                     <div className="refund-form-group">
                                         <label htmlFor="refund-decision">
@@ -629,9 +660,7 @@ export default function AdminRefundManagement() {
                                         <select
                                             id="refund-decision"
                                             value={decision}
-                                            onChange={e =>
-                                                setDecision(e.target.value)
-                                            }
+                                            onChange={e => setDecision(e.target.value)}
                                             disabled={submitting}
                                         >
                                             <option value="APPROVED">
@@ -653,15 +682,11 @@ export default function AdminRefundManagement() {
                                                 id="approved-amount"
                                                 type="number"
                                                 min="1"
-                                                max={Number(
-                                                    selectedRefund.requestedAmount
-                                                )}
+                                                max={Number(selectedRefund.requestedAmount)}
                                                 step="1"
                                                 value={approvedAmount}
                                                 onChange={e =>
-                                                    setApprovedAmount(
-                                                        e.target.value
-                                                    )
+                                                    setApprovedAmount(e.target.value)
                                                 }
                                                 disabled={submitting}
                                                 required
@@ -701,12 +726,7 @@ export default function AdminRefundManagement() {
                                         <button
                                             type="button"
                                             className="refund-cancel-btn"
-                                            onClick={() => {
-                                                if (!submitting) {
-                                                    setSelectedRefund(null);
-                                                    setError('');
-                                                }
-                                            }}
+                                            onClick={closeDetail}
                                             disabled={submitting}
                                         >
                                             Đóng
@@ -738,7 +758,7 @@ export default function AdminRefundManagement() {
                                     <button
                                         type="button"
                                         className="refund-cancel-btn"
-                                        onClick={() => setSelectedRefund(null)}
+                                        onClick={closeDetail}
                                     >
                                         Đóng
                                     </button>

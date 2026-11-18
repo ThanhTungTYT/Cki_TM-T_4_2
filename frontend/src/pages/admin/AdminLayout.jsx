@@ -13,7 +13,6 @@ import {
     faTriangleExclamation,
     faClipboardCheck,
     faGift,
-    faUserGear,
     faBell,
     faBoxOpen,
     faFileInvoiceDollar
@@ -27,8 +26,8 @@ const menuItems = [
     { label: "Tổng quan", path: "/admin", icon: faHouse },
     { label: "Quản lý đơn hàng", path: "/admin/orders", icon: faClipboardList },
     { label: "Nhà cung cấp", path: "/admin/providers", icon: faStore },
-    { label: "Duyệt yêu cầu ĐT", path: "/admin/provider-requests", icon: faClipboardCheck },
-    { label: "Quản lý tài khoản", path: "/admin/accounts", icon: faUsers },
+    { label: "Duyệt yêu cầu đối tác", path: "/admin/provider-requests", icon: faClipboardCheck },
+    { label: "Quản lý tài khoản", path: "/admin/accounts", icon: faUsers, adminOnly: true },
     { label: "Quản lý dịch vụ", path: "/admin/services", icon: faTags },
     { label: "Duyệt dịch vụ Provider", path: "/admin/provider-service-approvals", icon: faClipboardCheck },
     { label: "Quản lý giao dịch", path: "/admin/transactions", icon: faCreditCard },
@@ -36,7 +35,6 @@ const menuItems = [
     { label: "Quản lý hoàn tiền", path: "/admin/refunds", icon: faMoneyBillTransfer },
     { label: "Quản lý khiếu nại", path: "/admin/complaints", icon: faTriangleExclamation },
     { label: "Ưu đãi & điểm thưởng", path: "/admin/promotions", icon: faGift },
-    { label: "Nhân sự & vận hành", path: "/admin/staff-operations", icon: faUserGear },
     { label: "Giám sát thông báo", path: "/admin/outbox", icon: faBell },
     { label: "Đơn hàng khuyến mãi", path: "/admin/reward-orders", icon: faBoxOpen }
 ];
@@ -69,18 +67,15 @@ function AdminLayout({ children }) {
 
     const isStaff = currentRole === "STAFF";
     const isAdmin = currentRole === "ADMIN";
+    const hasAdminAccess = isAdmin || isStaff;
 
-    const staffAllowedPaths = [
-        "/admin/complaints",
-        "/admin/staff-operations",
-        "/admin/reward-orders"
-    ];
+    const visibleMenuItems = menuItems.filter(item => {
+        if (item.adminOnly && !isAdmin) {
+            return false;
+        }
 
-    const visibleMenuItems = isStaff
-        ? menuItems.filter(item => staffAllowedPaths.includes(item.path))
-        : isAdmin
-            ? menuItems
-            : [];
+        return hasAdminAccess;
+    });
 
     const handleLogout = () => {
         localStorage.removeItem("token");
@@ -95,7 +90,7 @@ function AdminLayout({ children }) {
 
     return (
         <div className="admin-layout">
-            {(isAdmin || isStaff) && <AdminNotificationRealtime />}
+            {hasAdminAccess && <AdminNotificationRealtime />}
 
             <aside className="admin-sidebar">
                 <Link
@@ -178,7 +173,7 @@ function AdminLayout({ children }) {
             </aside>
 
             <main className="admin-main">
-                {isAdmin && location.pathname === "/admin" && (
+                {hasAdminAccess && location.pathname === "/admin" && (
                     <AdminOverviewCards />
                 )}
 

@@ -15,6 +15,26 @@ import "./AdminProviderSettlements.css";
 
 const API = "http://localhost:8080/api";
 
+function getCurrentUser() {
+    try {
+        return JSON.parse(
+            sessionStorage.getItem("user") ||
+            localStorage.getItem("user") ||
+            "{}"
+        );
+    } catch {
+        return {};
+    }
+}
+
+function normalizeRole(role) {
+    return String(role || "").trim().toUpperCase().replace(/^ROLE_/, "");
+}
+
+function isAdminUser() {
+    return normalizeRole(getCurrentUser().role) === "ADMIN";
+}
+
 function getToken() {
     return localStorage.getItem("accessToken") ||
         localStorage.getItem("token") ||
@@ -72,6 +92,8 @@ const statusText = value => ({
 }[String(value || "").toUpperCase()] || value || "—");
 
 function AdminProviderSettlements() {
+    const isAdmin = isAdminUser();
+
     const [settlements, setSettlements] = useState([]);
     const [providers, setProviders] = useState([]);
     const [eligible, setEligible] = useState([]);
@@ -206,6 +228,11 @@ function AdminProviderSettlements() {
     };
 
     const approve = async id => {
+        if (!isAdminUser()) {
+            setError("Chỉ Admin mới có quyền duyệt kỳ đối soát.");
+            return;
+        }
+
         if (!window.confirm("Xác nhận duyệt kỳ đối soát này? Duyệt không có nghĩa là đã chuyển tiền.")) {
             return;
         }
@@ -236,6 +263,12 @@ function AdminProviderSettlements() {
 
     const submitPaid = async event => {
         event.preventDefault();
+
+        if (!isAdminUser()) {
+            setPaidTarget(null);
+            setError("Chỉ Admin mới có quyền xác nhận đã chuyển tiền.");
+            return;
+        }
 
         if (!paidTarget) return;
 
@@ -281,7 +314,7 @@ function AdminProviderSettlements() {
                             Đối soát & chi trả Provider
                         </h1>
                         <p>
-                            Quản lý kỳ đối soát, phê duyệt và lưu chứng từ chuyển tiền cho nhà cung cấp.
+                            Quản lý kỳ đối soát và theo dõi quá trình chi trả cho nhà cung cấp.
                         </p>
                     </div>
 
@@ -550,7 +583,7 @@ function AdminProviderSettlements() {
                                                 <FontAwesomeIcon icon={faEye} />
                                             </button>
 
-                                            {item.status === "DRAFT" && (
+                                            {isAdmin && item.status === "DRAFT" && (
                                                 <button
                                                     title="Duyệt"
                                                     onClick={() => approve(item.id)}
@@ -560,7 +593,7 @@ function AdminProviderSettlements() {
                                                 </button>
                                             )}
 
-                                            {item.status === "APPROVED" && (
+                                            {isAdmin && item.status === "APPROVED" && (
                                                 <button
                                                     title="Ghi nhận chuyển tiền"
                                                     onClick={() => setPaidTarget(item)}
@@ -669,7 +702,7 @@ function AdminProviderSettlements() {
                     </div>
                 )}
 
-                {paidTarget && (
+                {isAdmin && paidTarget && (
                     <div
                         className="settlement-modal-backdrop"
                         onClick={() => setPaidTarget(null)}
