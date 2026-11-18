@@ -1,58 +1,71 @@
 
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
-import Home from './pages/home';
-import Rewards from './pages/rewards';
-import Login from './pages/login';
-import Register from './pages/register';
-import Services from './pages/services';
-import ServiceDetail from './pages/service-detail';
-import Provider from './pages/provider';
-import Providers from './pages/providers';
-import Profile from './pages/profile';
-import VerifyOtp from './pages/verify-otp';
-import Cart from './pages/cart';
-import Checkout from './pages/checkout';
-import CustomerBookings from './pages/customer-bookings';
-import CustomerBookingHistory from './pages/customer-booking-history';
-import CustomerReports from './pages/customer-reports';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminAccounts from './pages/admin/AdminAccounts';
-import AdminServices from './pages/admin/AdminServices';
-import AdminProviders from './pages/admin/AdminProviders';
-import AdminOrders from './pages/admin/AdminOrders';
-import AdminTransactions from './pages/admin/AdminTransactions';
-import AdminProviderSettlements from './pages/admin/AdminProviderSettlements';
-import AdminProviderServiceApprovals from './pages/admin/AdminProviderServiceApprovals';
-import AdminComplaintManagement from './pages/admin/AdminComplaintManagement';
-import ForgotPassword from './pages/forgot-password';
-import AdminRefundManagement from './pages/admin/AdminRefundManagement';
-import AdminProviderChangeRequests from './pages/admin/AdminProviderChangeRequests';
-import AdminPromotions from './pages/admin/AdminPromotions';
-import AdminStaffOperations from './pages/admin/AdminStaffOperations';
-import AdminOutboxManagement from './pages/admin/AdminOutboxManagement';
-import AdminRewardOrders from './pages/admin/AdminRewardOrders';
-import PaymentResult from './pages/PaymentResult';
-import ProviderLayout from './pages/provider-portal/ProviderLayout';
-import ProviderDashboard from './pages/provider-portal/ProviderDashboard';
-import ProviderBookings from './pages/provider-portal/ProviderBookings';
-import ProviderBookingDetail from './pages/provider-portal/ProviderBookingDetail';
-import ProviderEmployees from './pages/provider-portal/ProviderEmployees';
-import ProviderSchedule from './pages/provider-portal/ProviderSchedule';
-import ProviderServices from './pages/provider-portal/ProviderServices';
-import ProviderComplaints from './pages/provider-portal/ProviderComplaints';
-import ProviderRevenue from './pages/provider-portal/ProviderRevenue';
-import ProviderReviews from './pages/provider-portal/ProviderReviews';
-import CleanerLayout from './pages/cleaner-portal/CleanerLayout';
-import CleanerDashboard from './pages/cleaner-portal/CleanerDashboard';
-import CleanerPlaceholder from './pages/cleaner-portal/CleanerPlaceholder';
-import CleanerCalendar from './pages/cleaner-portal/CleanerCalendar';
-import CleanerHistory from './pages/cleaner-portal/CleanerHistory';
-import CleanerNotifications from './pages/cleaner-portal/CleanerNotifications';
-import CleanerJobs from './pages/cleaner-portal/CleanerJobs';
-import CleanerJobDetail from './pages/cleaner-portal/CleanerJobDetail';
-import CleanerProfile from './pages/cleaner-portal/CleanerProfile';
-import ProtectedRoute from './components/ProtectedRoute';
+import {
+    BrowserRouter,
+    Routes,
+    Route,
+    Navigate,
+    useNavigate,
+    useLocation
+} from "react-router-dom";
+import { useEffect } from "react";
+
+import Home from "./pages/home";
+import Rewards from "./pages/rewards";
+import Login from "./pages/login";
+import Register from "./pages/register";
+import Services from "./pages/services";
+import ServiceDetail from "./pages/service-detail";
+import Provider from "./pages/provider";
+import Providers from "./pages/providers";
+import Profile from "./pages/profile";
+import VerifyOtp from "./pages/verify-otp";
+import Cart from "./pages/cart";
+import Checkout from "./pages/checkout";
+import CustomerBookings from "./pages/customer-bookings";
+import CustomerBookingHistory from "./pages/customer-booking-history";
+import CustomerReports from "./pages/customer-reports";
+
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminAccounts from "./pages/admin/AdminAccounts";
+import AdminServices from "./pages/admin/AdminServices";
+import AdminProviders from "./pages/admin/AdminProviders";
+import AdminOrders from "./pages/admin/AdminOrders";
+import AdminTransactions from "./pages/admin/AdminTransactions";
+import AdminProviderSettlements from "./pages/admin/AdminProviderSettlements";
+import AdminProviderServiceApprovals from "./pages/admin/AdminProviderServiceApprovals";
+import AdminComplaintManagement from "./pages/admin/AdminComplaintManagement";
+import AdminRefundManagement from "./pages/admin/AdminRefundManagement";
+import AdminProviderChangeRequests from "./pages/admin/AdminProviderChangeRequests";
+import AdminPromotions from "./pages/admin/AdminPromotions";
+import AdminStaffOperations from "./pages/admin/AdminStaffOperations";
+import AdminOutboxManagement from "./pages/admin/AdminOutboxManagement";
+import AdminRewardOrders from "./pages/admin/AdminRewardOrders";
+
+import ForgotPassword from "./pages/forgot-password";
+import PaymentResult from "./pages/PaymentResult";
+
+import ProviderLayout from "./pages/provider-portal/ProviderLayout";
+import ProviderDashboard from "./pages/provider-portal/ProviderDashboard";
+import ProviderBookings from "./pages/provider-portal/ProviderBookings";
+import ProviderBookingDetail from "./pages/provider-portal/ProviderBookingDetail";
+import ProviderEmployees from "./pages/provider-portal/ProviderEmployees";
+import ProviderSchedule from "./pages/provider-portal/ProviderSchedule";
+import ProviderServices from "./pages/provider-portal/ProviderServices";
+import ProviderComplaints from "./pages/provider-portal/ProviderComplaints";
+import ProviderRevenue from "./pages/provider-portal/ProviderRevenue";
+import ProviderReviews from "./pages/provider-portal/ProviderReviews";
+
+import CleanerLayout from "./pages/cleaner-portal/CleanerLayout";
+import CleanerDashboard from "./pages/cleaner-portal/CleanerDashboard";
+import CleanerPlaceholder from "./pages/cleaner-portal/CleanerPlaceholder";
+import CleanerCalendar from "./pages/cleaner-portal/CleanerCalendar";
+import CleanerHistory from "./pages/cleaner-portal/CleanerHistory";
+import CleanerNotifications from "./pages/cleaner-portal/CleanerNotifications";
+import CleanerJobs from "./pages/cleaner-portal/CleanerJobs";
+import CleanerJobDetail from "./pages/cleaner-portal/CleanerJobDetail";
+import CleanerProfile from "./pages/cleaner-portal/CleanerProfile";
+
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function AuthSessionExpiryHandler() {
     const navigate = useNavigate();
@@ -60,49 +73,51 @@ function AuthSessionExpiryHandler() {
 
     useEffect(() => {
         const onExpired = event => {
-            navigate('/login', {
+            navigate("/login", {
                 replace: true,
                 state: {
                     from: location,
-                    reason: event.detail?.reason || 'expired'
+                    reason: event.detail?.reason || "expired"
                 }
             });
         };
 
-        window.addEventListener('cleanmate:auth-expired', onExpired);
+        window.addEventListener("cleanmate:auth-expired", onExpired);
 
         return () => {
-            window.removeEventListener('cleanmate:auth-expired', onExpired);
+            window.removeEventListener("cleanmate:auth-expired", onExpired);
         };
     }, [location, navigate]);
 
     return null;
 }
 
-function HomeRoute() {
-    let user = {};
-
+function getCurrentRole() {
     try {
-        user = JSON.parse(
-            sessionStorage.getItem('user') ||
-            localStorage.getItem('user') ||
-            '{}'
+        const user = JSON.parse(
+            sessionStorage.getItem("user") ||
+            localStorage.getItem("user") ||
+            "{}"
         );
+
+        return String(user.role || "")
+            .trim()
+            .toUpperCase()
+            .replace(/^ROLE_/, "");
     } catch {
-        user = {};
+        return "";
     }
+}
 
-    const role = String(user.role || '')
-        .trim()
-        .toUpperCase()
-        .replace(/^ROLE_/, '');
+function HomeRoute() {
+    const role = getCurrentRole();
 
-    if (role === 'CLEANER' || role === 'EMPLOYEE') {
+    if (role === "CLEANER" || role === "EMPLOYEE") {
         return <Navigate to="/cleaner/dashboard" replace />;
     }
 
-    if (role === 'STAFF') {
-        return <Navigate to="/admin/staff-operations" replace />;
+    if (role === "STAFF") {
+        return <Navigate to="/admin" replace />;
     }
 
     return <Home />;
@@ -110,7 +125,7 @@ function HomeRoute() {
 
 function AdminOnly({ children }) {
     return (
-        <ProtectedRoute roles={['ADMIN']}>
+        <ProtectedRoute roles={["ADMIN"]}>
             {children}
         </ProtectedRoute>
     );
@@ -118,7 +133,7 @@ function AdminOnly({ children }) {
 
 function AdminAndStaff({ children }) {
     return (
-        <ProtectedRoute roles={['ADMIN', 'STAFF']}>
+        <ProtectedRoute roles={["ADMIN", "STAFF"]}>
             {children}
         </ProtectedRoute>
     );
@@ -152,7 +167,7 @@ function App() {
                 <Route
                     path="/profile"
                     element={
-                        <ProtectedRoute roles={['*']}>
+                        <ProtectedRoute roles={["*"]}>
                             <Profile />
                         </ProtectedRoute>
                     }
@@ -165,7 +180,7 @@ function App() {
                 <Route
                     path="/customer/bookings"
                     element={
-                        <ProtectedRoute roles={['CUSTOMER']}>
+                        <ProtectedRoute roles={["CUSTOMER"]}>
                             <CustomerBookings />
                         </ProtectedRoute>
                     }
@@ -174,7 +189,7 @@ function App() {
                 <Route
                     path="/customer/bookings/history"
                     element={
-                        <ProtectedRoute roles={['CUSTOMER']}>
+                        <ProtectedRoute roles={["CUSTOMER"]}>
                             <CustomerBookingHistory />
                         </ProtectedRoute>
                     }
@@ -183,7 +198,7 @@ function App() {
                 <Route
                     path="/customer/reports"
                     element={
-                        <ProtectedRoute roles={['CUSTOMER']}>
+                        <ProtectedRoute roles={["CUSTOMER"]}>
                             <CustomerReports />
                         </ProtectedRoute>
                     }
@@ -192,9 +207,9 @@ function App() {
                 <Route
                     path="/admin"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminDashboard />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
@@ -210,63 +225,63 @@ function App() {
                 <Route
                     path="/admin/services"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminServices />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
                 <Route
                     path="/admin/providers"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminProviders />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
                 <Route
                     path="/admin/provider-requests"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminProviderChangeRequests />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
                 <Route
                     path="/admin/orders"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminOrders />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
                 <Route
                     path="/admin/transactions"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminTransactions />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
                 <Route
                     path="/admin/provider-settlements"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminProviderSettlements />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
                 <Route
                     path="/admin/provider-service-approvals"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminProviderServiceApprovals />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
@@ -282,18 +297,36 @@ function App() {
                 <Route
                     path="/admin/refunds"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminRefundManagement />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
 
                 <Route
                     path="/admin/promotions"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminPromotions />
+                        </AdminAndStaff>
+                    }
+                />
+
+                <Route
+                    path="/admin/staff-operations"
+                    element={
+                        <AdminOnly>
+                            <AdminStaffOperations />
                         </AdminOnly>
+                    }
+                />
+
+                <Route
+                    path="/admin/outbox"
+                    element={
+                        <AdminAndStaff>
+                            <AdminOutboxManagement />
+                        </AdminAndStaff>
                     }
                 />
 
@@ -303,24 +336,6 @@ function App() {
                         <AdminAndStaff>
                             <AdminRewardOrders />
                         </AdminAndStaff>
-                    }
-                />
-
-                <Route
-                    path="/admin/staff-operations"
-                    element={
-                        <AdminAndStaff>
-                            <AdminStaffOperations />
-                        </AdminAndStaff>
-                    }
-                />
-
-                <Route
-                    path="/admin/outbox"
-                    element={
-                        <AdminOnly>
-                            <AdminOutboxManagement />
-                        </AdminOnly>
                     }
                 />
 

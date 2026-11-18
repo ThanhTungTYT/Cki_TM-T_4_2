@@ -1,3 +1,4 @@
+
 package org.ckitmdt.backend.controller.auth;
 
 import lombok.RequiredArgsConstructor;
@@ -44,15 +45,21 @@ public class AdminOrderController {
             @RequestParam(required = false) String toDate,
             Authentication authentication) {
 
-        validateAdmin(authentication);
+        validateAdminOrStaff(authentication);
 
-        String search = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
+        String search = keyword == null
+                ? ""
+                : keyword.trim().toLowerCase(Locale.ROOT);
+
         String statusFilter = normalize(status);
         LocalDateTime from = parseDate(fromDate, false);
         LocalDateTime to = parseDate(toDate, true);
 
         if (from != null && to != null && from.isAfter(to)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Khoảng ngày lọc không hợp lệ.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Khoảng ngày lọc không hợp lệ."
+            );
         }
 
         List<Booking> bookings = bookingRepository.findAll(
@@ -62,16 +69,19 @@ public class AdminOrderController {
         List<Map<String, Object>> result = new ArrayList<>();
 
         for (Booking booking : bookings) {
-            if (!statusFilter.isEmpty() && !statusFilter.equals(normalize(booking.getStatus()))) {
+            if (!statusFilter.isEmpty()
+                    && !statusFilter.equals(normalize(booking.getStatus()))) {
                 continue;
             }
 
-            if (partnerId != null && (booking.getPartner() == null
+            if (partnerId != null
+                    && (booking.getPartner() == null
                     || !partnerId.equals(booking.getPartner().getId()))) {
                 continue;
             }
 
-            if (customerId != null && (booking.getCustomer() == null
+            if (customerId != null
+                    && (booking.getCustomer() == null
                     || !customerId.equals(booking.getCustomer().getId()))) {
                 continue;
             }
@@ -80,15 +90,18 @@ public class AdminOrderController {
                     ? booking.getScheduledStart()
                     : booking.getCreatedAt();
 
-            if (from != null && (bookingDate == null || bookingDate.isBefore(from))) {
+            if (from != null
+                    && (bookingDate == null || bookingDate.isBefore(from))) {
                 continue;
             }
 
-            if (to != null && (bookingDate == null || bookingDate.isAfter(to))) {
+            if (to != null
+                    && (bookingDate == null || bookingDate.isAfter(to))) {
                 continue;
             }
 
-            BookingResponse response = bookingStateEngine.mapToBookingResponse(booking);
+            BookingResponse response =
+                    bookingStateEngine.mapToBookingResponse(booking);
 
             if (!search.isEmpty() && !matchesSearch(response, search)) {
                 continue;
@@ -105,7 +118,8 @@ public class AdminOrderController {
     public ResponseEntity<Map<String, Object>> getOrderDetail(
             @PathVariable Long id,
             Authentication authentication) {
-        validateAdmin(authentication);
+
+        validateAdminOrStaff(authentication);
 
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -113,7 +127,8 @@ public class AdminOrderController {
                         "Không tìm thấy đơn hàng."
                 ));
 
-        BookingResponse response = bookingStateEngine.mapToBookingResponse(booking);
+        BookingResponse response =
+                bookingStateEngine.mapToBookingResponse(booking);
 
         return ResponseEntity.ok(toOrderResponse(booking, response));
     }
@@ -173,7 +188,11 @@ public class AdminOrderController {
                 "CONFIRMED",
                 "ASSIGNED"
         ).contains(currentStatus)) {
-            if (List.of("EN_ROUTE", "IN_PROGRESS", "PENDING_COMPLETION").contains(currentStatus)) {
+            if (List.of(
+                    "EN_ROUTE",
+                    "IN_PROGRESS",
+                    "PENDING_COMPLETION"
+            ).contains(currentStatus)) {
                 throw new ResponseStatusException(
                         HttpStatus.CONFLICT,
                         "Đơn đã bắt đầu thực hiện. Không được hủy như đơn chưa thực hiện. Hãy xử lý qua quy trình ngoại lệ/khiếu nại và lưu bằng chứng."
@@ -187,6 +206,7 @@ public class AdminOrderController {
         }
 
         String reason = readText(requestBody.get("note"));
+
         if (reason.isBlank()) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -202,7 +222,9 @@ public class AdminOrderController {
         }
 
         List<Payment> payments = paymentRepository.findByBooking_Id(id);
-        boolean alreadyPaid = payments.stream().anyMatch(this::isSuccessfulPayment);
+
+        boolean alreadyPaid = payments.stream()
+                .anyMatch(this::isSuccessfulPayment);
 
         String refundPlan = readText(requestBody.get("refundPlan"));
 
@@ -240,24 +262,31 @@ public class AdminOrderController {
         return ResponseEntity.ok(updated);
     }
 
-    private Map<String, Object> toOrderResponse(Booking booking, BookingResponse response) {
-        List<Payment> payments = paymentRepository.findByBooking_Id(booking.getId());
+    private Map<String, Object> toOrderResponse(
+            Booking booking,
+            BookingResponse response
+    ) {
+        List<Payment> payments =
+                paymentRepository.findByBooking_Id(booking.getId());
 
-        boolean paid = payments.stream().anyMatch(this::isSuccessfulPayment);
+        boolean paid = payments.stream()
+                .anyMatch(this::isSuccessfulPayment);
 
-        List<Map<String, Object>> paymentRecords = payments.stream().map(payment -> {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("id", payment.getId());
-            row.put("method", payment.getPaymentMethod());
-            row.put("provider", payment.getPaymentProvider());
-            row.put("amount", payment.getAmount());
-            row.put("status", payment.getStatus());
-            row.put("transactionCode", payment.getTransactionCode());
-            row.put("txnRef", payment.getTxnRef());
-            row.put("createdAt", payment.getCreatedAt());
-            row.put("paidAt", payment.getPaidAt());
-            return row;
-        }).toList();
+        List<Map<String, Object>> paymentRecords = payments.stream()
+                .map(payment -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", payment.getId());
+                    row.put("method", payment.getPaymentMethod());
+                    row.put("provider", payment.getPaymentProvider());
+                    row.put("amount", payment.getAmount());
+                    row.put("status", payment.getStatus());
+                    row.put("transactionCode", payment.getTransactionCode());
+                    row.put("txnRef", payment.getTxnRef());
+                    row.put("createdAt", payment.getCreatedAt());
+                    row.put("paidAt", payment.getPaidAt());
+                    return row;
+                })
+                .toList();
 
         Map<String, Object> item = new LinkedHashMap<>();
 
@@ -288,7 +317,10 @@ public class AdminOrderController {
         item.put("cancelledAt", response.getCancelledAt());
         item.put("items", response.getItems());
         item.put("statusHistory", response.getStatusHistory());
-        item.put("cancellationNeedsRefundReview", paid && "CANCELLED".equalsIgnoreCase(booking.getStatus()));
+        item.put(
+                "cancellationNeedsRefundReview",
+                paid && "CANCELLED".equalsIgnoreCase(booking.getStatus())
+        );
 
         return item;
     }
@@ -299,11 +331,13 @@ public class AdminOrderController {
                 || contains(response.getCustomerPhone(), search)
                 || contains(response.getPartnerName(), search)
                 || contains(response.getFullAddress(), search)
-                || response.getId() != null && response.getId().toString().contains(search);
+                || response.getId() != null
+                && response.getId().toString().contains(search);
     }
 
     private boolean contains(String value, String search) {
-        return value != null && value.toLowerCase(Locale.ROOT).contains(search);
+        return value != null
+                && value.toLowerCase(Locale.ROOT).contains(search);
     }
 
     private boolean isSuccessfulPayment(Payment payment) {
@@ -312,17 +346,50 @@ public class AdminOrderController {
                 || "PAID".equalsIgnoreCase(payment.getStatus()));
     }
 
-    private void validateAdmin(Authentication authentication) {
-        if (authentication == null || authentication.getName() == null
+    private void validateAdminOrStaff(Authentication authentication) {
+        if (authentication == null
+                || authentication.getName() == null
                 || authentication.getName().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Bạn cần đăng nhập lại.");
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Bạn cần đăng nhập lại."
+            );
         }
 
         boolean allowed = authentication.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+                .anyMatch(authority ->
+                        "ROLE_ADMIN".equals(authority.getAuthority())
+                                || "ROLE_STAFF".equals(authority.getAuthority())
+                );
 
         if (!allowed) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Chỉ Admin mới có quyền xem và can thiệp đơn hàng toàn sàn.");
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ Admin hoặc Staff được xem đơn hàng toàn sàn."
+            );
+        }
+    }
+
+    private void validateAdmin(Authentication authentication) {
+        if (authentication == null
+                || authentication.getName() == null
+                || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Bạn cần đăng nhập lại."
+            );
+        }
+
+        boolean allowed = authentication.getAuthorities().stream()
+                .anyMatch(authority ->
+                        "ROLE_ADMIN".equals(authority.getAuthority())
+                );
+
+        if (!allowed) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Chỉ Admin mới có quyền can thiệp đơn hàng."
+            );
         }
     }
 
@@ -335,7 +402,10 @@ public class AdminOrderController {
             try {
                 return Long.parseLong(string.trim());
             } catch (NumberFormatException ignored) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phiên bản đơn hàng không hợp lệ.");
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Phiên bản đơn hàng không hợp lệ."
+                );
             }
         }
 
@@ -347,7 +417,9 @@ public class AdminOrderController {
     }
 
     private String normalize(String value) {
-        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        return value == null
+                ? ""
+                : value.trim().toUpperCase(Locale.ROOT);
     }
 
     private LocalDateTime parseDate(String value, boolean endOfDay) {
@@ -357,9 +429,16 @@ public class AdminOrderController {
 
         try {
             LocalDate date = LocalDate.parse(value.trim());
-            return endOfDay ? date.plusDays(1).atStartOfDay().minusNanos(1) : date.atStartOfDay();
+
+            return endOfDay
+                    ? date.plusDays(1).atStartOfDay().minusNanos(1)
+                    : date.atStartOfDay();
+
         } catch (Exception exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày lọc không hợp lệ. Dùng định dạng yyyy-MM-dd.");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Ngày lọc không hợp lệ. Dùng định dạng yyyy-MM-dd."
+            );
         }
     }
 }
