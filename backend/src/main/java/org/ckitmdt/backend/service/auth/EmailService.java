@@ -34,6 +34,25 @@ public class EmailService {
         mailSender.send(message);
     }
 
+    public void sendPartnerRegistrationOtp(String email, String otp) {
+        SimpleMailMessage message = new SimpleMailMessage();
+
+        message.setFrom(senderEmail);
+        message.setTo(email);
+        message.setSubject("CleanMate - Ma xac thuc dang ky Doi tac Doanh nghiep");
+
+        message.setText(
+                "Xin chao Quy Doi tac!\n\n"
+                        + "Ma OTP xac thuc email dang ky ho so Doanh nghiep CleanMate cua ban la: "
+                        + otp
+                        + "\n\nMa co hieu luc trong 5 phut."
+                        + "\nVui long nhap ma nay tai Buoc 1 de tiep tuc hoan tat ho so KYB."
+                        + "\nKhong chia se ma nay voi bat ky ai."
+        );
+
+        mailSender.send(message);
+    }
+
     public void sendTemporaryPassword(String email, String temporaryPassword) {
         SimpleMailMessage message = new SimpleMailMessage();
 

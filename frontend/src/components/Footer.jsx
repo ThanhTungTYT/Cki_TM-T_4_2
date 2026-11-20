@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBroom } from '@fortawesome/free-solid-svg-icons';
 import { faFacebookF, faInstagram, faYoutube } from '@fortawesome/free-brands-svg-icons';
@@ -24,28 +25,27 @@ function Footer() {
 
                 <div className="footer-column">
                     <h3>Dịch vụ</h3>
-                    <a href="#">Vệ sinh nhà ở</a>
-                    <a href="#">Vệ sinh văn phòng</a>
-                    <a href="#">Vệ sinh sau xây dựng</a>
-                    <a href="#">Vệ sinh máy lạnh</a>
-                    <a href="#">Tổng vệ sinh</a>
+                    <Link to="/services">Vệ sinh nhà ở</Link>
+                    <Link to="/services">Vệ sinh văn phòng</Link>
+                    <Link to="/services">Vệ sinh sau xây dựng</Link>
+                    <Link to="/services">Vệ sinh máy lạnh</Link>
+                    <Link to="/services">Tổng vệ sinh</Link>
                 </div>
 
                 <div className="footer-column">
                     <h3>Hỗ trợ</h3>
-                    <a href="#">Trung tâm trợ giúp</a>
-                    <a href="#">Chính sách giá</a>
-                    <a href="#">Quy trình đặt lịch</a>
-                    <a href="#">Câu hỏi thường gặp</a>
+                    <Link to="/customer/reports">Trung tâm trợ giúp</Link>
+                    <Link to="/services">Bảng giá dịch vụ</Link>
+                    <Link to="/customer/bookings">Theo dõi đơn đặt</Link>
+                    <Link to="/rewards">Đổi thưởng Ccoin</Link>
                 </div>
 
                 <div className="footer-column">
                     <h3>Về chúng tôi</h3>
-                    <a href="#">Giới thiệu</a>
-                    <a href="#">Tin tức & Sự kiện</a>
-                    <a href="#">Tuyển dụng</a>
-                    <a href="#">Trở thành đối tác</a>
-                    <a href="#">Liên hệ hệ thống</a>
+                    <Link to="/">Giới thiệu CleanMate</Link>
+                    <Link to="/providers">Mạng lưới đối tác</Link>
+                    <Link to="/become-partner">Trở thành đối tác (KYB)</Link>
+                    <Link to="/customer/reports">Liên hệ hệ thống</Link>
                 </div>
 
                 <div className="footer-column">
@@ -61,8 +61,8 @@ function Footer() {
             <div className="footer-bottom">
                 <span>© 2026 CleanMate Marketplace. Tất cả quyền được bảo lưu.</span>
                 <div>
-                    <a href="#">Điều khoản sử dụng</a>
-                    <a href="#">Chính sách bảo mật</a>
+                    <Link to="/become-partner">Điều khoản Đối tác</Link>
+                    <Link to="/services">Khám phá dịch vụ</Link>
                 </div>
             </div>
         </footer>

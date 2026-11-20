@@ -1,26 +1,33 @@
-
 import {
     BrowserRouter,
     Routes,
     Route,
     Navigate,
+    Outlet,
     useNavigate,
     useLocation
 } from "react-router-dom";
 import { useEffect } from "react";
 
+import CustomerChatFloating from "./components/chatbot/CustomerChatFloating";
+import ProtectedRoute from "./components/ProtectedRoute";
+
 import Home from "./pages/home";
 import Rewards from "./pages/rewards";
 import Login from "./pages/login";
 import Register from "./pages/register";
+import BecomePartner from "./pages/become-partner";
+import PartnerOnboarding from "./pages/partner-onboarding";
 import Services from "./pages/services";
 import ServiceDetail from "./pages/service-detail";
 import Provider from "./pages/provider";
 import Providers from "./pages/providers";
 import Profile from "./pages/profile";
 import VerifyOtp from "./pages/verify-otp";
+import ForgotPassword from "./pages/forgot-password";
 import Cart from "./pages/cart";
 import Checkout from "./pages/checkout";
+import PaymentResult from "./pages/PaymentResult";
 import CustomerBookings from "./pages/customer-bookings";
 import CustomerBookingHistory from "./pages/customer-booking-history";
 import CustomerReports from "./pages/customer-reports";
@@ -40,9 +47,6 @@ import AdminPromotions from "./pages/admin/AdminPromotions";
 import AdminStaffOperations from "./pages/admin/AdminStaffOperations";
 import AdminOutboxManagement from "./pages/admin/AdminOutboxManagement";
 import AdminRewardOrders from "./pages/admin/AdminRewardOrders";
-
-import ForgotPassword from "./pages/forgot-password";
-import PaymentResult from "./pages/PaymentResult";
 
 import ProviderLayout from "./pages/provider-portal/ProviderLayout";
 import ProviderDashboard from "./pages/provider-portal/ProviderDashboard";
@@ -65,14 +69,12 @@ import CleanerJobs from "./pages/cleaner-portal/CleanerJobs";
 import CleanerJobDetail from "./pages/cleaner-portal/CleanerJobDetail";
 import CleanerProfile from "./pages/cleaner-portal/CleanerProfile";
 
-import ProtectedRoute from "./components/ProtectedRoute";
-
 function AuthSessionExpiryHandler() {
     const navigate = useNavigate();
     const location = useLocation();
 
     useEffect(() => {
-        const onExpired = event => {
+        const onExpired = (event) => {
             navigate("/login", {
                 replace: true,
                 state: {
@@ -123,6 +125,15 @@ function HomeRoute() {
     return <Home />;
 }
 
+function CustomerLayout() {
+    return (
+        <>
+            <Outlet />
+            <CustomerChatFloating />
+        </>
+    );
+}
+
 function AdminOnly({ children }) {
     return (
         <ProtectedRoute roles={["ADMIN"]}>
@@ -145,61 +156,74 @@ function App() {
             <AuthSessionExpiryHandler />
 
             <Routes>
-                <Route path="/" element={<HomeRoute />} />
+                <Route element={<CustomerLayout />}>
+                    <Route path="/" element={<HomeRoute />} />
+                    <Route path="/services" element={<Services />} />
+                    <Route path="/service-detail/:id" element={<ServiceDetail />} />
+                    <Route path="/provider/:id" element={<Provider />} />
+                    <Route path="/providers" element={<Providers />} />
+                    <Route path="/rewards" element={<Rewards />} />
+                    <Route path="/cart" element={<Cart />} />
+                    <Route path="/become-partner" element={<BecomePartner />} />
+
+                    <Route
+                        path="/checkout"
+                        element={
+                            <ProtectedRoute roles={["CUSTOMER"]}>
+                                <Checkout />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/profile"
+                        element={
+                            <ProtectedRoute roles={["*"]}>
+                                <Profile />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route path="/payment-result" element={<PaymentResult />} />
+
+                    <Route
+                        path="/customer/bookings"
+                        element={
+                            <ProtectedRoute roles={["CUSTOMER"]}>
+                                <CustomerBookings />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/customer/bookings/history"
+                        element={
+                            <ProtectedRoute roles={["CUSTOMER"]}>
+                                <CustomerBookingHistory />
+                            </ProtectedRoute>
+                        }
+                    />
+
+                    <Route
+                        path="/customer/reports"
+                        element={
+                            <ProtectedRoute roles={["CUSTOMER"]}>
+                                <CustomerReports />
+                            </ProtectedRoute>
+                        }
+                    />
+                </Route>
+
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
-                <Route path="/services" element={<Services />} />
-                <Route path="/service-detail/:id" element={<ServiceDetail />} />
-                <Route path="/provider/:id" element={<Provider />} />
-                <Route path="/providers" element={<Providers />} />
-                <Route path="/rewards" element={<Rewards />} />
-                <Route path="/cart" element={<Cart />} />
-
-                <Route
-                    path="/checkout"
-                    element={
-                        <ProtectedRoute>
-                            <Checkout />
-                        </ProtectedRoute>
-                    }
-                />
-
-                <Route
-                    path="/profile"
-                    element={
-                        <ProtectedRoute roles={["*"]}>
-                            <Profile />
-                        </ProtectedRoute>
-                    }
-                />
-
                 <Route path="/verify-otp" element={<VerifyOtp />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
-                <Route path="/payment-result" element={<PaymentResult />} />
 
                 <Route
-                    path="/customer/bookings"
+                    path="/partner-onboarding"
                     element={
-                        <ProtectedRoute roles={["CUSTOMER"]}>
-                            <CustomerBookings />
-                        </ProtectedRoute>
-                    }
-                />
-
-                <Route
-                    path="/customer/bookings/history"
-                    element={
-                        <ProtectedRoute roles={["CUSTOMER"]}>
-                            <CustomerBookingHistory />
-                        </ProtectedRoute>
-                    }
-                />
-
-                <Route
-                    path="/customer/reports"
-                    element={
-                        <ProtectedRoute roles={["CUSTOMER"]}>
-                            <CustomerReports />
+                        <ProtectedRoute roles={["PROVIDER", "PARTNER"]}>
+                            <PartnerOnboarding />
                         </ProtectedRoute>
                     }
                 />
@@ -212,7 +236,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/accounts"
                     element={
@@ -221,7 +244,6 @@ function App() {
                         </AdminOnly>
                     }
                 />
-
                 <Route
                     path="/admin/services"
                     element={
@@ -230,7 +252,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/providers"
                     element={
@@ -239,7 +260,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/provider-requests"
                     element={
@@ -248,7 +268,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/orders"
                     element={
@@ -257,7 +276,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/transactions"
                     element={
@@ -266,7 +284,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/provider-settlements"
                     element={
@@ -275,7 +292,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/provider-service-approvals"
                     element={
@@ -284,7 +300,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/complaints"
                     element={
@@ -293,7 +308,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/refunds"
                     element={
@@ -302,7 +316,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/promotions"
                     element={
@@ -311,7 +324,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/staff-operations"
                     element={
@@ -320,7 +332,6 @@ function App() {
                         </AdminOnly>
                     }
                 />
-
                 <Route
                     path="/admin/outbox"
                     element={
@@ -329,7 +340,6 @@ function App() {
                         </AdminAndStaff>
                     }
                 />
-
                 <Route
                     path="/admin/reward-orders"
                     element={
@@ -339,103 +349,43 @@ function App() {
                     }
                 />
 
-                <Route path="/cleaner" element={<CleanerLayout />}>
-                    <Route
-                        index
-                        element={<Navigate to="dashboard" replace />}
-                    />
-
-                    <Route
-                        path="dashboard"
-                        element={<CleanerDashboard />}
-                    />
-
-                    <Route
-                        path="jobs"
-                        element={<CleanerJobs />}
-                    />
-
-                    <Route
-                        path="jobs/:id"
-                        element={<CleanerJobDetail />}
-                    />
-
-                    <Route
-                        path="calendar"
-                        element={<CleanerCalendar />}
-                    />
-
-                    <Route
-                        path="history"
-                        element={<CleanerHistory />}
-                    />
-
-                    <Route
-                        path="notifications"
-                        element={<CleanerNotifications />}
-                    />
-
-                    <Route
-                        path="profile"
-                        element={<CleanerProfile />}
-                    />
-
-                    <Route
-                        path="*"
-                        element={<CleanerPlaceholder />}
-                    />
+                <Route
+                    path="/cleaner"
+                    element={
+                        <ProtectedRoute roles={["CLEANER", "EMPLOYEE"]}>
+                            <CleanerLayout />
+                        </ProtectedRoute>
+                    }
+                >
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route path="dashboard" element={<CleanerDashboard />} />
+                    <Route path="jobs" element={<CleanerJobs />} />
+                    <Route path="jobs/:id" element={<CleanerJobDetail />} />
+                    <Route path="calendar" element={<CleanerCalendar />} />
+                    <Route path="history" element={<CleanerHistory />} />
+                    <Route path="notifications" element={<CleanerNotifications />} />
+                    <Route path="profile" element={<CleanerProfile />} />
+                    <Route path="*" element={<CleanerPlaceholder />} />
                 </Route>
 
-                <Route path="/provider-portal" element={<ProviderLayout />}>
-                    <Route
-                        index
-                        element={<Navigate to="dashboard" replace />}
-                    />
-
-                    <Route
-                        path="dashboard"
-                        element={<ProviderDashboard />}
-                    />
-
-                    <Route
-                        path="bookings"
-                        element={<ProviderBookings />}
-                    />
-
-                    <Route
-                        path="bookings/:id"
-                        element={<ProviderBookingDetail />}
-                    />
-
-                    <Route
-                        path="services"
-                        element={<ProviderServices />}
-                    />
-
-                    <Route
-                        path="employees"
-                        element={<ProviderEmployees />}
-                    />
-
-                    <Route
-                        path="schedule"
-                        element={<ProviderSchedule />}
-                    />
-
-                    <Route
-                        path="complaints"
-                        element={<ProviderComplaints />}
-                    />
-
-                    <Route
-                        path="revenue"
-                        element={<ProviderRevenue />}
-                    />
-
-                    <Route
-                        path="reviews"
-                        element={<ProviderReviews />}
-                    />
+                <Route
+                    path="/provider-portal"
+                    element={
+                        <ProtectedRoute roles={["PROVIDER", "PARTNER"]}>
+                            <ProviderLayout />
+                        </ProtectedRoute>
+                    }
+                >
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route path="dashboard" element={<ProviderDashboard />} />
+                    <Route path="bookings" element={<ProviderBookings />} />
+                    <Route path="bookings/:id" element={<ProviderBookingDetail />} />
+                    <Route path="services" element={<ProviderServices />} />
+                    <Route path="employees" element={<ProviderEmployees />} />
+                    <Route path="schedule" element={<ProviderSchedule />} />
+                    <Route path="complaints" element={<ProviderComplaints />} />
+                    <Route path="revenue" element={<ProviderRevenue />} />
+                    <Route path="reviews" element={<ProviderReviews />} />
                 </Route>
             </Routes>
         </BrowserRouter>

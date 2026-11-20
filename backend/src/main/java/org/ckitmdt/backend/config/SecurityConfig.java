@@ -66,6 +66,12 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**").permitAll()
 
                         .requestMatchers(
+                                "/api/customer/ai/api/chat",
+                                "/api/customer/ai/api/models",
+                                "/api/customer/ai/api/health"
+                        ).permitAll()
+
+                        .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/customer/notifications"
                         ).hasRole("CUSTOMER")
@@ -74,7 +80,6 @@ public class SecurityConfig {
                                 HttpMethod.PATCH,
                                 "/api/customer/notifications/*/read"
                         ).hasRole("CUSTOMER")
-
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/providers",
@@ -89,6 +94,9 @@ public class SecurityConfig {
                                 "/error",
                                 "/api/auth/login",
                                 "/api/auth/register",
+                                "/api/auth/register-partner",
+                                "/api/auth/register-partner/send-otp",
+                                "/api/auth/register-partner/verify-otp",
                                 "/api/auth/google",
                                 "/api/auth/facebook",
                                 "/api/auth/register/request-otp",
@@ -294,6 +302,12 @@ public class SecurityConfig {
                                 "/api/refunds/bookings/*/request"
                         ).authenticated()
 
+                        .requestMatchers(
+                                "/api/partner-onboarding/documents/**"
+                        ).hasAnyRole("PROVIDER", "PARTNER", "ADMIN", "STAFF")
+                        .requestMatchers(
+                                "/api/partner-onboarding/**"
+                        ).hasAnyRole("PROVIDER", "PARTNER")
                         .requestMatchers(
                                 "/api/provider/**"
                         ).hasAnyRole("PROVIDER", "PARTNER")

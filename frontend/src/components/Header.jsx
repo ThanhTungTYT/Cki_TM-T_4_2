@@ -33,8 +33,8 @@ function Header() {
                         <Link to="/">Trang chủ</Link>
                         <Link to="/services">Dịch vụ</Link>
                         <Link to="/providers">Đối tác vệ sinh</Link>
-                        <a href="#">Về chúng tôi</a>
-                        <a href="#">Hỗ trợ</a>
+                        <Link to="/become-partner">Trở thành đối tác</Link>
+                        <Link to="/customer/reports">Hỗ trợ</Link>
                     </nav>
 
                     <div className="header-actions">
