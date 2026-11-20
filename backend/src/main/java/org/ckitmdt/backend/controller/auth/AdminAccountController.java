@@ -34,8 +34,8 @@ public class AdminAccountController {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
-    private static final List<String> ALLOWED_ROLES = List.of("CUSTOMER", "PROVIDER", "CLEANER", "STAFF", "ADMIN");
-    private static final List<String> CREATABLE_ROLES = List.of("CUSTOMER", "PROVIDER", "CLEANER", "STAFF");
+    private static final List<String> ALLOWED_ROLES = List.of("CUSTOMER", "PROVIDER", "PARTNER", "CLEANER", "EMPLOYEE", "STAFF", "ADMIN");
+    private static final List<String> CREATABLE_ROLES = List.of("CUSTOMER", "PROVIDER", "PARTNER", "CLEANER", "STAFF");
 
     @GetMapping
     @Transactional(readOnly = true)
@@ -45,7 +45,7 @@ public class AdminAccountController {
             @RequestParam(required = false) String status
     ) {
         String searchKeyword = normalize(keyword);
-        String searchRole = normalize(role);
+        String searchRole = canonicalRoleKey(role);
         String searchStatus = normalize(status);
 
         if (!searchRole.isEmpty() && !ALLOWED_ROLES.contains(searchRole)) {
@@ -61,7 +61,7 @@ public class AdminAccountController {
                         || contains(user.getFullName(), searchKeyword)
                         || contains(user.getEmail(), searchKeyword)
                         || contains(user.getPhone(), searchKeyword))
-                .filter(user -> searchRole.isEmpty() || searchRole.equals(normalize(user.getRole())))
+                .filter(user -> searchRole.isEmpty() || searchRole.equals(canonicalRoleKey(user.getRole())))
                 .filter(user -> searchStatus.isEmpty() || searchStatus.equals(normalize(user.getStatus())))
                 .sorted(Comparator.comparing(User::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(this::toAccountResponse)
@@ -113,14 +113,16 @@ public class AdminAccountController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tài khoản mới phải ở trạng thái ACTIVE. Hãy tạo tài khoản rồi thực hiện khóa kèm lý do nếu cần.");
         }
 
+        String persistedRole = "PROVIDER".equals(role) ? "PARTNER" : role;
+
         User user = new User();
         user.setFullName(name);
         user.setEmail(email);
         user.setPhone(phone.isEmpty() ? null : phone);
         user.setPasswordHash(passwordEncoder.encode(password));
-        user.setRole(role);
+        user.setRole(persistedRole);
         user.setStatus("ACTIVE");
-        user.setEmailVerified(false);
+        user.setEmailVerified(true);
 
         User savedUser = userRepository.save(user);
 
@@ -169,7 +171,7 @@ public class AdminAccountController {
 
         String role = normalize(request.get("role"));
 
-        if (!role.isEmpty() && !role.equals(normalize(user.getRole()))) {
+        if (!role.isEmpty() && !canonicalRoleKey(role).equals(canonicalRoleKey(user.getRole()))) {
             validateRole(role);
 
             if ("ADMIN".equals(role)) {
@@ -180,7 +182,7 @@ public class AdminAccountController {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể thay đổi vai trò tài khoản Admin tại đây.");
             }
 
-            user.setRole(role);
+            user.setRole("PROVIDER".equals(role) ? "PARTNER" : role);
         }
 
         if (request.containsKey("status")) {
@@ -251,6 +253,10 @@ public class AdminAccountController {
 
         if ("ADMIN".equals(normalize(user.getRole()))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể thay đổi trạng thái tài khoản Admin.");
+        }
+
+        if (user.getEmail() != null && user.getEmail().equalsIgnoreCase(authentication.getName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không thể tự thay đổi trạng thái tài khoản đang đăng nhập.");
         }
 
         String oldStatus = normalize(user.getStatus());
@@ -368,15 +374,24 @@ public class AdminAccountController {
         response.put("email", user.getEmail());
         response.put("phone", user.getPhone());
         response.put("role", normalizeRole(user.getRole()));
+        response.put("rawRole", normalize(user.getRole()));
         response.put("status", normalizeStatus(user.getStatus()));
+        response.put("emailVerified", Boolean.TRUE.equals(user.getEmailVerified()));
         response.put("joinedAt", user.getCreatedAt() == null ? "" : user.getCreatedAt().format(DATE_FORMAT));
         return response;
+    }
+
+    private String canonicalRoleKey(String role) {
+        String normalized = normalize(role).replaceFirst("^ROLE_", "");
+        if ("PARTNER".equals(normalized)) return "PROVIDER";
+        if ("EMPLOYEE".equals(normalized)) return "CLEANER";
+        return normalized;
     }
 
     private String normalizeRole(String role) {
         if (role == null) return "Customer";
 
-        return switch (role.toUpperCase(Locale.ROOT)) {
+        return switch (canonicalRoleKey(role)) {
             case "CUSTOMER" -> "Customer";
             case "PROVIDER" -> "Provider";
             case "CLEANER" -> "Cleaner";

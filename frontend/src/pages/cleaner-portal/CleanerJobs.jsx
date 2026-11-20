@@ -186,7 +186,7 @@ function CleanerJobs() {
                 (filter === 'IN_PROGRESS' &&
                     ['IN_PROGRESS', 'ON_THE_WAY', 'EN_ROUTE'].includes(status)) ||
                 (filter === 'COMPLETED' &&
-                    status === 'WORK_SUBMITTED');
+                    ['WORK_SUBMITTED', 'COMPLETED'].includes(status));
 
             const matchesSearch =
                 !keyword ||

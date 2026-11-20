@@ -159,8 +159,19 @@ function CleanerDashboard() {
     });
 
     const fetchBookings = useCallback(async () => {
-        const data = await bookingApi.getCleanerBookings();
-        return Array.isArray(data) ? data : [];
+        const assignments = await bookingApi.getCleanerAssignments();
+        if (!Array.isArray(assignments)) return [];
+        return assignments
+            .filter((assignment) => {
+                const st = String(assignment?.assignmentStatus || assignment?.status || '').toUpperCase();
+                return assignment?.booking && st !== 'DECLINED';
+            })
+            .map((assignment) => ({
+                ...assignment.booking,
+                cleanerAssignment: assignment,
+                assignmentId: assignment.assignmentId || assignment.id,
+                assignmentStatus: assignment.assignmentStatus || assignment.status
+            }));
     }, []);
 
     const loadBookings = useCallback(async () => {

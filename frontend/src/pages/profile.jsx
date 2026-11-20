@@ -12,6 +12,8 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
+import LocationPickerMap from "../components/map/LocationPickerMap";
+import { hasValidCoords, saveUserGeoPreference } from "../utils/geo";
 import CustomerBookingsView from "../components/CustomerBookingsView";
 import "./profile.css";
 
@@ -49,6 +51,10 @@ function Profile() {
     const [editingAddress, setEditingAddress] = useState(null);
     const [addressSaving, setAddressSaving] = useState(false);
     const [addressError, setAddressError] = useState("");
+    const [pwdForm, setPwdForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    const [pwdSaving, setPwdSaving] = useState(false);
+    const [pwdError, setPwdError] = useState("");
+    const [pwdSuccess, setPwdSuccess] = useState("");
     const emptyAddress = {
         receiverName: "",
         phone: "",
@@ -56,9 +62,44 @@ function Profile() {
         district: "",
         ward: "",
         streetAddress: "",
+        latitude: null,
+        longitude: null,
         isDefault: false
     };
     const [addressForm, setAddressForm] = useState(emptyAddress);
+
+    const handlePasswordChange = async () => {
+        setPwdError("");
+        setPwdSuccess("");
+        if (!pwdForm.currentPassword || pwdForm.newPassword.length < 6) {
+            setPwdError("Vui lòng nhập mật khẩu hiện tại và mật khẩu mới tối thiểu 6 ký tự.");
+            return;
+        }
+        if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+            setPwdError("Mật khẩu xác nhận không khớp.");
+            return;
+        }
+        setPwdSaving(true);
+        try {
+            const token = sessionStorage.getItem("accessToken") || localStorage.getItem("accessToken");
+            const res = await fetch("http://localhost:8080/api/users/me/password", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    currentPassword: pwdForm.currentPassword,
+                    newPassword: pwdForm.newPassword
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || "Không thể đổi mật khẩu.");
+            setPwdSuccess(data.message || "Đổi mật khẩu thành công!");
+            setPwdForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        } catch (err) {
+            setPwdError(err.message);
+        } finally {
+            setPwdSaving(false);
+        }
+    };
 
     const handleChange = event => {
         const { name, value } = event.target;
@@ -169,6 +210,10 @@ function Profile() {
 
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.message || data.detail || "Không thể lưu địa chỉ");
+
+            if (data.isDefault && hasValidCoords(data.latitude, data.longitude)) {
+                saveUserGeoPreference(data.latitude, data.longitude, data.district || data.streetAddress);
+            }
 
             setAddresses(previous => {
                 const next = editingAddress
@@ -389,16 +434,39 @@ function Profile() {
                                         <p className="card-subtitle">Cập nhật mật khẩu định kỳ giúp tài khoản an toàn hơn.</p>
                                         <div className="form-group">
                                             <label>Mật khẩu hiện tại</label>
-                                            <input type="password" />
+                                            <input
+                                                type="password"
+                                                value={pwdForm.currentPassword}
+                                                onChange={(e) => setPwdForm((p) => ({ ...p, currentPassword: e.target.value }))}
+                                            />
                                         </div>
                                         <div className="form-group">
-                                            <label>Mật khẩu mới</label>
-                                            <input type="password" />
+                                            <label>Mật khẩu mới (≥ 6 ký tự)</label>
+                                            <input
+                                                type="password"
+                                                value={pwdForm.newPassword}
+                                                onChange={(e) => setPwdForm((p) => ({ ...p, newPassword: e.target.value }))}
+                                            />
                                         </div>
                                         <div className="form-group">
                                             <label>Xác nhận mật khẩu mới</label>
-                                            <input type="password" />
+                                            <input
+                                                type="password"
+                                                value={pwdForm.confirmPassword}
+                                                onChange={(e) => setPwdForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                                            />
                                         </div>
+                                        {pwdError && <p style={{ color: "#dc2626", fontSize: 13, margin: "6px 0" }}>{pwdError}</p>}
+                                        {pwdSuccess && <p style={{ color: "#059669", fontSize: 13, margin: "6px 0" }}>{pwdSuccess}</p>}
+                                        <button
+                                            type="button"
+                                            className="btn-save"
+                                            style={{ marginTop: 8 }}
+                                            onClick={handlePasswordChange}
+                                            disabled={pwdSaving}
+                                        >
+                                            {pwdSaving ? "Đang đổi mật khẩu..." : "Cập nhật mật khẩu"}
+                                        </button>
                                     </div>
                                 </div>
 
@@ -446,6 +514,25 @@ function Profile() {
                                             <div className="address-modal-header">
                                                 <h3>{editingAddress ? "Sửa địa chỉ" : "Thêm địa chỉ mới"}</h3>
                                                 <button type="button" className="address-modal-close" aria-label="Đóng" onClick={() => setAddressModalOpen(false)}>×</button>
+                                            </div>
+                                            <div style={{ marginBottom: 14 }}>
+                                                <LocationPickerMap
+                                                    latitude={addressForm.latitude}
+                                                    longitude={addressForm.longitude}
+                                                    address={[addressForm.streetAddress, addressForm.ward, addressForm.district, addressForm.province].filter(Boolean).join(", ")}
+                                                    height={220}
+                                                    onChange={(loc) => {
+                                                        setAddressForm(form => ({
+                                                            ...form,
+                                                            latitude: loc.latitude,
+                                                            longitude: loc.longitude,
+                                                            streetAddress: loc.streetAddress || form.streetAddress,
+                                                            ward: loc.ward || form.ward,
+                                                            district: loc.district || form.district,
+                                                            province: loc.province || form.province
+                                                        }));
+                                                    }}
+                                                />
                                             </div>
                                             <div className="address-modal-grid">
                                                 {[["receiverName", "Tên người nhận"], ["phone", "Số điện thoại"], ["province", "Tỉnh / Thành phố"], ["district", "Quận / Huyện"], ["ward", "Phường / Xã"], ["streetAddress", "Số nhà, tên đường"]].map(([name, label]) => (

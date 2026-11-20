@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
@@ -29,6 +30,17 @@ public class UserProfileController {
         );
     }
 
+    @GetMapping("/me/cleaner-summary")
+    public ResponseEntity<Map<String, Object>> getCleanerSummary(
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(
+                userProfileService.getCleanerSummary(
+                        authentication.getName()
+                )
+        );
+    }
+
     @PutMapping("/me")
     public ResponseEntity<UserProfileResponse> updateProfile(
             Authentication authentication,
@@ -40,6 +52,22 @@ public class UserProfileController {
                         request
                 )
         );
+    }
+
+    @PutMapping("/me/password")
+    public ResponseEntity<Map<String, Object>> changePassword(
+            Authentication authentication,
+            @RequestBody Map<String, String> request
+    ) {
+        userProfileService.changePassword(
+                authentication.getName(),
+                request != null ? request.get("currentPassword") : null,
+                request != null ? request.get("newPassword") : null
+        );
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Đổi mật khẩu thành công."
+        ));
     }
 
     @GetMapping("/me/addresses")
