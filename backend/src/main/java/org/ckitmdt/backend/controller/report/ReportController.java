@@ -629,7 +629,9 @@ public class ReportController {
             case "PROVIDER_RESPONDED" -> Set.of(
                     "IN_PROGRESS",
                     "UNDER_REVIEW",
-                    "WAITING_PROVIDER"
+                    "WAITING_PROVIDER",
+                    "RESOLVED",
+                    "REJECTED"
             ).contains(newStatus);
 
             case "UNDER_REVIEW" -> Set.of(

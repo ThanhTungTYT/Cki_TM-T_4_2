@@ -66,7 +66,7 @@ public class ProviderSecurityHelper {
     }
 
     public static String text(Object value) {
-        return value != null ? value.toString().trim() : null;
+        return value != null ? value.toString().trim() : "";
     }
 
     public static String normalize(String value) {

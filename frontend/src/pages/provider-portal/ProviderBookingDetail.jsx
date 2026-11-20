@@ -226,6 +226,21 @@ function ProviderBookingDetail() {
         }
     }
 
+    async function handleConfirmCashPayment() {
+        if (!window.confirm('Xác nhận đối tác/nhân viên đã thu đủ tiền mặt từ khách hàng cho đơn này?')) return;
+        clearMessages();
+        setSubmitting(true);
+        try {
+            await providerBookingApi.confirmCashPayment(id);
+            setActionMsg('✅ Đã xác nhận thu tiền mặt thành công! Hệ thống đã ghi nhận thanh toán và cập nhật điểm Ccoin (nếu đơn đã hoàn thành).');
+            loadBooking();
+        } catch (e) {
+            setActionError(`❌ ${e.message}`);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
     if (loading) return <div className="pp-loading">Đang tải chi tiết đơn hàng...</div>;
     if (error)   return <div className="pp-alert pp-alert-error">⚠️ {error}</div>;
     if (!booking) return null;
@@ -427,6 +442,19 @@ function ProviderBookingDetail() {
                                             <span className={`pp-badge ${booking.paymentStatus === 'PAID' ? 'pp-badge-completed' : 'pp-badge-waiting'}`}>
                                                 {booking.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
                                             </span>
+                                            {booking.paymentMethod === 'CASH'
+                                                && booking.paymentStatus !== 'PAID'
+                                                && ['IN_PROGRESS', 'PENDING_COMPLETION', 'COMPLETED'].includes(status) && (
+                                                <button
+                                                    type="button"
+                                                    className="pp-btn pp-btn-success pp-btn-sm"
+                                                    onClick={handleConfirmCashPayment}
+                                                    disabled={submitting}
+                                                    style={{ marginLeft: 8 }}
+                                                >
+                                                    💵 Xác nhận đã thu tiền mặt
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>

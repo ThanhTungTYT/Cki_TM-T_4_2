@@ -26,6 +26,12 @@ public interface BookingItemRepository extends JpaRepository<BookingItem, Long> 
             String bookingStatus
     );
 
+    List<BookingItem> findByService_IdAndBooking_Customer_IdAndBooking_StatusOrderByBooking_CompletedAtDesc(
+            Long serviceId,
+            Long customerId,
+            String bookingStatus
+    );
+
     @Query("""
             SELECT COALESCE(SUM(COALESCE(i.employeeCount, 1) * COALESCE(i.quantity, 1)), 0)
             FROM BookingItem i JOIN i.booking b

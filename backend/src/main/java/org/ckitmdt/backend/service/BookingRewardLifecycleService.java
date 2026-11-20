@@ -47,14 +47,16 @@ public class BookingRewardLifecycleService {
             return;
         }
 
-        if (paymentRepository.existsByBooking_IdAndStatus(
+        boolean paidSuccess = paymentRepository.existsByBooking_IdAndStatus(
                 booking.getId(),
                 "SUCCESS"
-        )) {
+        );
+
+        if (paidSuccess) {
             consumeHeldVouchers(booking);
         }
 
-        if ("COMPLETED".equals(status)) {
+        if ("COMPLETED".equals(status) && paidSuccess) {
             earnPointsIfEligible(booking);
         }
     }

@@ -115,7 +115,10 @@ public class ProviderEmployeeController {
                 .updatedAt(now)
                 .build();
 
-        return employeeRow(employeeRepository.save(employee));
+        Employee savedEmployee = employeeRepository.save(employee);
+        Map<String, Object> res = employeeRow(savedEmployee);
+        res.put("temporaryPassword", rawPassword);
+        return res;
     }
 
     @PutMapping("/{id}")
@@ -212,6 +215,12 @@ public class ProviderEmployeeController {
 
         employee.setStatus(status);
         employee.setUpdatedAt(LocalDateTime.now());
+        if (employee.getUser() != null) {
+            User empUser = employee.getUser();
+            empUser.setStatus("INACTIVE".equals(status) ? "INACTIVE" : "ACTIVE");
+            empUser.setUpdatedAt(LocalDateTime.now());
+            userRepository.save(empUser);
+        }
         return employeeRow(employeeRepository.save(employee));
     }
 

@@ -42,6 +42,7 @@ public class Address {
     @Column(precision = 10, scale = 7)
     private BigDecimal longitude;
 
+    @Builder.Default
     @Column(name = "is_default")
     private Boolean isDefault = false;
 

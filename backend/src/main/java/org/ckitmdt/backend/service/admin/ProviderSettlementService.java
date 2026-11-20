@@ -6,8 +6,10 @@ import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.entity.ProviderSettlement;
 import org.ckitmdt.backend.entity.ProviderSettlementItem;
+import org.ckitmdt.backend.entity.Payment;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.PartnerRepository;
+import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.repository.ProviderSettlementItemRepository;
 import org.ckitmdt.backend.repository.ProviderSettlementRepository;
 import org.springframework.data.domain.Sort;
@@ -35,7 +37,19 @@ public class ProviderSettlementService {
     private final ProviderSettlementItemRepository itemRepository;
     private final BookingRepository bookingRepository;
     private final PartnerRepository partnerRepository;
+    private final PaymentRepository paymentRepository;
     private final AdminAuditLogService auditLogService;
+
+    private boolean isOnlinePaidBooking(Booking booking) {
+        if (booking == null || booking.getId() == null) {
+            return false;
+        }
+        return paymentRepository.findByBooking_IdAndStatusIgnoreCase(booking.getId(), "SUCCESS")
+                .stream()
+                .anyMatch(p -> p.getPaymentMethod() != null
+                        && !"CASH".equalsIgnoreCase(p.getPaymentMethod())
+                        && !"CASH_ON_SERVICE".equalsIgnoreCase(p.getPaymentMethod()));
+    }
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> getAll() {
@@ -72,7 +86,7 @@ public class ProviderSettlementService {
         List<Map<String, Object>> result = new ArrayList<>();
 
         for (Booking booking : bookings) {
-            if (itemRepository.existsByBooking_Id(booking.getId())) {
+            if (itemRepository.existsByBooking_Id(booking.getId()) || !isOnlinePaidBooking(booking)) {
                 continue;
             }
 
@@ -126,12 +140,13 @@ public class ProviderSettlementService {
         List<Booking> eligible = bookings.stream()
                 .filter(booking ->
                         !itemRepository.existsByBooking_Id(booking.getId())
+                                && isOnlinePaidBooking(booking)
                 )
                 .toList();
 
         if (eligible.isEmpty()) {
             throw badRequest(
-                    "Không có đơn COMPLETED chưa được đối soát trong khoảng thời gian này."
+                    "Không có đơn COMPLETED thanh toán online (VNPay) chưa được đối soát trong khoảng thời gian này."
             );
         }
 

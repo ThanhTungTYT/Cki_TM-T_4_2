@@ -41,6 +41,14 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     boolean existsByService_IdAndCustomer_Id(Long serviceId, Long customerId);
 
+    boolean existsByBooking_IdAndService_Id(Long bookingId, Long serviceId);
+
+    @Query("select avg(r.rating) from Review r where r.partner.id = :partnerId")
+    Double averageRatingByPartnerId(@Param("partnerId") Long partnerId);
+
+    @Query("select avg(r.rating) from Review r where r.employee.id = :employeeId")
+    Double averageRatingByEmployeeId(@Param("employeeId") Long employeeId);
+
     @Query(value = "select r from Review r where r.service.id = :serviceId " +
             "order by case when :customerId is not null and r.customer.id = :customerId then 0 else 1 end, " +
             "r.createdAt desc, r.id desc",
