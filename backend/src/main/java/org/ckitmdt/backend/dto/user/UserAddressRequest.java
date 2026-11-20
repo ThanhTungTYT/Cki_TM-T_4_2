@@ -1,5 +1,7 @@
 package org.ckitmdt.backend.dto.user;
 
+import java.math.BigDecimal;
+
 public record UserAddressRequest(
         String receiverName,
         String phone,
@@ -7,6 +9,8 @@ public record UserAddressRequest(
         String district,
         String ward,
         String streetAddress,
-        Boolean isDefault
+        Boolean isDefault,
+        BigDecimal latitude,
+        BigDecimal longitude
 ) {
 }

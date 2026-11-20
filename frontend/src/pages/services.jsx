@@ -15,6 +15,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { calculateDistanceKm, formatDistanceKm, getCurrentBrowserLocation, readUserGeoPreference, saveUserGeoPreference } from '../utils/geo';
 import ServicePackageModal from '../components/ServicePackageModal';
 import { useCartDispatch } from '../context/CartContext';
 import { publicServicesApi } from '../services/api';
@@ -65,6 +66,36 @@ function Services() {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [retryKey, setRetryKey] = useState(0);
+    const [userGeo, setUserGeo] = useState(() => readUserGeoPreference());
+    const [nearMeActive, setNearMeActive] = useState(false);
+    const [locating, setLocating] = useState(false);
+
+    const handleNearMe = async () => {
+        if (nearMeActive) {
+            setNearMeActive(false);
+            return;
+        }
+        setLocating(true);
+        try {
+            const coords = await getCurrentBrowserLocation();
+            saveUserGeoPreference(coords.latitude, coords.longitude, 'Vị trí hiện tại');
+            setUserGeo(coords);
+            setNearMeActive(true);
+        } catch (err) {
+            window.alert(err.message || 'Không thể lấy tọa độ GPS hiện tại.');
+        } finally {
+            setLocating(false);
+        }
+    };
+
+    const displayedServices = (() => {
+        const enriched = services.map(s => ({
+            ...s,
+            _distanceKm: userGeo ? calculateDistanceKm(userGeo.latitude, userGeo.longitude, s.providerLatitude, s.providerLongitude) : null
+        }));
+        if (!nearMeActive) return enriched;
+        return [...enriched].sort((a, b) => (a._distanceKm ?? 999999) - (b._distanceKm ?? 999999));
+    })();
 
     useEffect(() => {
         setCurrentPage(1);
@@ -303,6 +334,25 @@ function Services() {
                                 </option>
                             ))}
                         </select>
+                        <button
+                            type="button"
+                            onClick={handleNearMe}
+                            disabled={locating}
+                            style={{
+                                marginTop: 10,
+                                width: '100%',
+                                padding: '9px 12px',
+                                borderRadius: 8,
+                                border: '1px solid #2563eb',
+                                background: nearMeActive ? '#2563eb' : '#eff6ff',
+                                color: nearMeActive ? '#fff' : '#1d4ed8',
+                                fontWeight: 600,
+                                fontSize: 13,
+                                cursor: 'pointer'
+                            }}
+                        >
+                            {locating ? '⏳ Đang định vị GPS...' : nearMeActive ? '📍 Đang ưu tiên gần tôi (Bấm tắt)' : '📍 Tìm dịch vụ gần tôi nhất'}
+                        </button>
                     </div>
 
                     <div className="filter-section">
@@ -432,7 +482,7 @@ function Services() {
                         <div className="no-services" role="status">Đang tải dịch vụ…</div>
                     ) : services.length > 0 ? (
                         <div className="service-grid">
-                            {services.map(service => (
+                            {displayedServices.map(service => (
                                 <article className="service-card" key={`${service.id}-${service.providerId ?? ''}`}>
                                     <div
                                         className="service-image"
@@ -518,6 +568,11 @@ function Services() {
                                             <span className="service-location">
                                                 <FontAwesomeIcon icon={faLocationDot} />
                                                 {' '}{service.location || 'Chưa cập nhật khu vực'}
+                                                {service._distanceKm != null && (
+                                                    <strong style={{ color: '#2563eb', marginLeft: 6 }}>
+                                                        (≈ {formatDistanceKm(service._distanceKm)})
+                                                    </strong>
+                                                )}
                                             </span>
                                         </div>
 

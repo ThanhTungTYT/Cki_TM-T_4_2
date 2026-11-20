@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { calculateDistanceKm, formatDistanceKm, getCurrentBrowserLocation, readUserGeoPreference, saveUserGeoPreference } from '../utils/geo';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faArrowLeft,
@@ -80,6 +81,8 @@ function formatRating(value) {
 
 function ServiceDetail() {
     const { id } = useParams();
+    const [searchParams] = useSearchParams();
+    const recommendedPartnerId = searchParams.get('partnerId');
     const navigate = useNavigate();
     const dispatch = useCartDispatch();
 
@@ -88,6 +91,23 @@ function ServiceDetail() {
     const [error, setError] = useState('');
     const [bookingProvider, setBookingProvider] = useState(null);
     const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+    const [userGeo, setUserGeo] = useState(() => readUserGeoPreference());
+    const [sortByDistance, setSortByDistance] = useState(false);
+    const [locating, setLocating] = useState(false);
+
+    const handleLocateMe = async () => {
+        setLocating(true);
+        try {
+            const coords = await getCurrentBrowserLocation();
+            saveUserGeoPreference(coords.latitude, coords.longitude, 'Vị trí hiện tại');
+            setUserGeo(coords);
+            setSortByDistance(true);
+        } catch (err) {
+            window.alert(err.message || 'Không thể lấy vị trí hiện tại.');
+        } finally {
+            setLocating(false);
+        }
+    };
 
     const addBookingToCart = async item => {
         await dispatch({ type: 'ADD_ITEM', payload: item });
@@ -117,11 +137,22 @@ function ServiceDetail() {
                     throw new Error('Backend không trả về thông tin dịch vụ hợp lệ.');
                 }
 
+                const verifiedProviders = Array.isArray(data.providers) ? data.providers : [];
                 setService({
                     ...data,
                     packages: Array.isArray(data.packages) ? data.packages : [],
-                    providers: Array.isArray(data.providers) ? data.providers : []
+                    providers: verifiedProviders
                 });
+
+                if (recommendedPartnerId) {
+                    const matched = verifiedProviders.find(
+                        p => String(p.providerId) === String(recommendedPartnerId)
+                    );
+                    if (matched) {
+                        setBookingProvider(matched);
+                        setIsPackageModalOpen(true);
+                    }
+                }
             } catch (err) {
                 if (err.name !== 'AbortError') {
                     setError(
@@ -139,7 +170,7 @@ function ServiceDetail() {
         loadService();
 
         return () => controller.abort();
-    }, [id]);
+    }, [id, recommendedPartnerId]);
 
     useEffect(() => {
         if (!service || window.location.hash !== '#service-reviews') return undefined;
@@ -357,10 +388,17 @@ function ServiceDetail() {
                     <button
                         type="button"
                         className="detail-book-button"
-                        onClick={() => navigate('/services')}
+                        onClick={() => {
+                            const section = document.getElementById('service-providers-section');
+                            if (section) {
+                                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            } else {
+                                navigate('/services');
+                            }
+                        }}
                     >
                         <FontAwesomeIcon icon={faCalendarCheck} />
-                        <span>Xem và chọn gói dịch vụ</span>
+                        <span>Xem và chọn nhà cung cấp</span>
                     </button>
 
                     <button
@@ -446,14 +484,36 @@ function ServiceDetail() {
                     )}
                 </section>
 
-                <section style={{
-                    gridColumn: '1 / -1',
-                    marginTop: '30px'
-                }}>
-                    <h2 className="detail-section-title">
-                        <FontAwesomeIcon icon={faBuilding} />
-                        Nhà cung cấp dịch vụ
-                    </h2>
+                <section
+                    id="service-providers-section"
+                    style={{
+                        gridColumn: '1 / -1',
+                        marginTop: '30px'
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                        <h2 className="detail-section-title" style={{ margin: 0 }}>
+                            <FontAwesomeIcon icon={faBuilding} />
+                            Nhà cung cấp dịch vụ
+                        </h2>
+                        <button
+                            type="button"
+                            onClick={handleLocateMe}
+                            disabled={locating}
+                            style={{
+                                padding: '8px 14px',
+                                borderRadius: 8,
+                                border: '1px solid #2563eb',
+                                background: sortByDistance ? '#2563eb' : '#eff6ff',
+                                color: sortByDistance ? '#fff' : '#1d4ed8',
+                                fontWeight: 600,
+                                fontSize: 13,
+                                cursor: 'pointer'
+                            }}
+                        >
+                            {locating ? '⏳ Đang định vị...' : sortByDistance ? '📍 Đang xếp theo gần tôi nhất' : '📍 Xếp theo gần tôi nhất'}
+                        </button>
+                    </div>
 
                     {providers.length === 0 ? (
                         <p style={{ color: '#777', padding: '15px 0' }}>
@@ -466,17 +526,36 @@ function ServiceDetail() {
                             gap: '18px',
                             marginTop: '20px'
                         }}>
-                            {providers.map(provider => (
+                            {[...providers]
+                                .map(p => ({
+                                    ...p,
+                                    _distanceKm: userGeo ? calculateDistanceKm(userGeo.latitude, userGeo.longitude, p.latitude, p.longitude) : null
+                                }))
+                                .sort((a, b) => {
+                                    if (!sortByDistance) return 0;
+                                    const da = a._distanceKm ?? 999999;
+                                    const db = b._distanceKm ?? 999999;
+                                    return da - db;
+                                })
+                                .map(provider => {
+                                    const isAiPick = recommendedPartnerId && String(provider.providerId) === String(recommendedPartnerId);
+                                    const outOfRadius = provider._distanceKm != null && provider.serviceRadiusKm != null && provider._distanceKm > provider.serviceRadiusKm;
+                                    return (
                                 <article
                                     key={provider.providerId}
                                     style={{
-                                        border: '1px solid #e5e7eb',
+                                        border: isAiPick ? '2px solid #2563eb' : '1px solid #e5e7eb',
                                         borderRadius: '14px',
                                         padding: '20px',
-                                        background: '#fff',
+                                        background: isAiPick ? '#eff6ff' : '#fff',
                                         boxShadow: '0 3px 12px rgba(0,0,0,0.04)'
                                     }}
                                 >
+                                    {isAiPick && (
+                                        <div style={{ display: 'inline-block', background: '#2563eb', color: '#fff', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 6, marginBottom: 10 }}>
+                                            ✦ Gợi ý từ CleanMate AI
+                                        </div>
+                                    )}
                                     <div style={{
                                         display: 'flex',
                                         alignItems: 'center',
@@ -543,6 +622,11 @@ function ServiceDetail() {
                                     <p>
                                         <FontAwesomeIcon icon={faLocationDot} />
                                         {' '}{provider.address || 'Chưa cập nhật địa chỉ'}
+                                        {provider._distanceKm != null && (
+                                            <span style={{ display: 'inline-block', marginLeft: 8, padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: outOfRadius ? '#fef3c7' : '#ecfdf5', color: outOfRadius ? '#b45309' : '#047857' }}>
+                                                📍 Cách bạn ~{formatDistanceKm(provider._distanceKm)}{outOfRadius ? ' (ngoài bán kính ưu tiên)' : ''}
+                                            </span>
+                                        )}
                                     </p>
 
                                     <p>
@@ -596,7 +680,8 @@ function ServiceDetail() {
                                         Xem hồ sơ nhà cung cấp
                                     </button>
                                 </article>
-                            ))}
+                                    );
+                                })}
                         </div>
                     )}
                 </section>

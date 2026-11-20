@@ -307,6 +307,12 @@ public class CleanerAssignmentQueryService {
                 .receiverName(receiverName)
                 .receiverPhone(receiverPhone)
                 .fullAddress(fullAddress)
+                .latitude(booking.getLatitudeSnapshot() != null
+                        ? booking.getLatitudeSnapshot()
+                        : (address != null ? address.getLatitude() : null))
+                .longitude(booking.getLongitudeSnapshot() != null
+                        ? booking.getLongitudeSnapshot()
+                        : (address != null ? address.getLongitude() : null))
                 .scheduledStart(booking.getScheduledStart())
                 .scheduledEnd(booking.getScheduledEnd())
                 .status(booking.getStatus())

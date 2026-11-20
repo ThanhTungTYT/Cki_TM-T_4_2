@@ -17,6 +17,9 @@ public class ServiceDetailProviderDto {
     private String description;
     private String avatarUrl;
     private String address;
+    private BigDecimal latitude;
+    private BigDecimal longitude;
+    private Double serviceRadiusKm;
     private BigDecimal price;
     private BigDecimal ratingAverage;
     private Integer totalCompletedJobs;
