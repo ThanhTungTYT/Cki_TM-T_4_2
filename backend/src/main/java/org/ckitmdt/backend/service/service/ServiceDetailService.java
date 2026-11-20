@@ -236,6 +236,9 @@ public class ServiceDetailService {
                 .description(partner.getDescription())
                 .avatarUrl(partner.getUser().getAvatarUrl())
                 .address(partner.getAddress())
+                .latitude(partner.getLatitude())
+                .longitude(partner.getLongitude())
+                .serviceRadiusKm(partner.getServiceRadiusKm())
                 .price(price)
                 .ratingAverage(reviewStats == null || reviewStats.getAverageRating() == null
                         ? null : BigDecimal.valueOf(reviewStats.getAverageRating()))

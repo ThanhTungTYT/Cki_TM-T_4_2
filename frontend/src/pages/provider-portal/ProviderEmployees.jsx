@@ -48,8 +48,11 @@ function ProviderEmployees() {
 
         setSubmitting(true);
         try {
-            await providerEmployeeApi.create(form);
-            setMsg('✅ Thêm nhân viên thành công!');
+            const created = await providerEmployeeApi.create(form);
+            const pwdNote = created?.temporaryPassword
+                ? ` — Mật khẩu đăng nhập: ${created.temporaryPassword}`
+                : '';
+            setMsg(`✅ Thêm nhân viên thành công!${pwdNote}`);
             setShowAdd(false);
             setForm({ fullName: '', email: '', phone: '', password: '' });
             loadEmployees();

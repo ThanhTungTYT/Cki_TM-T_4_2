@@ -89,7 +89,9 @@ public class ProviderComplaintController {
 
         String currentStatus = normalize(ticket.getStatus());
 
-        if ("RESOLVED".equals(currentStatus) || "REJECTED".equals(currentStatus)) {
+        if ("RESOLVED".equals(currentStatus)
+                || "REJECTED".equals(currentStatus)
+                || "CLOSED".equals(currentStatus)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "Khiếu nại đã kết thúc xử lý, không thể gửi giải trình mới."
@@ -140,7 +142,15 @@ public class ProviderComplaintController {
         map.put("subject", c.getSubject());
         map.put("category", c.getCategory());
         map.put("description", c.getDescription());
-        map.put("evidenceUrl", c.getEvidenceUrl());
+        String rawEvidence = c.getEvidenceUrl();
+        String mappedEvidence = rawEvidence;
+        if (rawEvidence != null && !rawEvidence.isBlank()
+                && !rawEvidence.startsWith("http://")
+                && !rawEvidence.startsWith("https://")
+                && !rawEvidence.startsWith("/api/")) {
+            mappedEvidence = "/api/reports/" + c.getId() + "/evidence";
+        }
+        map.put("evidenceUrl", mappedEvidence);
         map.put("status", c.getStatus());
         map.put("resolution", c.getResolution());
         map.put("handledBy", c.getHandledBy());

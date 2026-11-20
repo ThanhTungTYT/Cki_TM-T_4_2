@@ -369,12 +369,12 @@ export const providerBookingApi = {
 
     async accept(id) {
         const res = await fetch(
-            `${BASE_URL}/provider/bookings/${id}/actions/accept`,
+            `${BASE_URL}/provider/bookings/${id}/actions/provider-accept`,
             {
                 method: "POST",
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
-                    action: "ACCEPT",
+                    action: "PROVIDER_ACCEPT",
                 }),
             }
         );
@@ -387,13 +387,13 @@ export const providerBookingApi = {
 
     async reject(id, reason) {
         const res = await fetch(
-            `${BASE_URL}/provider/bookings/${id}/actions/reject`,
+            `${BASE_URL}/provider/bookings/${id}/actions/provider-reject`,
             {
                 method: "POST",
                 headers: getAuthHeaders(),
                 body: JSON.stringify({
-                    action: "REJECT",
-                    reason,
+                    action: "PROVIDER_REJECT",
+                    note: reason,
                 }),
             }
         );
@@ -401,6 +401,25 @@ export const providerBookingApi = {
         return handleResponse(
             res,
             "Không thể từ chối đơn hàng."
+        );
+    },
+
+    async confirmCashPayment(id, note = "Đối tác xác nhận đã thu đủ tiền mặt từ khách hàng.") {
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings/${id}/actions/provider-confirm-cash-payment`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                    action: "PROVIDER_CONFIRM_CASH_PAYMENT",
+                    note,
+                }),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể xác nhận đã thu tiền mặt."
         );
     },
 

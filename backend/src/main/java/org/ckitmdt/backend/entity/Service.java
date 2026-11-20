@@ -44,9 +44,11 @@ public class Service {
     @Column(name = "estimated_minutes")
     private Integer estimatedMinutes;
 
+    @Builder.Default
     @Column(name = "display_order")
     private Integer displayOrder = 0;
 
+    @Builder.Default
     private String status = "ACTIVE";
 
     @Column(name = "created_at")

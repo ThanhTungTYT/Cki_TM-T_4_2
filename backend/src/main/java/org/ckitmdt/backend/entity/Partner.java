@@ -49,6 +49,45 @@ public class Partner {
     @Column(precision = 10, scale = 7)
     private BigDecimal longitude;
 
+    @Column(name = "service_radius_km")
+    private Double serviceRadiusKm;
+
+    @Column(name = "entity_type", length = 50)
+    private String entityType;
+
+    @Column(name = "country_code", length = 10)
+    private String countryCode;
+
+    @Column(name = "business_license_number", length = 100)
+    private String businessLicenseNumber;
+
+    @Column(name = "representative_name", length = 100)
+    private String representativeName;
+
+    @Column(name = "representative_title", length = 100)
+    private String representativeTitle;
+
+    @Column(name = "business_license_url", length = 500)
+    private String businessLicenseUrl;
+
+    @Column(name = "representative_id_card_url", length = 500)
+    private String representativeIdCardUrl;
+
+    @Column(name = "bank_name", length = 100)
+    private String bankName;
+
+    @Column(name = "bank_account_number", length = 50)
+    private String bankAccountNumber;
+
+    @Column(name = "bank_account_holder", length = 150)
+    private String bankAccountHolder;
+
+    @Column(name = "terms_accepted_at")
+    private LocalDateTime termsAcceptedAt;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
+
     @Builder.Default
     @Column(name = "version")
     private Integer version = 1;

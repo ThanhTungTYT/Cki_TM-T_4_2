@@ -162,10 +162,14 @@ public class PublicServiceCatalogService {
                 .estimatedMinutes(service.getEstimatedMinutes())
                 .rating(stats == null || stats.getAverageRating() == null ? 0D : stats.getAverageRating())
                 .reviews(stats == null ? 0L : stats.getReviewCount())
-                .providerRating(partnerStats == null ? null : BigDecimal.valueOf(partnerStats.getAverageRating()))
+                .providerRating(partnerStats == null || partnerStats.getAverageRating() == null
+                        ? null : BigDecimal.valueOf(partnerStats.getAverageRating()))
                 .providerReviews(partnerStats == null ? 0L : partnerStats.getReviewCount())
                 .providerCompletedJobs(partner.getTotalCompletedJobs())
                 .location(providerLocation(partner.getAddress()))
+                .providerLatitude(partner.getLatitude())
+                .providerLongitude(partner.getLongitude())
+                .serviceRadiusKm(partner.getServiceRadiusKm())
                 .packages(packages)
                 .build();
     }

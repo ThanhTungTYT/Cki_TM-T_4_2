@@ -101,7 +101,9 @@ public class RewardController {
         List<VoucherResponse> vouchers = new ArrayList<>(redemptions.stream()
                 .map(redemption -> {
                     var promotion = redemption.getPromotion();
-                    if ("AVAILABLE".equalsIgnoreCase(redemption.getStatus())
+                    boolean isAvailable = "AVAILABLE".equalsIgnoreCase(redemption.getStatus())
+                            || "ACTIVE".equalsIgnoreCase(redemption.getStatus());
+                    if (isAvailable
                             && (redemption.getExpiresAt() == null
                             || now.isBefore(redemption.getExpiresAt()))) {
                         personallyAvailablePromotionIds.add(promotion.getId());
@@ -117,7 +119,7 @@ public class RewardController {
                             redemption.getPointsUsed() == null
                                     ? 0
                                     : redemption.getPointsUsed(),
-                            redemption.getStatus(),
+                            isAvailable ? "AVAILABLE" : redemption.getStatus(),
                             redemption.getRedeemedAt(),
                             redemption.getExpiresAt(),
                             redemption.getBooking() == null

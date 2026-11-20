@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -33,6 +34,10 @@ public class CleanerBookingViewResponse {
     private String receiverPhone;
 
     private String fullAddress;
+
+    private BigDecimal latitude;
+
+    private BigDecimal longitude;
 
     private LocalDateTime scheduledStart;
 

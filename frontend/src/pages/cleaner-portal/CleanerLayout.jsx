@@ -138,7 +138,7 @@ function Icon({ name, size = 20 }) {
 function CleanerLayout() {
     const navigate = useNavigate();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [user] = useState(getCleanerUser);
+    const [user, setUser] = useState(getCleanerUser);
 
     const userName = user.fullName || user.name || 'Nhân viên';
     const userEmail = user.email || 'Tài khoản nhân viên';
@@ -151,6 +151,17 @@ function CleanerLayout() {
         if (!token) {
             navigate('/login', { replace: true });
         }
+
+        const onUserUpdated = (event) => {
+            const nextName = event?.detail?.fullName;
+            setUser((prev) => ({
+                ...getCleanerUser(),
+                ...prev,
+                ...(nextName ? { fullName: nextName } : {})
+            }));
+        };
+        window.addEventListener('cleanmate:user-updated', onUserUpdated);
+        return () => window.removeEventListener('cleanmate:user-updated', onUserUpdated);
     }, [navigate]);
 
     const handleLogout = () => {
@@ -238,15 +249,6 @@ function CleanerLayout() {
                     </div>
 
                     <div className="cl-sidebar-actions">
-                        <Link
-                            to="/"
-                            className="cl-home-btn"
-                            title="Quay về trang chủ"
-                        >
-                            <Icon name="home" size={17} />
-                            <span>Về trang chủ</span>
-                        </Link>
-
                         <button
                             className="cl-logout-btn"
                             onClick={handleLogout}
@@ -280,15 +282,11 @@ function CleanerLayout() {
 
                     <div className="cl-topbar-right">
                         <Link
-                            to="/"
-                            className="cl-topbar-home-btn"
-                            title="Quay về trang chủ"
+                            to="/cleaner/profile"
+                            className="cl-user-info"
+                            style={{ textDecoration: 'none', color: 'inherit' }}
+                            title="Mở hồ sơ cá nhân"
                         >
-                            <Icon name="home" size={16} />
-                            <span>Về trang chủ</span>
-                        </Link>
-
-                        <div className="cl-user-info">
                             <div className="cl-user-avatar">
                                 {userName.charAt(0).toUpperCase()}
                             </div>
@@ -297,7 +295,7 @@ function CleanerLayout() {
                                 <strong>{userName}</strong>
                                 <span>{userEmail}</span>
                             </div>
-                        </div>
+                        </Link>
                     </div>
                 </header>
 

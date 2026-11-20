@@ -26,5 +26,8 @@ public class PublicServiceListItemDto {
     long providerReviews;
     Integer providerCompletedJobs;
     String location;
+    BigDecimal providerLatitude;
+    BigDecimal providerLongitude;
+    Double serviceRadiusKm;
     List<ServicePackageListItemDto> packages;
 }

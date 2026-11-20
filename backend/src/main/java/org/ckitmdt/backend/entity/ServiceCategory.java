@@ -26,9 +26,11 @@ public class ServiceCategory {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    @Builder.Default
     @Column(name = "display_order")
     private Integer displayOrder = 0;
 
+    @Builder.Default
     private String status = "ACTIVE";
 
     @Column(name = "created_at")

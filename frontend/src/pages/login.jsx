@@ -59,6 +59,18 @@ function Login() {
             window.fbAsyncInit = null;
         };
     }, []);
+    const redirectByRole = (rawRole) => {
+        const role = String(rawRole || "").trim().toUpperCase().replace(/^ROLE_/, "");
+        if (role === "ADMIN" || role === "STAFF") {
+            window.location.href = "/admin";
+        } else if (role === "PROVIDER" || role === "PARTNER") {
+            window.location.href = "/provider-portal/dashboard";
+        } else if (role === "CLEANER" || role === "EMPLOYEE") {
+            window.location.href = "/cleaner/dashboard";
+        } else {
+            window.location.href = customerReturnPath();
+        }
+    };
     const handleLogin = async (e) => {
         e.preventDefault();
         setMessage("");
@@ -92,14 +104,7 @@ function Login() {
             }));
 
             setMessage("Đăng nhập thành công");
-            const role = (data.role || "").toUpperCase();
-            if (role === "ADMIN" || role === "ROLE_ADMIN") {
-                window.location.href = "/admin";
-            } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
-                window.location.href = "/provider-portal/dashboard";
-            } else {
-                window.location.href = customerReturnPath();
-            }
+            redirectByRole(data.role);
         } catch (error) {
             setMessage(error.message);
         } finally {
@@ -145,14 +150,7 @@ function Login() {
                 role: data.role
             }));
             setMessage("Đăng nhập Google thành công");
-            const role = (data.role || "").toUpperCase();
-            if (role === "ADMIN" || role === "ROLE_ADMIN") {
-                window.location.href = "/admin";
-            } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
-                window.location.href = "/provider-portal/dashboard";
-            } else {
-                window.location.href = customerReturnPath();
-            }
+            redirectByRole(data.role);
         } catch (error) {
             console.error(error);
             setMessage(error.message);
@@ -207,14 +205,7 @@ function Login() {
                     role: data.role
                 }));
                 setMessage("Đăng nhập Facebook thành công");
-                const role = (data.role || "").toUpperCase();
-                if (role === "ADMIN" || role === "ROLE_ADMIN") {
-                    window.location.href = "/admin";
-                } else if (role === "PROVIDER" || role === "PARTNER" || role === "ROLE_PROVIDER" || role === "ROLE_PARTNER") {
-                    window.location.href = "/provider-portal/dashboard";
-                } else {
-                    window.location.href = customerReturnPath();
-                }
+                redirectByRole(data.role);
             } catch (error) {
                 console.error(error);
                 setMessage(error.message);

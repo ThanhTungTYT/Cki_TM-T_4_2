@@ -4,6 +4,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowLeft, faBroom, faBuilding, faCalendarDays, faCheck, faCircleCheck, faCircleExclamation, faClock, faCrosshairs, faCreditCard, faLocationDot, faMapPin, faMoneyBillWave, faPhone, faQrcode, faRoute, faShieldHalved, faSpinner, faTag, faUser } from '@fortawesome/free-solid-svg-icons';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import LocationPickerMap from '../components/map/LocationPickerMap';
+import { hasValidCoords, saveUserGeoPreference } from '../utils/geo';
 import { useCart, useCartDispatch } from '../context/CartContext';
 import { bookingApi } from '../services/api';
 import { createVNPayPayment } from '../services/paymentService';
@@ -96,9 +98,32 @@ export default function Checkout() {
         lng: null
     });
 
+    const [savedAddresses, setSavedAddresses] = useState([]);
     const [defaultAddressId, setDefaultAddressId] = useState(null);
     const [addressLoading, setAddressLoading] = useState(true);
     const [defaultAddressError, setDefaultAddressError] = useState('');
+
+    const applySelectedAddress = (address) => {
+        if (!address) return;
+        setDefaultAddressId(address.id);
+        setDefaultAddressError('');
+        setAddressForm({
+            city: address.province || '',
+            district: address.district || '',
+            ward: address.ward || '',
+            streetAddress: address.streetAddress || '',
+            lat: address.latitude ?? null,
+            lng: address.longitude ?? null
+        });
+        if (hasValidCoords(address.latitude, address.longitude)) {
+            saveUserGeoPreference(address.latitude, address.longitude, address.district || address.streetAddress);
+        }
+        setCustomerInfo(current => ({
+            ...current,
+            fullName: address.receiverName || current.fullName || '',
+            phone: address.phone || current.phone || ''
+        }));
+    };
     const [specialNotes, setSpecialNotes] = useState('');
 
     const todayStr = useMemo(() => formatDateString(new Date()), []);
@@ -260,28 +285,16 @@ export default function Checkout() {
                     throw new Error(data.message || data.detail || 'Không thể tải địa chỉ đã lưu.');
                 }
 
-                const address = data.find(item => item.isDefault);
+                const list = Array.isArray(data) ? data : [];
+                setSavedAddresses(list);
+                const address = list.find(item => item.isDefault) || list[0];
 
                 if (!address) {
-                    setDefaultAddressError('Bạn chưa có địa chỉ mặc định. Hãy đặt một địa chỉ mặc định trong hồ sơ trước khi đặt lịch.');
+                    setDefaultAddressError('Bạn chưa có địa chỉ đã lưu. Hãy thêm một địa chỉ trong hồ sơ trước khi đặt lịch.');
                     return;
                 }
 
-                setDefaultAddressId(address.id);
-                setAddressForm({
-                    city: address.province || '',
-                    district: address.district || '',
-                    ward: address.ward || '',
-                    streetAddress: address.streetAddress || '',
-                    lat: address.latitude ?? null,
-                    lng: address.longitude ?? null
-                });
-
-                setCustomerInfo(current => ({
-                    ...current,
-                    fullName: current.fullName || address.receiverName || '',
-                    phone: current.phone || address.phone || ''
-                }));
+                applySelectedAddress(address);
             })
             .catch(error => setDefaultAddressError(error.message))
             .finally(() => setAddressLoading(false));
@@ -966,6 +979,28 @@ export default function Checkout() {
                                 </div>
                             </div>
 
+                            {savedAddresses.length > 0 && (
+                                <div className="form-group" style={{ marginBottom: 14 }}>
+                                    <label htmlFor="savedAddressSelect">Chọn nhanh từ sổ địa chỉ đã lưu</label>
+                                    <select
+                                        id="savedAddressSelect"
+                                        value={defaultAddressId || ''}
+                                        onChange={event => {
+                                            const picked = savedAddresses.find(a => String(a.id) === String(event.target.value));
+                                            if (picked) applySelectedAddress(picked);
+                                        }}
+                                        style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', width: '100%' }}
+                                    >
+                                        {savedAddresses.map(addr => (
+                                            <option key={addr.id} value={addr.id}>
+                                                {addr.isDefault ? '★ [Mặc định] ' : ''}
+                                                {addr.receiverName} — {[addr.streetAddress, addr.ward, addr.district, addr.province].filter(Boolean).join(', ')}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
                             <div className="form-grid-3">
                                 <div className="form-group">
                                     <label htmlFor="citySelect">Tỉnh / Thành phố</label>
@@ -992,22 +1027,44 @@ export default function Checkout() {
                                 <div className="map-widget-header">
                                     <div className="map-title">
                                         <FontAwesomeIcon icon={faMapPin} className="pin-icon" />
-                                        <span>Tọa độ GPS:</span>
-                                        <strong>{addressForm.lat ?? 'Chưa có'} | {addressForm.lng ?? 'Chưa có'}</strong>
-                                    </div>
-                                    <button type="button" className="btn-detect-gps" onClick={handleGetLocation}>
-                                        <FontAwesomeIcon icon={faCrosshairs} /> Lấy tọa độ GPS
-                                    </button>
-                                </div>
-                                <div className="map-visual-placeholder">
-                                    <div className="pin-marker">
-                                        <FontAwesomeIcon icon={faLocationDot} />
-                                    </div>
-                                    <div className="map-overlay-info">
-                                        <FontAwesomeIcon icon={faCircleCheck} />
-                                        <span>Địa chỉ lấy từ hồ sơ khách hàng.</span>
+                                        <span>Bản đồ định vị OpenStreetMap (miễn phí)</span>
                                     </div>
                                 </div>
+                                <LocationPickerMap
+                                    latitude={addressForm.lat}
+                                    longitude={addressForm.lng}
+                                    address={[addressForm.streetAddress, addressForm.ward, addressForm.district, addressForm.city].filter(Boolean).join(', ')}
+                                    height={240}
+                                    onChange={(loc) => {
+                                        setAddressForm(current => ({
+                                            ...current,
+                                            lat: loc.latitude,
+                                            lng: loc.longitude
+                                        }));
+                                        const currentSaved = savedAddresses.find(a => String(a.id) === String(defaultAddressId));
+                                        const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+                                        if (currentSaved && token) {
+                                            fetch(`http://localhost:8080/api/users/me/addresses/${currentSaved.id}`, {
+                                                method: 'PUT',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    Authorization: `Bearer ${token}`
+                                                },
+                                                body: JSON.stringify({
+                                                    receiverName: currentSaved.receiverName,
+                                                    phone: currentSaved.phone,
+                                                    province: currentSaved.province,
+                                                    district: currentSaved.district,
+                                                    ward: currentSaved.ward,
+                                                    streetAddress: currentSaved.streetAddress,
+                                                    isDefault: currentSaved.isDefault,
+                                                    latitude: loc.latitude,
+                                                    longitude: loc.longitude
+                                                })
+                                            }).catch(() => {});
+                                        }
+                                    }}
+                                />
                             </div>
                         </section>
 

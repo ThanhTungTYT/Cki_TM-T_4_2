@@ -24,23 +24,32 @@ const API_URL = "http://localhost:8080/api/reports";
 const STATUS_LABELS = {
     OPEN: "Mới tiếp nhận",
     IN_PROGRESS: "Đang xử lý",
+    WAITING_PROVIDER: "Chờ nhà cung cấp phản hồi",
     PROVIDER_RESPONDED: "Nhà cung cấp đã phản hồi",
+    UNDER_REVIEW: "Chuyển Admin thẩm định",
     RESOLVED: "Đã giải quyết",
-    REJECTED: "Đã từ chối"
+    REJECTED: "Đã từ chối",
+    CLOSED: "Đã đóng"
 };
 
 const STATUS_OPTIONS = {
     IN_PROGRESS: "Đang xử lý",
-    RESOLVED: "Đã giải quyết",
-    REJECTED: "Đã từ chối"
+    WAITING_PROVIDER: "Yêu cầu Nhà cung cấp giải trình",
+    UNDER_REVIEW: "Chuyển Admin thẩm định",
+    RESOLVED: "Đã giải quyết (Admin)",
+    REJECTED: "Đã từ chối (Admin)",
+    CLOSED: "Đóng khiếu nại (Admin)"
 };
 
 const STATUS_CLASSES = {
     OPEN: "complaint-status complaint-status-open",
     IN_PROGRESS: "complaint-status complaint-status-progress",
+    WAITING_PROVIDER: "complaint-status complaint-status-progress",
     PROVIDER_RESPONDED: "complaint-status complaint-status-progress",
+    UNDER_REVIEW: "complaint-status complaint-status-progress",
     RESOLVED: "complaint-status complaint-status-resolved",
-    REJECTED: "complaint-status complaint-status-rejected"
+    REJECTED: "complaint-status complaint-status-rejected",
+    CLOSED: "complaint-status complaint-status-resolved"
 };
 
 function getToken() {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { providerDashboardApi, providerChangeRequestApi } from '../../services/providerApi';
+import LocationPickerMap from '../../components/map/LocationPickerMap';
 
 const VND = (v) =>
     v != null ? `${Number(v).toLocaleString('vi-VN')}đ` : '—';
@@ -598,6 +599,20 @@ function ProviderDashboard() {
 
                             {modalTab === 'LOCATION_UPDATE' && (
                                 <>
+                                    <div className="pp-form-group">
+                                        <label className="pp-label">Chọn vị trí trụ sở mới trên Bản đồ OpenStreetMap (miễn phí)</label>
+                                        <LocationPickerMap
+                                            latitude={propLat || p.latitude}
+                                            longitude={propLon || p.longitude}
+                                            address={propAddress || p.address}
+                                            height={220}
+                                            onChange={(loc) => {
+                                                setPropLat(String(loc.latitude));
+                                                setPropLon(String(loc.longitude));
+                                                if (loc.fullAddress) setPropAddress(loc.fullAddress);
+                                            }}
+                                        />
+                                    </div>
                                     <div className="pp-form-group">
                                         <label className="pp-label">Địa chỉ đề xuất mới *</label>
                                         <input

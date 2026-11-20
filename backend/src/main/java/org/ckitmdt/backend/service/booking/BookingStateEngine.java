@@ -24,6 +24,7 @@ import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -378,7 +379,7 @@ public class BookingStateEngine {
         return savedBooking;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void expirePendingPayment(Long bookingId) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
 

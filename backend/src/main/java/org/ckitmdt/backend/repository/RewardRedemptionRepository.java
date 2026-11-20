@@ -19,11 +19,19 @@ public interface RewardRedemptionRepository extends JpaRepository<RewardRedempti
     List<RewardRedemption> findByUser_IdAndPromotion_IdAndStatusOrderByRedeemedAtAsc(
             Long userId, Long promotionId, String status);
 
+    @Query("SELECT redemption FROM RewardRedemption redemption "
+            + "WHERE redemption.user.id = :userId "
+            + "AND redemption.promotion.id = :promotionId "
+            + "AND UPPER(redemption.status) IN ('AVAILABLE', 'ACTIVE') "
+            + "ORDER BY redemption.redeemedAt ASC")
+    List<RewardRedemption> findAvailableByUserAndPromotion(
+            @Param("userId") Long userId, @Param("promotionId") Long promotionId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT redemption FROM RewardRedemption redemption "
             + "WHERE redemption.user.id = :userId "
             + "AND redemption.promotion.id = :promotionId "
-            + "AND redemption.status = 'AVAILABLE' "
+            + "AND UPPER(redemption.status) IN ('AVAILABLE', 'ACTIVE') "
             + "ORDER BY redemption.redeemedAt ASC")
     List<RewardRedemption> findAvailableByUserAndPromotionForUpdate(
             @Param("userId") Long userId, @Param("promotionId") Long promotionId);

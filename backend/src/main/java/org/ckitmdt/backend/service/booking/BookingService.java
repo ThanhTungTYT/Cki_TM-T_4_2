@@ -58,6 +58,11 @@ public class BookingService {
             String userEmail
     ) {
         User customer = getUserByEmail(userEmail);
+        String customerRole = customer.getRole() == null ? "" : customer.getRole().trim().toUpperCase(Locale.ROOT).replaceFirst("^ROLE_", "");
+        if (!"CUSTOMER".equals(customerRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Chỉ tài khoản khách hàng (CUSTOMER) mới được đặt lịch dịch vụ.");
+        }
         return calculateQuoteInternal(request, customer, false).response();
     }
 
@@ -65,6 +70,11 @@ public class BookingService {
     public List<BookingAvailabilitySlotResponse> getAvailability(
             BookingAvailabilityRequest request, String userEmail) {
         User customer = getUserByEmail(userEmail);
+        String customerRole = customer.getRole() == null ? "" : customer.getRole().trim().toUpperCase(Locale.ROOT).replaceFirst("^ROLE_", "");
+        if (!"CUSTOMER".equals(customerRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Chỉ tài khoản khách hàng (CUSTOMER) mới được đặt lịch dịch vụ.");
+        }
         if (request == null || request.getDate() == null || request.getItems() == null
                 || request.getItems().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -176,14 +186,14 @@ public class BookingService {
             boolean withinWorkingHours = isWithinWorkingHours(start, end);
             long reservedEmployees = activeEmployees;
             if (meetsNotice && withinWorkingHours) {
-                LocalDateTime reservationStart = start.minusMinutes(effectiveTravelBufferMinutes());
-                LocalDateTime reservationEnd = end.plusMinutes(effectiveTravelBufferMinutes());
+                LocalDateTime dayStart = start.toLocalDate().atStartOfDay();
+                LocalDateTime dayEnd = start.toLocalDate().plusDays(1).atStartOfDay();
                 reservedEmployees = excludedBooking == null
                         ? bookingItemRepository.countReservedEmployees(
-                        partner.getId(), reservationStart, reservationEnd, now)
+                        partner.getId(), dayStart, dayEnd, now)
                         : bookingItemRepository.countReservedEmployeesExcludingBooking(
                         partner.getId(), excludedBooking.getId(),
-                        reservationStart, reservationEnd, now);
+                        dayStart, dayEnd, now);
             }
             boolean available = meetsNotice && withinWorkingHours && activeEmployees > 0
                     && reservedEmployees + employeesNeeded <= activeEmployees;
@@ -206,7 +216,7 @@ public class BookingService {
             BookingCalendarAvailabilityRequest request, String userEmail) {
         if (request.getDates().size() > 42) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Chá»‰ cÃ³ thá»ƒ kiá»ƒm tra tá»‘i Ä‘a 42 ngÃ y má»—i láº§n.");
+                    "Chỉ có thể kiểm tra tối đa 42 ngày mỗi lần.");
         }
 
         Map<LocalDate, Boolean> result = new LinkedHashMap<>();
@@ -385,8 +395,8 @@ public class BookingService {
 
         long overlappingCount = bookingItemRepository.countReservedEmployees(
                 partner.getId(),
-                scheduledStart.minusMinutes(effectiveTravelBufferMinutes()),
-                scheduledEnd.plusMinutes(effectiveTravelBufferMinutes()),
+                scheduledStart.toLocalDate().atStartOfDay(),
+                scheduledStart.toLocalDate().plusDays(1).atStartOfDay(),
                 now
         );
         long activeEmployees = employeeRepository.findByPartner_IdOrderByIdAsc(partner.getId())
@@ -432,6 +442,11 @@ public class BookingService {
             String userEmail
     ) {
         User customer = getUserByEmail(userEmail);
+        String customerRole = customer.getRole() == null ? "" : customer.getRole().trim().toUpperCase(Locale.ROOT).replaceFirst("^ROLE_", "");
+        if (!"CUSTOMER".equals(customerRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Chỉ tài khoản khách hàng (CUSTOMER) mới được đặt lịch dịch vụ.");
+        }
         if (request.getIdempotencyKey() != null
                 && !request.getIdempotencyKey().isBlank()) {
             Optional<Booking> existing = bookingRepository.findByIdempotencyKey(
@@ -663,6 +678,11 @@ public class BookingService {
     @Transactional(readOnly = true)
     public List<BookingResponse> getMyBookings(String userEmail, String status) {
         User customer = getUserByEmail(userEmail);
+        String customerRole = customer.getRole() == null ? "" : customer.getRole().trim().toUpperCase(Locale.ROOT).replaceFirst("^ROLE_", "");
+        if (!"CUSTOMER".equals(customerRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Chỉ tài khoản khách hàng (CUSTOMER) mới được đặt lịch dịch vụ.");
+        }
         String role = customer.getRole() == null ? "" : customer.getRole().replace("ROLE_", "");
         if (!"CUSTOMER".equalsIgnoreCase(role)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -792,6 +812,11 @@ public class BookingService {
     @Transactional
     public BookingResponse reschedulePendingBooking(Long bookingId, LocalDateTime newStart, String userEmail) {
         User customer = getUserByEmail(userEmail);
+        String customerRole = customer.getRole() == null ? "" : customer.getRole().trim().toUpperCase(Locale.ROOT).replaceFirst("^ROLE_", "");
+        if (!"CUSTOMER".equals(customerRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Chỉ tài khoản khách hàng (CUSTOMER) mới được đặt lịch dịch vụ.");
+        }
         Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Không tìm thấy đơn hàng."));

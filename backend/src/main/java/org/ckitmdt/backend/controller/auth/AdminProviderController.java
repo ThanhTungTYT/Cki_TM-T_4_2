@@ -119,6 +119,7 @@ public class AdminProviderController {
         String oldStatus = normalizePartnerStatus(partner);
 
         partner.setStatus("ACTIVE");
+        partner.setRejectionReason(null);
         partner.setVersion(partner.getVersion() == null ? 1 : partner.getVersion() + 1);
 
         partnerRepository.save(partner);
@@ -224,6 +225,7 @@ public class AdminProviderController {
         }
 
         partner.setStatus("REJECTED");
+        partner.setRejectionReason(reason);
         partner.setVersion(partner.getVersion() == null ? 1 : partner.getVersion() + 1);
 
         partnerRepository.save(partner);
@@ -398,7 +400,7 @@ public class AdminProviderController {
 
         historyRepository.save(PartnerStatusHistory.builder()
                 .partner(partner)
-                .oldStatus(oldStatus)
+                .oldStatus(oldStatus == null || oldStatus.isBlank() ? "NONE" : oldStatus)
                 .newStatus(newStatus)
                 .reason(reason)
                 .actionType(actionType)
@@ -433,6 +435,19 @@ public class AdminProviderController {
         result.put("joinedAt", partner.getCreatedAt() == null ? "" : partner.getCreatedAt().format(DATE_FORMAT));
         result.put("description", partner.getDescription());
         result.put("taxCode", partner.getTaxCode());
+        result.put("entityType", partner.getEntityType());
+        result.put("countryCode", partner.getCountryCode());
+        result.put("businessLicenseNumber", partner.getBusinessLicenseNumber());
+        result.put("representativeName", partner.getRepresentativeName());
+        result.put("representativeTitle", partner.getRepresentativeTitle());
+        result.put("businessLicenseUrl", partner.getBusinessLicenseUrl());
+        result.put("representativeIdCardUrl", partner.getRepresentativeIdCardUrl());
+        result.put("serviceRadiusKm", partner.getServiceRadiusKm());
+        result.put("bankName", partner.getBankName());
+        result.put("bankAccountNumber", partner.getBankAccountNumber());
+        result.put("bankAccountHolder", partner.getBankAccountHolder());
+        result.put("termsAcceptedAt", partner.getTermsAcceptedAt());
+        result.put("rejectionReason", partner.getRejectionReason());
         result.put("ratingAverage", partner.getRatingAverage());
         result.put("totalCompletedJobs", partner.getTotalCompletedJobs());
 

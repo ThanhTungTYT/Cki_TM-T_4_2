@@ -7,15 +7,21 @@ import org.ckitmdt.backend.dto.user.UserProfileResponse;
 import org.ckitmdt.backend.dto.user.UserAddressRequest;
 import org.ckitmdt.backend.dto.user.UserAddressResponse;
 import org.ckitmdt.backend.entity.Address;
+import org.ckitmdt.backend.entity.Employee;
+import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.AddressRepository;
 import org.ckitmdt.backend.repository.BookingRepository;
+import org.ckitmdt.backend.repository.EmployeeRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,6 +33,32 @@ public class UserProfileService {
     private final UserRepository userRepository;
     private final AddressRepository addressRepository;
     private final BookingRepository bookingRepository;
+    private final EmployeeRepository employeeRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    @Transactional
+    public void changePassword(String email, String currentPassword, String newPassword) {
+        User user = findUser(email);
+        if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Tài khoản đăng nhập qua mạng xã hội chưa có mật khẩu nội bộ.");
+        }
+        if (currentPassword == null || currentPassword.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập mật khẩu hiện tại.");
+        }
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu hiện tại không chính xác.");
+        }
+        if (newPassword == null || newPassword.trim().length() < 6) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu mới phải có ít nhất 6 ký tự.");
+        }
+        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu mới phải khác mật khẩu hiện tại.");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+    }
 
     private User findUser(String email) {
         return userRepository.findByEmail(email)
@@ -50,6 +82,35 @@ public class UserProfileService {
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(String email) {
         return toResponse(findUser(email));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getCleanerSummary(String email) {
+        User user = findUser(email);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("userId", user.getId());
+        summary.put("role", user.getRole());
+        summary.put("accountStatus", user.getStatus());
+        summary.put("joinedAt", user.getCreatedAt());
+
+        Employee employee = employeeRepository.findByUser_Id(user.getId()).orElse(null);
+        if (employee != null) {
+            summary.put("employeeId", employee.getId());
+            summary.put("employeeCode", employee.getEmployeeCode());
+            summary.put("employeeStatus", employee.getStatus());
+            summary.put("ratingAverage", employee.getRatingAverage());
+            summary.put("totalCompletedJobs", employee.getTotalCompletedJobs() == null ? 0 : employee.getTotalCompletedJobs());
+
+            Partner partner = employee.getPartner();
+            if (partner != null) {
+                summary.put("partnerId", partner.getId());
+                summary.put("partnerName", partner.getBusinessName());
+                summary.put("partnerAddress", partner.getAddress());
+                summary.put("partnerStatus", partner.getStatus());
+                summary.put("partnerPhone", partner.getUser() != null ? partner.getUser().getPhone() : null);
+            }
+        }
+        return summary;
     }
 
     @Transactional
@@ -146,6 +207,8 @@ public class UserProfileService {
                 .district(clean(request.district()))
                 .ward(clean(request.ward()))
                 .streetAddress(clean(request.streetAddress()))
+                .latitude(request.latitude())
+                .longitude(request.longitude())
                 .isDefault(makeDefault)
                 .createdAt(now)
                 .updatedAt(now)
@@ -170,6 +233,10 @@ public class UserProfileService {
         address.setDistrict(clean(request.district()));
         address.setWard(clean(request.ward()));
         address.setStreetAddress(clean(request.streetAddress()));
+        if (request.latitude() != null && request.longitude() != null) {
+            address.setLatitude(request.latitude());
+            address.setLongitude(request.longitude());
+        }
         address.setIsDefault(makeDefault);
         address.setUpdatedAt(LocalDateTime.now());
         if (makeDefault) addressRepository.saveAll(existing);

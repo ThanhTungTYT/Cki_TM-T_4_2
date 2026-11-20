@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { bookingApi } from '../../services/api';
+import LocationPickerMap from '../../components/map/LocationPickerMap';
+import { hasValidCoords } from '../../utils/geo';
 
 function formatDate(value) {
     if (!value) return 'Chưa xác định';
@@ -378,6 +380,26 @@ function CleanerJobDetail() {
                         </div>
                     </div>
 
+                    {hasValidCoords(booking.latitude, booking.longitude) && (
+                        <div style={{ marginTop: 14 }}>
+                            <LocationPickerMap
+                                latitude={booking.latitude}
+                                longitude={booking.longitude}
+                                readOnly
+                                height={200}
+                            />
+                            <a
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${booking.latitude},${booking.longitude}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="cl-text-link"
+                                style={{ display: 'inline-block', marginTop: 8, fontWeight: 600 }}
+                            >
+                                🗺️ Mở chỉ đường Google Maps tới nhà khách →
+                            </a>
+                        </div>
+                    )}
+
                     {booking.customerNote && (
                         <div className="cl-detail-note">
                             <strong>Ghi chú từ khách hàng</strong>
@@ -558,8 +580,10 @@ function CleanerJobDetail() {
 
                                 <div className="cl-detail-log-content">
                                     <strong>
-                                        {(log.logType || log.type) === 'INCIDENT'
+                                        {(log.logType || log.type) === 'INCIDENT' || (log.logType || log.type) === 'ISSUE_REPORT'
                                             ? 'Báo cáo sự cố'
+                                            : (log.logType || log.type) === 'FINAL_REPORT'
+                                            ? 'Báo cáo tổng kết'
                                             : 'Cập nhật tiến độ'}
                                     </strong>
 

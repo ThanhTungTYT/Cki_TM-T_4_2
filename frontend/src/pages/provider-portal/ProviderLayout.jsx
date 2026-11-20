@@ -223,7 +223,12 @@ function ProviderLayout() {
                     setBusinessName(res.businessName);
                 }
             })
-            .catch(() => {});
+            .catch((err) => {
+                const msg = String(err?.message || '').toLowerCase();
+                if (msg.includes('duyệt') || msg.includes('phê duyệt') || msg.includes('chờ') || msg.includes('từ chối') || msg.includes('hồ sơ')) {
+                    navigate('/partner-onboarding', { replace: true });
+                }
+            });
         loadNotifications();
         const interval = setInterval(loadNotifications, 30000);
         return () => clearInterval(interval);

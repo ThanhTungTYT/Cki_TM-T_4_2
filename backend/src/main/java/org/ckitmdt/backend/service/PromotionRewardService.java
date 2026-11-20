@@ -160,7 +160,7 @@ public class PromotionRewardService {
                         .multiply(discountValue)
                         .divide(
                                 BigDecimal.valueOf(100),
-                                2,
+                                0,
                                 RoundingMode.HALF_UP
                         );
             } else if ("FIXED".equals(discountType)) {
@@ -181,8 +181,9 @@ public class PromotionRewardService {
         }
 
         /*
-         * Voucher được kiểm tra độc lập với việc đổi Ccoin.
-         * Không chuyển khối này vào điều kiện requested > 0.
+         * Voucher đổi điểm được kiểm tra độc lập với việc trừ Ccoin.
+         * Hỗ trợ cả trạng thái 'AVAILABLE' và 'ACTIVE' trong dữ liệu DB hiện có.
+         * Các mã dùng chung nhiều lượt (usageLimit > 1) vẫn cho khách khác sử dụng nếu không phải voucher cá nhân 1 lượt.
          */
         if (promotion != null
                 && rewardRedemptionRepository.existsByPromotion_Id(promotion.getId())) {
@@ -194,10 +195,9 @@ public class PromotionRewardService {
                             promotion.getId()
                     )
                     : rewardRedemptionRepository
-                    .findByUser_IdAndPromotion_IdAndStatusOrderByRedeemedAtAsc(
+                    .findAvailableByUserAndPromotion(
                             userId,
-                            promotion.getId(),
-                            "AVAILABLE"
+                            promotion.getId()
                     );
 
             voucher = ownedVouchers.stream()
@@ -205,6 +205,16 @@ public class PromotionRewardService {
                             || now.isBefore(item.getExpiresAt()))
                     .findFirst()
                     .orElse(null);
+
+            boolean singleUsePersonalVoucher = promotion.getUsageLimit() != null
+                    && promotion.getUsageLimit() <= 1;
+
+            if (voucher == null && singleUsePersonalVoucher) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Bạn không sở hữu voucher đổi điểm này hoặc voucher đã được sử dụng/hết hạn."
+                );
+            }
         }
 
         if (requested > 0) {
@@ -219,7 +229,7 @@ public class PromotionRewardService {
             }
 
             if (promotion != null
-                    && (!Boolean.TRUE.equals(promotion.getCombinableWithPoints())
+                    && (Boolean.FALSE.equals(promotion.getCombinableWithPoints())
                     || !Boolean.TRUE.equals(policy.getAllowCombineWithPromotion()))) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
@@ -285,7 +295,7 @@ public class PromotionRewardService {
                 .subtract(pointsDiscount)
                 .add(platformFee)
                 .max(BigDecimal.ZERO)
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(0, RoundingMode.HALF_UP);
 
         return new Pricing(
                 promotion,
@@ -334,8 +344,10 @@ public class PromotionRewardService {
 
         if (pricing.voucher() != null) {
             RewardRedemption voucher = pricing.voucher();
+            boolean voucherUsable = "AVAILABLE".equalsIgnoreCase(voucher.getStatus())
+                    || "ACTIVE".equalsIgnoreCase(voucher.getStatus());
 
-            if (!"AVAILABLE".equalsIgnoreCase(voucher.getStatus())
+            if (!voucherUsable
                     || (voucher.getExpiresAt() != null
                     && !now.isBefore(voucher.getExpiresAt()))
                     || (voucher.getExpiresAt() != null

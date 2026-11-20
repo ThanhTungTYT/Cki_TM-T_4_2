@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminLayout from "./AdminLayout";
+import LocationPickerMap from "../../components/map/LocationPickerMap";
+import { hasValidCoords } from "../../utils/geo";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
     faMagnifyingGlass,
@@ -594,9 +596,65 @@ function AdminProviders() {
                                 <p><strong>Số điện thoại:</strong> {selectedProvider.phone || "—"}</p>
                                 <p><strong>Mô tả:</strong> {selectedProvider.description || "Chưa có mô tả"}</p>
                                 <p><strong>Mã số thuế:</strong> {selectedProvider.taxCode || "—"}</p>
+                                <p><strong>Loại hình pháp nhân:</strong> {selectedProvider.entityType || "—"} ({selectedProvider.countryCode || "VN"})</p>
+                                <p><strong>Số Giấy phép ĐKKD:</strong> {selectedProvider.businessLicenseNumber || "—"}</p>
+                                <p><strong>Người đại diện:</strong> {selectedProvider.representativeName || "—"} {selectedProvider.representativeTitle ? `(${selectedProvider.representativeTitle})` : ""}</p>
+                                <p><strong>Ngân hàng đối soát:</strong> {selectedProvider.bankName ? `${selectedProvider.bankName} · ${selectedProvider.bankAccountNumber} (${selectedProvider.bankAccountHolder})` : "Chưa cập nhật"}</p>
                                 <p><strong>Địa chỉ:</strong> {selectedProvider.address || "—"}</p>
-                                <p><strong>Latitude:</strong> {selectedProvider.latitude ?? "Chưa cập nhật"}</p>
-                                <p><strong>Longitude:</strong> {selectedProvider.longitude ?? "Chưa cập nhật"}</p>
+                                <p><strong>Tọa độ &amp; Bán kính phục vụ:</strong> {selectedProvider.latitude ?? "—"}, {selectedProvider.longitude ?? "—"} · {selectedProvider.serviceRadiusKm ?? 10} km</p>
+                                {(selectedProvider.businessLicenseUrl || selectedProvider.representativeIdCardUrl) && (
+                                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "10px 0" }}>
+                                        {selectedProvider.businessLicenseUrl && (
+                                            <button
+                                                type="button"
+                                                className="provider-reset-btn"
+                                                onClick={async () => {
+                                                    const token = getToken();
+                                                    const res = await fetch(selectedProvider.businessLicenseUrl, {
+                                                        headers: token ? { Authorization: `Bearer ${token}` } : {}
+                                                    });
+                                                    if (!res.ok) return;
+                                                    const blob = await res.blob();
+                                                    window.open(URL.createObjectURL(blob), "_blank", "noopener,noreferrer");
+                                                }}
+                                            >
+                                                📄 Xem Giấy phép ĐKKD
+                                            </button>
+                                        )}
+                                        {selectedProvider.representativeIdCardUrl && (
+                                            <button
+                                                type="button"
+                                                className="provider-reset-btn"
+                                                onClick={async () => {
+                                                    const token = getToken();
+                                                    const res = await fetch(selectedProvider.representativeIdCardUrl, {
+                                                        headers: token ? { Authorization: `Bearer ${token}` } : {}
+                                                    });
+                                                    if (!res.ok) return;
+                                                    const blob = await res.blob();
+                                                    window.open(URL.createObjectURL(blob), "_blank", "noopener,noreferrer");
+                                                }}
+                                            >
+                                                🪪 Xem CCCD Người đại diện
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                                {hasValidCoords(selectedProvider.latitude, selectedProvider.longitude) && (
+                                    <div style={{ margin: "12px 0" }}>
+                                        <LocationPickerMap
+                                            latitude={selectedProvider.latitude}
+                                            longitude={selectedProvider.longitude}
+                                            radiusKm={selectedProvider.serviceRadiusKm || 10}
+                                            showRadius
+                                            readOnly
+                                            height={200}
+                                        />
+                                    </div>
+                                )}
+                                {selectedProvider.rejectionReason && (
+                                    <p style={{ color: "#b91c1c" }}><strong>Lý do từ chối gần nhất:</strong> {selectedProvider.rejectionReason}</p>
+                                )}
                                 <p><strong>Phiên bản hồ sơ:</strong> {selectedProvider.version ?? 1}</p>
                                 <p><strong>Số dịch vụ liên kết:</strong> {selectedProvider.services}</p>
                                 <p><strong>Ngày đăng ký:</strong> {selectedProvider.joinedAt || "—"}</p>
