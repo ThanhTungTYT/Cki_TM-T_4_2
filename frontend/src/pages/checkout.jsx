@@ -1060,6 +1060,7 @@ export default function Checkout() {
                                     latitude={addressForm.lat}
                                     longitude={addressForm.lng}
                                     address={[addressForm.streetAddress, addressForm.ward, addressForm.district, addressForm.city].filter(Boolean).join(', ')}
+                                    saveUserGeo
                                     height={240}
                                     onChange={(loc) => {
                                         setAddressForm(current => ({
@@ -1092,6 +1093,45 @@ export default function Checkout() {
                                     }}
                                 />
                             </div>
+
+                            {quote?.outsideServiceRadius && (
+                                <div
+                                    style={{
+                                        marginTop: 12,
+                                        padding: '12px 14px',
+                                        borderRadius: 10,
+                                        background: '#fffbeb',
+                                        border: '1px solid #fcd34d',
+                                        borderLeft: '4px solid #f59e0b',
+                                        color: '#92400e',
+                                        fontSize: 13,
+                                        lineHeight: 1.5
+                                    }}
+                                    role="status"
+                                >
+                                    <strong>⚠️ Cảnh báo khoảng cách phục vụ:</strong>{' '}
+                                    {quote.serviceRadiusWarning ||
+                                        `Địa chỉ hiện cách đối tác khoảng ${quote.distanceKm} km, vượt bán kính tiêu chuẩn ${quote.serviceRadiusKm || 10} km. Bạn vẫn có thể tiếp tục đặt lịch để đối tác xác nhận.`}
+                                </div>
+                            )}
+
+                            {!quote?.outsideServiceRadius && quote?.distanceKm != null && (
+                                <div
+                                    style={{
+                                        marginTop: 10,
+                                        padding: '8px 12px',
+                                        borderRadius: 8,
+                                        background: '#f0fdf4',
+                                        border: '1px solid #bbf7d0',
+                                        color: '#166534',
+                                        fontSize: 12.5
+                                    }}
+                                >
+                                    ✓ Địa chỉ cách trụ sở <strong>{currentProviderName}</strong> khoảng{' '}
+                                    <strong>{quote.distanceKm} km</strong> (trong bán kính phục vụ{' '}
+                                    {quote.serviceRadiusKm || 10} km).
+                                </div>
+                            )}
                         </section>
 
                         <section className="checkout-section-card">

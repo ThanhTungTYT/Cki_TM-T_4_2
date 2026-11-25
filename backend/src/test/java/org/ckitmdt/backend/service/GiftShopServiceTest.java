@@ -15,8 +15,9 @@ class GiftShopServiceTest {
     private final UserRepository users = mock(UserRepository.class);
     private final RewardAccountRepository accounts = mock(RewardAccountRepository.class);
     private final RewardTransactionRepository transactions = mock(RewardTransactionRepository.class);
+    private final RewardPolicyRepository policies = mock(RewardPolicyRepository.class);
     private final GiftShopService shop = new GiftShopService(
-            gifts, redemptions, users, accounts, transactions,
+            gifts, redemptions, users, accounts, transactions, policies,
             mock(RewardExpiryService.class), mock(CustomerNotificationService.class));
     private final GiftShopService.RedeemRequest request = new GiftShopService.RedeemRequest(1L, "Nguyen Van A", "0901234567", "12 Nguyen Trai, TP HCM", "12345678-12345678");
     private RewardAccount wallet;
@@ -57,5 +58,22 @@ class GiftShopServiceTest {
         assertEquals(5000, wallet.getBalance());
         verify(gifts, never()).findForUpdate(any());
         verify(transactions, never()).save(any());
+    }
+    @Test void cancelRefundsWithExpiryAndDecrementsTotalRedeemed() {
+        User customer = User.builder().id(7L).role("CUSTOMER").build();
+        wallet.setBalance(2000);
+        wallet.setTotalRedeemed(3000);
+        GiftRedemption pending = GiftRedemption.builder()
+                .id(99L).user(customer).gift(gift).giftName(gift.getName()).pointsUsed(3000).status("PENDING").build();
+        when(redemptions.findByIdForUpdate(99L)).thenReturn(Optional.of(pending));
+        when(policies.findById(1L)).thenReturn(Optional.of(RewardPolicy.builder().id(1L).expiryMonths(6).build()));
+
+        var result = shop.cancel("user@test", 99L);
+        assertEquals("CANCELLED", result.status());
+        assertEquals(5000, wallet.getBalance());
+        assertEquals(0, wallet.getTotalRedeemed());
+        assertEquals(3, gift.getStock());
+        verify(transactions).save(argThat(t ->
+                "GIFT_REFUND".equals(t.getType()) && t.getPoints() == 3000 && t.getExpiresAt() != null));
     }
 }

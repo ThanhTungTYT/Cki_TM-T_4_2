@@ -37,8 +37,12 @@ const CATEGORIES = [
 const STATUS_LABELS = {
     OPEN: 'Đang chờ xử lý',
     IN_PROGRESS: 'Đang xử lý',
+    WAITING_PROVIDER: 'Chờ nhà cung cấp giải trình',
+    PROVIDER_RESPONDED: 'Nhà cung cấp đã giải trình',
+    UNDER_REVIEW: 'Admin đang thẩm định',
     RESOLVED: 'Đã giải quyết',
-    REJECTED: 'Đã từ chối'
+    REJECTED: 'Đã từ chối',
+    CLOSED: 'Đã đóng'
 };
 
 function getToken() {
@@ -820,46 +824,52 @@ export default function CustomerReports() {
                                                             </div>
                                                         )}
 
-                                                        <form
-                                                            className="customer-report-reply-form"
-                                                            onSubmit={(event) =>
-                                                                handleSendReply(event, report.id)
-                                                            }
-                                                        >
-                                                            <label htmlFor={`report-reply-${report.id}`}>
-                                                                Gửi phản hồi bổ sung
-                                                            </label>
-                                                            <textarea
-                                                                id={`report-reply-${report.id}`}
-                                                                rows={3}
-                                                                value={replyContent}
-                                                                onChange={(event) =>
-                                                                    setReplyContent(event.target.value)
+                                                        {!['RESOLVED', 'REJECTED', 'CLOSED'].includes(String(report.status || '').toUpperCase()) ? (
+                                                            <form
+                                                                className="customer-report-reply-form"
+                                                                onSubmit={(event) =>
+                                                                    handleSendReply(event, report.id)
                                                                 }
-                                                                placeholder="Nhập nội dung bạn muốn trao đổi thêm..."
-                                                                disabled={sendingReply}
-                                                            />
-
-                                                            <div className="customer-report-reply-actions">
-                                                                <small>
-                                                                    Nội dung gửi đi sẽ được lưu trong lịch sử khiếu nại.
-                                                                </small>
-                                                                <button
-                                                                    type="submit"
-                                                                    className="customer-report-primary"
-                                                                    disabled={
-                                                                        sendingReply ||
-                                                                        !replyContent.trim()
+                                                            >
+                                                                <label htmlFor={`report-reply-${report.id}`}>
+                                                                    Gửi phản hồi bổ sung
+                                                                </label>
+                                                                <textarea
+                                                                    id={`report-reply-${report.id}`}
+                                                                    rows={3}
+                                                                    value={replyContent}
+                                                                    onChange={(event) =>
+                                                                        setReplyContent(event.target.value)
                                                                     }
-                                                                >
-                                                                    <FontAwesomeIcon
-                                                                        icon={sendingReply ? faRotate : faPaperPlane}
-                                                                        className={sendingReply ? 'customer-report-spin' : ''}
-                                                                    />
-                                                                    {sendingReply ? 'Đang gửi...' : 'Gửi phản hồi'}
-                                                                </button>
+                                                                    placeholder="Nhập nội dung bạn muốn trao đổi thêm..."
+                                                                    disabled={sendingReply}
+                                                                />
+
+                                                                <div className="customer-report-reply-actions">
+                                                                    <small>
+                                                                        Nội dung gửi đi sẽ được lưu trong lịch sử khiếu nại.
+                                                                    </small>
+                                                                    <button
+                                                                        type="submit"
+                                                                        className="customer-report-primary"
+                                                                        disabled={
+                                                                            sendingReply ||
+                                                                            !replyContent.trim()
+                                                                        }
+                                                                    >
+                                                                        <FontAwesomeIcon
+                                                                            icon={sendingReply ? faRotate : faPaperPlane}
+                                                                            className={sendingReply ? 'customer-report-spin' : ''}
+                                                                        />
+                                                                        {sendingReply ? 'Đang gửi...' : 'Gửi phản hồi'}
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+                                                        ) : (
+                                                            <div className="customer-report-conversation-empty">
+                                                                Khiếu nại đã có kết luận hoặc đã đóng nên không thể gửi thêm phản hồi.
                                                             </div>
-                                                        </form>
+                                                        )}
                                                     </div>
                                                 )}
                                             </article>

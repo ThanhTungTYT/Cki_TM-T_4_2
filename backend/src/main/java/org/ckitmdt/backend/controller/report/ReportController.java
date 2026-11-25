@@ -306,28 +306,76 @@ public class ReportController {
         );
 
         if (isProviderForReport(user, report)) {
-            report.setStatus("PROVIDER_RESPONDED");
+            if (!"UNDER_REVIEW".equals(upper(report.getStatus()))) {
+                report.setStatus("PROVIDER_RESPONDED");
+            }
             report.setUpdatedAt(now);
         } else if (isStaff(user)) {
             if ("OPEN".equals(upper(report.getStatus()))) {
                 report.setStatus("IN_PROGRESS");
             }
+            if (report.getFirstRespondedAt() == null) {
+                report.setFirstRespondedAt(now);
+            }
 
             report.setHandledBy(user.getEmail());
+            report.setUpdatedAt(now);
+        } else {
             report.setUpdatedAt(now);
         }
 
         reportRepository.save(report);
 
-        if ("CUSTOMER".equals(upper(report.getReporter().getRole()))) {
+        boolean authorIsReporter = report.getReporter() != null
+                && Objects.equals(report.getReporter().getId(), user.getId());
+
+        if (!authorIsReporter
+                && report.getReporter() != null
+                && "CUSTOMER".equals(upper(report.getReporter().getRole()))) {
             customerNotificationService.notifyCustomer(
                     report.getReporter(),
                     "COMPLAINT_RESPONSE",
                     "Khiếu nại có phản hồi mới",
-                    "Khiếu nại '" + report.getSubject() + "' đã có phản hồi mới.",
+                    "Khiếu nại '" + report.getSubject() + "' đã có phản hồi mới từ " + authorName + ".",
                     "COMPLAINT",
                     report.getId()
             );
+        }
+
+        if (authorIsReporter) {
+            List<User> staffRecipients = new ArrayList<>();
+            assignmentRepository.findByTicket_IdAndActiveTrue(id)
+                    .map(assignment -> assignment.getStaff())
+                    .filter(s -> s != null && "ACTIVE".equalsIgnoreCase(s.getStatus()))
+                    .ifPresent(staffRecipients::add);
+            if (staffRecipients.isEmpty()) {
+                staffRecipients.addAll(userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("ADMIN", "ACTIVE"));
+                staffRecipients.addAll(userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("STAFF", "ACTIVE"));
+            }
+            for (User recipient : staffRecipients) {
+                notificationRepository.save(AdminNotification.builder()
+                        .recipient(recipient)
+                        .type("CUSTOMER_COMPLAINT_REPLY")
+                        .title("Khách hàng phản hồi khiếu nại #" + report.getId())
+                        .message("Khách hàng " + authorName + " vừa nhắn thêm trong khiếu nại '" + report.getSubject() + "'.")
+                        .referenceType("REPORT_TICKET")
+                        .referenceId(report.getId())
+                        .createdAt(now)
+                        .build());
+            }
+            if (report.getBooking() != null
+                    && report.getBooking().getPartner() != null
+                    && report.getBooking().getPartner().getUser() != null) {
+                notificationRepository.save(AdminNotification.builder()
+                        .recipient(report.getBooking().getPartner().getUser())
+                        .type("CUSTOMER_COMPLAINT_REPLY")
+                        .title("Khách hàng phản hồi khiếu nại #" + report.getId())
+                        .message("Khách hàng " + authorName + " vừa nhắn thêm trong khiếu nại '" + report.getSubject() + "'.")
+                        .referenceType("REPORT_TICKET")
+                        .referenceId(report.getId())
+                        .createdAt(now)
+                        .build());
+            }
         }
 
         return responseRow(saved);
@@ -379,8 +427,13 @@ public class ReportController {
 
         List<User> recipients = new ArrayList<>();
         assignmentRepository.findByTicket_IdAndActiveTrue(id)
-                .map(assignment -> assignment.getStaff())
-                .ifPresent(recipients::add);
+                .ifPresent(assignment -> {
+                    if (assignment.getStaff() != null) {
+                        recipients.add(assignment.getStaff());
+                    }
+                    assignment.setActive(false);
+                    assignmentRepository.save(assignment);
+                });
         List<User> admins = userRepository.findAll().stream().filter(this::isAdmin).toList();
         for (User admin : admins) {
             if (recipients.stream().noneMatch(existing -> Objects.equals(existing.getId(), admin.getId()))) {

@@ -144,5 +144,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByStatusIn(List<String> statuses);
 
+    List<Booking> findByStatusInAndUpdatedAtGreaterThanEqual(List<String> statuses, LocalDateTime updatedAfter);
+
     long countByStatusIgnoreCase(String status);
 }

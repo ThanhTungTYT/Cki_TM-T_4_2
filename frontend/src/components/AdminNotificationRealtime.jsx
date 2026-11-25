@@ -21,7 +21,20 @@ function getRole() {
 }
 
 export default function AdminNotificationRealtime() {
-    const [notification, setNotification] = useState(null);
+    const [notifications, setNotifications] = useState([]);
+
+    const pushToast = (item) => {
+        const key = `${item.id || Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const entry = { ...item, localKey: key };
+        setNotifications((prev) => [entry, ...prev].slice(0, 3));
+        window.setTimeout(() => {
+            setNotifications((prev) => prev.filter((n) => n.localKey !== key));
+        }, 9000);
+    };
+
+    const dismissToast = (localKey) => {
+        setNotifications((prev) => prev.filter((n) => n.localKey !== localKey));
+    };
 
     useEffect(() => {
         const token = getToken();
@@ -42,15 +55,11 @@ export default function AdminNotificationRealtime() {
                 client.subscribe('/user/queue/admin-notifications', message => {
                     try {
                         const data = JSON.parse(message.body);
-                        setNotification({
-                            ...data,
-                            localKey: `${data.id || Date.now()}-${Date.now()}`
-                        });
+                        pushToast(data);
                     } catch {
-                        setNotification({
+                        pushToast({
                             title: 'Thông báo mới',
-                            message: 'Bạn vừa nhận được một thông báo mới.',
-                            localKey: String(Date.now())
+                            message: 'Bạn vừa nhận được một thông báo mới.'
                         });
                     }
                 });
@@ -67,21 +76,44 @@ export default function AdminNotificationRealtime() {
         };
     }, []);
 
-    if (!notification) return null;
+    if (notifications.length === 0) return null;
 
     return (
-        <div className="admin-realtime-notification">
-            <div className="admin-realtime-icon">
-                <FontAwesomeIcon icon={faBell} />
-            </div>
-            <div className="admin-realtime-content">
-                <strong>{notification.title || 'Thông báo mới'}</strong>
-                <p>{notification.message || 'Bạn vừa nhận được một thông báo mới.'}</p>
-                {notification.createdAt && <small>{new Date(notification.createdAt).toLocaleString('vi-VN')}</small>}
-            </div>
-            <button type="button" onClick={() => setNotification(null)} aria-label="Đóng thông báo">
-                <FontAwesomeIcon icon={faXmark} />
-            </button>
+        <div
+            style={{
+                position: 'fixed',
+                top: 16,
+                right: 16,
+                zIndex: 9999,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                maxWidth: 380
+            }}
+        >
+            {notifications.map((notification) => (
+                <div
+                    key={notification.localKey}
+                    className="admin-realtime-notification"
+                    style={{ position: 'static', margin: 0 }}
+                >
+                    <div className="admin-realtime-icon">
+                        <FontAwesomeIcon icon={faBell} />
+                    </div>
+                    <div className="admin-realtime-content">
+                        <strong>{notification.title || 'Thông báo mới'}</strong>
+                        <p>{notification.message || 'Bạn vừa nhận được một thông báo mới.'}</p>
+                        {notification.createdAt && <small>{new Date(notification.createdAt).toLocaleString('vi-VN')}</small>}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => dismissToast(notification.localKey)}
+                        aria-label="Đóng thông báo"
+                    >
+                        <FontAwesomeIcon icon={faXmark} />
+                    </button>
+                </div>
+            ))}
         </div>
     );
 }

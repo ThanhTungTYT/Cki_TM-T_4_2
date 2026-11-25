@@ -48,16 +48,25 @@ public class AdminOutboxDeliveryService {
         if (!"PENDING".equalsIgnoreCase(event.getStatus())) return;
 
         List<User> admins = userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("ADMIN", "ACTIVE");
+        List<User> staffMembers = userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("STAFF", "ACTIVE");
 
-        if (admins.isEmpty()) {
-            throw new IllegalStateException("Không có tài khoản Admin đang hoạt động để nhận thông báo.");
+        Map<Long, User> recipientsById = new LinkedHashMap<>();
+        for (User admin : admins) {
+            recipientsById.put(admin.getId(), admin);
+        }
+        for (User staff : staffMembers) {
+            recipientsById.putIfAbsent(staff.getId(), staff);
+        }
+
+        if (recipientsById.isEmpty()) {
+            throw new IllegalStateException("Không có tài khoản Admin/Staff đang hoạt động để nhận thông báo.");
         }
 
         LocalDateTime now = LocalDateTime.now();
 
-        for (User admin : admins) {
+        for (User recipient : recipientsById.values()) {
             AdminNotification notification = notificationRepository.save(AdminNotification.builder()
-                    .recipient(admin)
+                    .recipient(recipient)
                     .type(event.getEventType())
                     .title(event.getTitle())
                     .message(event.getMessage())
@@ -66,7 +75,7 @@ public class AdminOutboxDeliveryService {
                     .createdAt(now)
                     .build());
 
-            publishAfterCommit(admin, notification);
+            publishAfterCommit(recipient, notification);
         }
 
         event.setStatus("PROCESSED");

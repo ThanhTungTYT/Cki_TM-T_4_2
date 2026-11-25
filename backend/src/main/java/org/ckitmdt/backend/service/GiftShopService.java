@@ -19,6 +19,7 @@ public class GiftShopService {
     private final UserRepository users;
     private final RewardAccountRepository accounts;
     private final RewardTransactionRepository transactions;
+    private final RewardPolicyRepository policies;
     private final RewardExpiryService expiry;
     private final CustomerNotificationService notifications;
 
@@ -93,6 +94,8 @@ public class GiftShopService {
         LocalDateTime now = LocalDateTime.now();
 
         account.setBalance(Math.addExact(account.getBalance() == null ? 0 : account.getBalance(), points));
+        int currentRedeemed = account.getTotalRedeemed() == null ? 0 : account.getTotalRedeemed();
+        account.setTotalRedeemed(Math.max(0, currentRedeemed - points));
         account.setUpdatedAt(now);
         gift.setStock(Math.addExact(gift.getStock() == null ? 0 : gift.getStock(), 1));
         redemption.setStatus("CANCELLED");
@@ -101,10 +104,18 @@ public class GiftShopService {
         accounts.save(account);
         gifts.save(gift);
         if (points > 0) {
+            RewardPolicy policy = policies.findById(1L).orElse(null);
+            int expiryMonths = (policy != null && policy.getExpiryMonths() != null)
+                    ? policy.getExpiryMonths()
+                    : 12;
+            LocalDateTime refundExpiresAt = expiryMonths > 0 ? now.plusMonths(expiryMonths) : null;
             transactions.save(RewardTransaction.builder().rewardAccount(account).performedBy(user)
                     .type("GIFT_REFUND").points(points)
                     .description("Hoàn Ccoin do hủy đơn đổi quà #" + redemption.getId())
-                    .eventKey("GIFT_CANCEL_REFUND_" + redemption.getId()).createdAt(now).build());
+                    .eventKey("GIFT_CANCEL_REFUND_" + redemption.getId())
+                    .createdAt(now)
+                    .expiresAt(refundExpiresAt)
+                    .build());
         }
         notifications.notifyCustomer(user, "GIFT_ORDER_CANCELLED", "Đơn đổi quà đã hủy",
                 "Đơn đổi " + redemption.getGiftName() + " (#" + redemption.getId()

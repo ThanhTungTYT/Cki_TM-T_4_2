@@ -265,6 +265,17 @@ public class BookingStateEngine {
                     if (emp != null) {
                         emp.setTotalCompletedJobs((emp.getTotalCompletedJobs() != null ? emp.getTotalCompletedJobs() : 0) + 1);
                         employeeRepository.save(emp);
+                        if (emp.getUser() != null) {
+                            adminNotificationRepository.save(AdminNotification.builder()
+                                    .recipient(emp.getUser())
+                                    .type("BOOKING_COMPLETED")
+                                    .title("Khách hàng đã nghiệm thu đơn #" + booking.getBookingCode())
+                                    .message("Đơn hàng #" + booking.getBookingCode() + " đã hoàn thành. Cảm ơn bạn đã hoàn thành tốt công việc!")
+                                    .referenceType("BOOKING_ASSIGNMENT")
+                                    .referenceId(a.getId())
+                                    .createdAt(now)
+                                    .build());
+                        }
                     }
                 }
             }
@@ -272,6 +283,17 @@ public class BookingStateEngine {
                 Partner p = booking.getPartner();
                 p.setTotalCompletedJobs((p.getTotalCompletedJobs() != null ? p.getTotalCompletedJobs() : 0) + 1);
                 partnerRepository.save(p);
+                if (p.getUser() != null) {
+                    adminNotificationRepository.save(AdminNotification.builder()
+                            .recipient(p.getUser())
+                            .type("BOOKING_COMPLETED")
+                            .title("Đơn hàng #" + booking.getBookingCode() + " đã hoàn thành")
+                            .message("Khách hàng đã xác nhận nghiệm thu hoàn thành đơn hàng #" + booking.getBookingCode() + ".")
+                            .referenceType("BOOKING")
+                            .referenceId(booking.getId())
+                            .createdAt(now)
+                            .build());
+                }
             }
         }
 
@@ -287,9 +309,44 @@ public class BookingStateEngine {
             List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
             for (BookingAssignment a : assignments) {
                 if (!"COMPLETED".equalsIgnoreCase(a.getStatus())) {
+                    boolean wasActive = !"CANCELLED".equalsIgnoreCase(a.getStatus())
+                            && !"DECLINED".equalsIgnoreCase(a.getStatus());
                     a.setStatus("CANCELLED");
                     bookingAssignmentRepository.save(a);
+                    if (wasActive && a.getEmployee() != null && a.getEmployee().getUser() != null) {
+                        adminNotificationRepository.save(AdminNotification.builder()
+                                .recipient(a.getEmployee().getUser())
+                                .type("BOOKING_CANCELLED")
+                                .title("Đơn hàng #" + booking.getBookingCode() + " đã bị hủy")
+                                .message("Phân công cho đơn hàng #" + booking.getBookingCode() + " đã bị hủy"
+                                        + (booking.getCancelReason() != null && !booking.getCancelReason().isBlank()
+                                                ? ". Lý do: " + booking.getCancelReason() : "."))
+                                .referenceType("BOOKING_ASSIGNMENT")
+                                .referenceId(a.getId())
+                                .createdAt(now)
+                                .build());
+                    }
                 }
+            }
+
+            boolean cancelledByCustomer = currentUser != null
+                    && booking.getCustomer() != null
+                    && currentUser.getId().equals(booking.getCustomer().getId());
+            if (cancelledByCustomer
+                    && booking.getPartner() != null
+                    && booking.getPartner().getUser() != null) {
+                adminNotificationRepository.save(AdminNotification.builder()
+                        .recipient(booking.getPartner().getUser())
+                        .type("BOOKING_CANCELLED_BY_CUSTOMER")
+                        .title("Khách hàng đã hủy đơn #" + booking.getBookingCode())
+                        .message("Khách hàng " + booking.getCustomer().getFullName()
+                                + " đã hủy đơn hàng #" + booking.getBookingCode()
+                                + (booking.getCancelReason() != null && !booking.getCancelReason().isBlank()
+                                        ? ". Lý do: " + booking.getCancelReason() : "."))
+                        .referenceType("BOOKING")
+                        .referenceId(booking.getId())
+                        .createdAt(now)
+                        .build());
             }
         }
 
@@ -393,7 +450,12 @@ public class BookingStateEngine {
                 currentUser != null ? currentUser.getEmail() : "SYSTEM"
         );
 
-        customerNotificationService.notifyBookingStatus(savedBooking);
+        // Tránh gửi thông báo gây hiểu nhầm "Đơn đã được xác nhận" khi đơn bị lùi trạng thái từ ASSIGNED/EN_ROUTE về CONFIRMED do đổi nhân sự
+        boolean isRollbackToConfirmed = targetStatus == BookingStatusEnum.CONFIRMED
+                && ("ASSIGNED".equalsIgnoreCase(oldStatus) || "EN_ROUTE".equalsIgnoreCase(oldStatus));
+        if (!isRollbackToConfirmed) {
+            customerNotificationService.notifyBookingStatus(savedBooking);
+        }
         return savedBooking;
     }
 

@@ -414,6 +414,34 @@ public class BookingService {
                 ? "Còn đủ nhân viên cho khung giờ đã chọn."
                 : "Khung giờ này không còn đủ nhân viên hoặc cần thêm thời gian di chuyển. Vui lòng chọn khung giờ khác.";
 
+        Double distanceKm = null;
+        Double serviceRadiusKm = partner.getServiceRadiusKm();
+        boolean outsideServiceRadius = false;
+        String serviceRadiusWarning = null;
+        if (request.getAddressId() != null && partner.getLatitude() != null && partner.getLongitude() != null) {
+            Address address = addressRepository.findByIdAndUserId(request.getAddressId(), customer.getId()).orElse(null);
+            if (address != null && address.getLatitude() != null && address.getLongitude() != null) {
+                double dist = haversineKm(
+                        address.getLatitude().doubleValue(),
+                        address.getLongitude().doubleValue(),
+                        partner.getLatitude().doubleValue(),
+                        partner.getLongitude().doubleValue()
+                );
+                distanceKm = Math.round(dist * 10.0) / 10.0;
+                double maxRadius = (serviceRadiusKm != null && serviceRadiusKm > 0) ? serviceRadiusKm : 10.0;
+                if (distanceKm > maxRadius) {
+                    outsideServiceRadius = true;
+                    serviceRadiusWarning = String.format(
+                            Locale.ROOT,
+                            "Địa chỉ đặt dịch vụ cách trụ sở %s khoảng %.1f km (vượt bán kính phục vụ tiêu chuẩn %.1f km). Đối tác có thể cần trao đổi thêm về thời gian di chuyển.",
+                            partner.getBusinessName(),
+                            distanceKm,
+                            maxRadius
+                    );
+                }
+            }
+        }
+
         BookingQuoteResponse response = BookingQuoteResponse.builder()
                 .partnerId(partner.getId())
                 .partnerName(partner.getBusinessName())
@@ -432,9 +460,24 @@ public class BookingService {
                 .scheduledEnd(scheduledEnd)
                 .capacityAvailable(capacityAvailable)
                 .capacityMessage(capacityMessage)
+                .distanceKm(distanceKm)
+                .serviceRadiusKm(serviceRadiusKm)
+                .outsideServiceRadius(outsideServiceRadius)
+                .serviceRadiusWarning(serviceRadiusWarning)
                 .build();
 
         return new QuoteCalculation(response, pricing);
+    }
+
+    private double haversineKm(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     @Transactional

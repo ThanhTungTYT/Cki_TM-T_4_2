@@ -486,12 +486,20 @@ function Services() {
                                 <article className="service-card" key={`${service.id}-${service.providerId ?? ''}`}>
                                     <div
                                         className="service-image"
-                                        onClick={() => navigate(`/service-detail/${service.id}`)}
+                                        onClick={() => navigate(
+                                            service.providerId
+                                                ? `/service-detail/${service.id}?partnerId=${service.providerId}`
+                                                : `/service-detail/${service.id}`
+                                        )}
                                         role="link"
                                         tabIndex={0}
                                         onKeyDown={event => {
                                             if (event.key === 'Enter') {
-                                                navigate(`/service-detail/${service.id}`);
+                                                navigate(
+                                                    service.providerId
+                                                        ? `/service-detail/${service.id}?partnerId=${service.providerId}`
+                                                        : `/service-detail/${service.id}`
+                                                );
                                             }
                                         }}
                                     >
@@ -511,12 +519,20 @@ function Services() {
                                     <div className="service-content">
                                         <h3
                                             className="service-detail-link"
-                                            onClick={() => navigate(`/service-detail/${service.id}`)}
+                                            onClick={() => navigate(
+                                                service.providerId
+                                                    ? `/service-detail/${service.id}?partnerId=${service.providerId}`
+                                                    : `/service-detail/${service.id}`
+                                            )}
                                             role="link"
                                             tabIndex={0}
                                             onKeyDown={event => {
                                                 if (event.key === 'Enter') {
-                                                    navigate(`/service-detail/${service.id}`);
+                                                    navigate(
+                                                        service.providerId
+                                                            ? `/service-detail/${service.id}?partnerId=${service.providerId}`
+                                                            : `/service-detail/${service.id}`
+                                                    );
                                                 }
                                             }}
                                         >

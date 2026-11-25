@@ -222,14 +222,18 @@ export default function AdminPromotions() {
         });
     }, [promotions, keyword, statusFilter]);
 
+    const toLocalDateTimeInput = (ms) => {
+        const d = new Date(ms);
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
     const openCreate = () => {
         setEditingPromotion(null);
         setForm({
             ...EMPTY_PROMOTION,
-            startAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
-            endAt: new Date(Date.now() + 30 * 86400000)
-                .toISOString()
-                .slice(0, 16),
+            startAt: toLocalDateTimeInput(Date.now() + 60000),
+            endAt: toLocalDateTimeInput(Date.now() + 30 * 86400000),
         });
         setError("");
         setModalOpen(true);
@@ -856,9 +860,7 @@ export default function AdminPromotions() {
                             )}
 
                             <p className="promotion-footnote">
-                                Công thức tích điểm được cố định theo quy tắc
-                                nghiệp vụ. Phần này lưu cấu hình đổi điểm, thời hạn
-                                Ccoin và hỗ trợ điều chỉnh điểm thủ công.
+                                Chính sách tích điểm, quy đổi và thời hạn Ccoin tại đây được áp dụng trực tiếp khi hoàn tất đơn hàng và thanh toán.
                             </p>
                         </form>
 
