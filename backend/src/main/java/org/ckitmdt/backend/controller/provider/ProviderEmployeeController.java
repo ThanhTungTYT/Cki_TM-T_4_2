@@ -213,14 +213,23 @@ public class ProviderEmployeeController {
             }
         }
 
-        employee.setStatus(status);
-        employee.setUpdatedAt(LocalDateTime.now());
         if (employee.getUser() != null) {
             User empUser = employee.getUser();
-            empUser.setStatus("INACTIVE".equals(status) ? "INACTIVE" : "ACTIVE");
-            empUser.setUpdatedAt(LocalDateTime.now());
-            userRepository.save(empUser);
+            if ("LOCKED".equalsIgnoreCase(empUser.getStatus())) {
+                if ("ACTIVE".equals(status)) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "Tài khoản nhân viên đang bị Quản trị viên khóa. Không thể kích hoạt lại từ cổng Đối tác."
+                    );
+                }
+            } else {
+                empUser.setStatus("INACTIVE".equals(status) ? "INACTIVE" : "ACTIVE");
+                empUser.setUpdatedAt(LocalDateTime.now());
+                userRepository.save(empUser);
+            }
         }
+        employee.setStatus(status);
+        employee.setUpdatedAt(LocalDateTime.now());
         return employeeRow(employeeRepository.save(employee));
     }
 

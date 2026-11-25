@@ -7,6 +7,7 @@ import org.ckitmdt.backend.dto.booking.*;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.BookingAssignment;
 import org.ckitmdt.backend.entity.BookingStatusHistory;
+import org.ckitmdt.backend.entity.CancellationRefund;
 import org.ckitmdt.backend.entity.Employee;
 import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.repository.EmployeeRepository;
@@ -121,10 +122,10 @@ public class BookingStateEngine {
         if (action == BookingActionEnum.CANCEL && currentUser != null) {
             String uRole = normalizeRole(currentUser.getRole());
             boolean isPartnerActor = booking.getPartner() != null && booking.getPartner().getUser() != null && booking.getPartner().getUser().getId().equals(currentUser.getId());
-            if ((isStaffRole(uRole) || isPartnerActor) && (request.getNote() == null || request.getNote().isBlank())) {
+            if ((isAdminRole(uRole) || isPartnerActor) && (request.getNote() == null || request.getNote().isBlank())) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        (isPartnerActor ? "Nhà cung cấp" : "Admin/Staff") + " phải ghi rõ lý do khi hủy đơn hàng."
+                        (isPartnerActor ? "Nhà cung cấp" : "Admin") + " phải ghi rõ lý do khi hủy đơn hàng."
                 );
             }
         }
@@ -201,8 +202,25 @@ public class BookingStateEngine {
                     .build());
 
             customerNotificationService.notifyBookingStatus(expiredBooking);
+            rewardLifecycleService.processBooking(expiredBooking.getId());
 
             return mapToBookingResponse(expiredBooking);
+        }
+
+        if (action == BookingActionEnum.PROVIDER_ACCEPT
+                && currentStatus == BookingStatusEnum.PENDING_PROVIDER) {
+            LocalDateTime checkNow = LocalDateTime.now();
+            LocalDateTime deadline = booking.getProviderDeadlineAt();
+            if (deadline == null && booking.getScheduledStart() != null && booking.getCreatedAt() != null) {
+                deadline = BookingService.calculateProviderDeadline(booking.getScheduledStart(), booking.getCreatedAt());
+            }
+            if ((deadline != null && !checkNow.isBefore(deadline))
+                    || (booking.getScheduledStart() != null && !checkNow.isBefore(booking.getScheduledStart()))) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Đơn hàng đã quá thời hạn tiếp nhận hoặc đã qua giờ hẹn nên không thể xác nhận."
+                );
+            }
         }
 
         BookingStatusEnum targetStatus = determineNextStatus(
@@ -410,7 +428,7 @@ public class BookingStateEngine {
         rewardLifecycleService.processBooking(saved.getId());
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void expirePendingProvider(Long bookingId) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
         LocalDateTime now = LocalDateTime.now();
@@ -457,24 +475,64 @@ public class BookingStateEngine {
                 .createdAt(now)
                 .build());
 
+        // Tự động tạo yêu cầu hoàn tiền nếu khách đã thanh toán online thành công
+        List<Payment> payments = paymentRepository.findByBooking_Id(saved.getId());
+        Payment paidOnline = payments.stream()
+                .filter(this::isSuccessfulPayment)
+                .filter(p -> !"CASH".equalsIgnoreCase(p.getPaymentProvider()))
+                .findFirst()
+                .orElse(null);
+        boolean refundCreated = false;
+        if (paidOnline != null && saved.getCustomer() != null
+                && !cancellationRefundRepository.existsByBooking_Id(saved.getId())) {
+            cancellationRefundRepository.save(CancellationRefund.builder()
+                    .booking(saved)
+                    .requestedBy(saved.getCustomer())
+                    .requestedAmount(paidOnline.getAmount() != null ? paidOnline.getAmount() : saved.getTotalAmount())
+                    .status("PENDING_REVIEW")
+                    .cancellationReason("Hệ thống tự động tạo yêu cầu hoàn tiền do đơn quá hạn tiếp nhận: " + cancellationReason)
+                    .requestedAt(now)
+                    .build());
+            refundCreated = true;
+        }
+
         customerNotificationService.notifyCustomer(
                 saved.getCustomer(),
                 "BOOKING_EXPIRED",
                 "Đơn hàng đã tự hủy",
-                "Đơn " + saved.getBookingCode() + " đã tự hủy. " + cancellationReason,
+                "Đơn " + saved.getBookingCode() + " đã tự hủy. " + cancellationReason
+                        + (refundCreated ? " Yêu cầu hoàn tiền đã được tạo tự động để Admin xử lý." : ""),
                 "BOOKING",
                 saved.getId()
         );
 
-        // Thông báo cho Admin (đơn tiền mặt không cần hoàn tiền, chỉ thông báo)
-        adminNotificationRepository.save(AdminNotification.builder()
-                .type("BOOKING_PROVIDER_EXPIRED")
-                .title("Đơn hàng quá hạn tiếp nhận")
-                .message("Đơn hàng #" + saved.getBookingCode() + " đã tự hủy. " + cancellationReason)
-                .referenceType("BOOKING")
-                .referenceId(saved.getId())
-                .createdAt(now)
-                .build());
+        String adminMsg = "Đơn hàng #" + saved.getBookingCode() + " đã tự hủy. " + cancellationReason
+                + (refundCreated ? " Đã tự động tạo yêu cầu hoàn tiền (chờ duyệt)." : "");
+
+        if (saved.getPartner() != null && saved.getPartner().getUser() != null) {
+            adminNotificationRepository.save(AdminNotification.builder()
+                    .recipient(saved.getPartner().getUser())
+                    .type("BOOKING_PROVIDER_EXPIRED")
+                    .title("Đơn hàng quá hạn tiếp nhận")
+                    .message(adminMsg)
+                    .referenceType("BOOKING")
+                    .referenceId(saved.getId())
+                    .createdAt(now)
+                    .build());
+        }
+
+        List<User> activeAdmins = userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("ADMIN", "ACTIVE");
+        for (User admin : activeAdmins) {
+            adminNotificationRepository.save(AdminNotification.builder()
+                    .recipient(admin)
+                    .type("BOOKING_PROVIDER_EXPIRED")
+                    .title("Đơn hàng quá hạn tiếp nhận")
+                    .message(adminMsg)
+                    .referenceType("BOOKING")
+                    .referenceId(saved.getId())
+                    .createdAt(now)
+                    .build());
+        }
 
         rewardLifecycleService.processBooking(saved.getId());
     }
@@ -523,7 +581,6 @@ public class BookingStateEngine {
 
             case PENDING_COMPLETION -> switch (action) {
                 case CUSTOMER_ACCEPT -> BookingStatusEnum.COMPLETED;
-                case CANCEL -> BookingStatusEnum.CANCELLED;
                 default -> invalidTransition(currentStatus, action);
             };
 
@@ -626,7 +683,7 @@ public class BookingStateEngine {
             }
 
             case CANCEL -> {
-                if (!isCustomer && !isPartner && !isAdmin && !isStaff) {
+                if (!isCustomer && !isPartner && !isAdmin) {
                     throw new ResponseStatusException(
                             HttpStatus.FORBIDDEN,
                             "Bạn không có quyền hủy đơn hàng này."
@@ -663,11 +720,9 @@ public class BookingStateEngine {
                                 "Nhà cung cấp không thể hủy đơn ở trạng thái hiện tại."
                         );
                     }
-
-
                 }
 
-                if ((isAdmin || isStaff)
+                if (isAdmin
                         && (status.equals("COMPLETED")
                         || status.equals("CANCELLED")
                         || status.equals("REJECTED")
@@ -765,7 +820,7 @@ public class BookingStateEngine {
         boolean isCleaner = user != null
                 && isAssignedCleaner(booking, user, role);
 
-        boolean hasUnpaidCashPayment = (isPartner || isAdmin)
+        boolean hasUnpaidCashPayment = isPartner
                 && paymentRepository.findByBooking_Id(booking.getId())
                 .stream()
                 .anyMatch(payment ->
@@ -775,24 +830,30 @@ public class BookingStateEngine {
 
         switch (status) {
             case PENDING_PAYMENT -> {
-                if (isCustomer || isAdmin || isStaff || isPartner) {
+                if (isCustomer || isAdmin) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
 
             case PENDING_PROVIDER -> {
-                if (isPartner || isAdmin) {
+                LocalDateTime nowCheck = LocalDateTime.now();
+                LocalDateTime deadline = booking.getProviderDeadlineAt();
+                boolean deadlineExpired = (deadline != null && !nowCheck.isBefore(deadline))
+                        || (booking.getScheduledStart() != null && !nowCheck.isBefore(booking.getScheduledStart()));
+                if ((isPartner || isAdmin) && !deadlineExpired) {
                     allowed.add(BookingActionEnum.PROVIDER_ACCEPT.name());
+                }
+                if (isPartner || isAdmin) {
                     allowed.add(BookingActionEnum.PROVIDER_REJECT.name());
                 }
 
-                if (isCustomer || isAdmin || isStaff) {
+                if (isCustomer || isAdmin || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
 
             case CONFIRMED -> {
-                if (isCustomer || isAdmin || isStaff || isPartner) {
+                if (isCustomer || isAdmin || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
@@ -803,7 +864,7 @@ public class BookingStateEngine {
                     allowed.add(BookingActionEnum.START_JOB.name());
                 }
 
-                if (isCustomer || isAdmin || isStaff) {
+                if (isCustomer || isAdmin || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
@@ -827,17 +888,13 @@ public class BookingStateEngine {
                 if (isPartner && hasUnpaidCashPayment) {
                     allowed.add(BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT.name());
                 }
-
-                if (isAdmin || isStaff) {
-                    allowed.add(BookingActionEnum.CANCEL.name());
-                }
             }
 
             default -> {
             }
         }
 
-        if (status == BookingStatusEnum.COMPLETED && hasUnpaidCashPayment) {
+        if (status == BookingStatusEnum.COMPLETED && isPartner && hasUnpaidCashPayment) {
             allowed.add(BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT.name());
         }
 

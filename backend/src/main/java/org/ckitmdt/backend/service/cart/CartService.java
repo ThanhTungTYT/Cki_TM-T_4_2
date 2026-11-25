@@ -234,12 +234,21 @@ public class CartService {
             List<CartItemResponse> itemResponses = new ArrayList<>();
 
             for (CartItem it : partnerItems) {
-                BigDecimal unitPrice = getUnitPrice(
-                        it.getService(), it.getServicePackage(), it.getPartner());
+                CartItemPricing pricing = resolveCartItemPricing(it);
+                BigDecimal unitPrice = pricing.unitPrice();
                 BigDecimal itemPrice = unitPrice.multiply(BigDecimal.valueOf(it.getQuantity()));
 
-                groupSubtotal = groupSubtotal.add(itemPrice);
+                if (!pricing.unavailable()) {
+                    groupSubtotal = groupSubtotal.add(itemPrice);
+                }
                 totalQuantity += it.getQuantity();
+
+                Integer estimatedMinutes = null;
+                if (it.getServicePackage() != null && it.getServicePackage().getDurationMinutes() != null) {
+                    estimatedMinutes = it.getServicePackage().getDurationMinutes();
+                } else if (it.getService() != null && it.getService().getEstimatedMinutes() != null) {
+                    estimatedMinutes = it.getService().getEstimatedMinutes();
+                }
 
                 itemResponses.add(CartItemResponse.builder()
                         .id(it.getId())
@@ -253,6 +262,9 @@ public class CartService {
                         .quantity(it.getQuantity())
                         .unitPrice(unitPrice)
                         .estimatedPrice(itemPrice)
+                        .estimatedMinutes(estimatedMinutes)
+                        .unavailable(pricing.unavailable())
+                        .unavailableReason(pricing.unavailableReason())
                         .scheduledStart(it.getScheduledStart())
                         .note(it.getNote())
                         .build());
@@ -274,6 +286,42 @@ public class CartService {
                 .totalItems(totalQuantity)
                 .totalAmount(grandTotal)
                 .build();
+    }
+
+    private record CartItemPricing(BigDecimal unitPrice, boolean unavailable, String unavailableReason) {}
+
+    private CartItemPricing resolveCartItemPricing(CartItem item) {
+        org.ckitmdt.backend.entity.Service service = item.getService();
+        ServicePackage servicePackage = item.getServicePackage();
+        Partner partner = item.getPartner();
+
+        BigDecimal fallbackPrice = servicePackage != null && servicePackage.getPrice() != null
+                ? servicePackage.getPrice()
+                : (service != null && service.getBasePrice() != null ? service.getBasePrice() : BigDecimal.ZERO);
+
+        if (service == null || !"ACTIVE".equalsIgnoreCase(service.getStatus())) {
+            return new CartItemPricing(fallbackPrice, true, "Dịch vụ hiện đã tạm ngừng cung cấp.");
+        }
+        if (servicePackage != null && servicePackage.getStatus() != null
+                && !"ACTIVE".equalsIgnoreCase(servicePackage.getStatus())) {
+            return new CartItemPricing(fallbackPrice, true, "Gói dịch vụ hiện đã ngừng nhận đặt.");
+        }
+        if (partner != null) {
+            if (!"ACTIVE".equalsIgnoreCase(partner.getStatus())
+                    || partner.getUser() == null
+                    || !"ACTIVE".equalsIgnoreCase(partner.getUser().getStatus())) {
+                return new CartItemPricing(fallbackPrice, true, "Nhà cung cấp hiện đang tạm ngừng hoạt động.");
+            }
+            if (servicePackage == null || servicePackage.getPrice() == null) {
+                Optional<PartnerService> ps = partnerServiceRepository
+                        .findByPartner_IdAndService_IdAndStatusIgnoreCase(partner.getId(), service.getId(), "ACTIVE");
+                if (ps.isEmpty() || ps.get().getPrice() == null) {
+                    return new CartItemPricing(fallbackPrice, true, "Nhà cung cấp đã tạm dừng hoặc ngừng cung cấp dịch vụ này.");
+                }
+                return new CartItemPricing(ps.get().getPrice(), false, null);
+            }
+        }
+        return new CartItemPricing(fallbackPrice, false, null);
     }
 
     private BigDecimal getUnitPrice(

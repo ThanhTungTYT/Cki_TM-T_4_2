@@ -178,6 +178,7 @@ public class ProviderBookingController {
         List<Employee> allEmployees = employeeRepository.findByPartner_IdOrderByIdAsc(partner.getId())
                 .stream()
                 .filter(e -> "ACTIVE".equalsIgnoreCase(e.getStatus()))
+                .filter(e -> e.getUser() != null && "ACTIVE".equalsIgnoreCase(e.getUser().getStatus()))
                 .toList();
 
         Set<Long> alreadyAssignedEmpIds = assignmentRepository.findByBooking_IdOrderByIdAsc(id)
@@ -291,28 +292,57 @@ public class ProviderBookingController {
             Authentication auth) {
 
         Partner partner = helper.currentPartner(auth);
-        Booking booking = bookingRepository.findById(id)
+        Booking booking = bookingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng."));
 
         if (booking.getPartner() == null || !booking.getPartner().getId().equals(partner.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không có quyền xử lý đơn này.");
         }
 
-        String status = booking.getStatus();
-        if (!Set.of("PENDING_PROVIDER", "CONFIRMED", "ASSIGNED").contains(normalize(status))) {
+        LocalDateTime now = LocalDateTime.now();
+        String status = normalize(booking.getStatus());
+
+        if ("PENDING_PROVIDER".equals(status)) {
+            LocalDateTime deadline = booking.getProviderDeadlineAt();
+            if ((deadline != null && !now.isBefore(deadline))
+                    || (booking.getScheduledStart() != null && !now.isBefore(booking.getScheduledStart()))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Đơn hàng đã quá thời hạn tiếp nhận hoặc đã qua giờ hẹn nên không thể phân công.");
+            }
+        }
+
+        int requiredEmployees = computeRequiredEmployees(id);
+        List<BookingAssignment> existingAssignments = assignmentRepository.findByBooking_IdOrderByIdAsc(id);
+        long activeHealthyCount = existingAssignments.stream()
+                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus())
+                        && !"DECLINED".equalsIgnoreCase(a.getStatus())
+                        && !isReportedUnable(a))
+                .count();
+
+        boolean allowedNormal = Set.of("PENDING_PROVIDER", "CONFIRMED", "ASSIGNED").contains(status);
+        boolean allowedReplacement = Set.of("EN_ROUTE", "IN_PROGRESS").contains(status)
+                && activeHealthyCount < requiredEmployees;
+        if (!allowedNormal && !allowedReplacement) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Chỉ có thể phân công nhân viên khi đơn ở trạng thái PENDING_PROVIDER, CONFIRMED hoặc ASSIGNED.");
+                    "Chỉ có thể phân công nhân viên khi đơn ở trạng thái PENDING_PROVIDER, CONFIRMED, ASSIGNED hoặc cần bổ sung nhân sự thay thế.");
+        }
+
+        if (activeHealthyCount >= requiredEmployees) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Đơn hàng đã đủ số nhân viên yêu cầu (" + requiredEmployees + " người). Vui lòng gỡ nhân viên cũ trước khi phân công thay thế.");
         }
 
         Long employeeId = requiredLong(body, "employeeId");
         Employee employee = helper.ownedEmployee(employeeId, partner);
 
-        if (!"ACTIVE".equalsIgnoreCase(employee.getStatus())) {
+        if (!"ACTIVE".equalsIgnoreCase(employee.getStatus())
+                || employee.getUser() == null
+                || !"ACTIVE".equalsIgnoreCase(employee.getUser().getStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Nhân viên không ở trạng thái hoạt động.");
+                    "Nhân viên không ở trạng thái hoạt động hoặc tài khoản đang bị khóa.");
         }
 
-        boolean alreadyAssigned = assignmentRepository.findByBooking_IdOrderByIdAsc(id)
+        boolean alreadyAssigned = existingAssignments
                 .stream()
                 .anyMatch(a -> a.getEmployee() != null
                         && a.getEmployee().getId().equals(employeeId)
@@ -344,8 +374,6 @@ public class ProviderBookingController {
                         "Nhân viên này đã có lịch thực hiện đơn hàng khác trong ngày " + serviceDate + ".");
             }
         }
-
-        LocalDateTime now = LocalDateTime.now();
 
         if ("PENDING_PROVIDER".equalsIgnoreCase(booking.getStatus())) {
             booking = bookingStateEngine.transitionBooking(
@@ -383,16 +411,10 @@ public class ProviderBookingController {
                     .build());
         }
 
-        List<BookingItem> items = bookingItemRepository.findByBookingId(id);
-        int requiredEmployees = (items == null || items.isEmpty()) ? 1 :
-                items.stream()
-                        .mapToInt(it -> (it.getEmployeeCount() != null && it.getEmployeeCount() > 0 ? it.getEmployeeCount() : 1)
-                                * (it.getQuantity() != null && it.getQuantity() > 0 ? it.getQuantity() : 1))
-                        .sum();
-        if (requiredEmployees <= 0) requiredEmployees = 1;
-
         long activeCount = assignmentRepository.findByBooking_IdOrderByIdAsc(id).stream()
-                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus()))
+                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus())
+                        && !"DECLINED".equalsIgnoreCase(a.getStatus())
+                        && !isReportedUnable(a))
                 .count();
 
         if (activeCount >= requiredEmployees && "CONFIRMED".equalsIgnoreCase(booking.getStatus())) {
@@ -415,44 +437,73 @@ public class ProviderBookingController {
             Authentication auth) {
 
         Partner partner = helper.currentPartner(auth);
-        Booking booking = bookingRepository.findById(bookingId)
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng."));
 
         if (booking.getPartner() == null || !booking.getPartner().getId().equals(partner.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không có quyền xử lý đơn này.");
         }
 
-        String bookingStatus = normalize(booking.getStatus());
-        if (Set.of("IN_PROGRESS", "PENDING_COMPLETION", "COMPLETED").contains(bookingStatus)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Không thể xóa phân công khi công việc đang hoặc đã thực hiện.");
-        }
-
-        BookingAssignment assignment = assignmentRepository.findById(assignmentId)
+        BookingAssignment assignment = assignmentRepository.findByIdForUpdate(assignmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phân công."));
 
         if (!assignment.getBooking().getId().equals(bookingId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phân công không thuộc đơn hàng này.");
         }
 
+        String bookingStatus = normalize(booking.getStatus());
         String assignmentStatus = normalize(assignment.getStatus());
-        if (Set.of("IN_PROGRESS", "WORK_SUBMITTED", "COMPLETED").contains(assignmentStatus)) {
+        boolean reportedUnable = isReportedUnable(assignment);
+
+        if (Set.of("PENDING_COMPLETION", "COMPLETED", "CANCELLED", "REJECTED", "EXPIRED").contains(bookingStatus)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Không thể xóa phân công của nhân viên đang hoặc đã thực hiện công việc.");
+                    "Không thể gỡ phân công khi đơn hàng đã hoàn tất hoặc kết thúc.");
         }
 
-        assignmentRepository.delete(assignment);
+        if ("IN_PROGRESS".equals(bookingStatus) && !reportedUnable && !"ASSIGNED".equals(assignmentStatus)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Không thể gỡ phân công khi công việc đang thực hiện, trừ nhân viên đã báo không thể thực hiện hoặc chưa bắt đầu.");
+        }
 
-        List<BookingItem> items = bookingItemRepository.findByBookingId(bookingId);
-        int requiredEmployees = (items == null || items.isEmpty()) ? 1 :
-                items.stream()
-                        .mapToInt(it -> (it.getEmployeeCount() != null && it.getEmployeeCount() > 0 ? it.getEmployeeCount() : 1)
-                                * (it.getQuantity() != null && it.getQuantity() > 0 ? it.getQuantity() : 1))
-                        .sum();
-        if (requiredEmployees <= 0) requiredEmployees = 1;
+        if (Set.of("IN_PROGRESS", "WORK_SUBMITTED", "COMPLETED").contains(assignmentStatus)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Không thể gỡ phân công của nhân viên đang hoặc đã thực hiện công việc.");
+        }
+
+        if ("CANCELLED".equals(assignmentStatus)) {
+            return Map.of("message", "Phân công đã được hủy trước đó.", "assignmentId", assignmentId);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String existingNote = assignment.getNote();
+        String cancelNote = "Đối tác đã hủy phân công.";
+        assignment.setStatus("CANCELLED");
+        assignment.setNote(existingNote == null || existingNote.isBlank()
+                ? cancelNote
+                : existingNote + "\n" + cancelNote);
+        assignmentRepository.save(assignment);
+
+        if (assignment.getEmployee() != null && assignment.getEmployee().getUser() != null) {
+            String bookingCode = booking.getBookingCode() != null
+                    ? booking.getBookingCode()
+                    : String.valueOf(booking.getId());
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(assignment.getEmployee().getUser())
+                    .type("BOOKING_ASSIGNMENT_REMOVED")
+                    .title("Phân công công việc đã được thay đổi")
+                    .message("Đối tác đã gỡ phân công của bạn khỏi đơn hàng " + bookingCode + ".")
+                    .referenceType("BOOKING_ASSIGNMENT")
+                    .referenceId(assignment.getId())
+                    .createdAt(now)
+                    .build());
+        }
+
+        int requiredEmployees = computeRequiredEmployees(bookingId);
 
         long remainingActive = assignmentRepository.findByBooking_IdOrderByIdAsc(bookingId).stream()
-                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus()) && !"DECLINED".equalsIgnoreCase(a.getStatus()))
+                .filter(a -> !"CANCELLED".equalsIgnoreCase(a.getStatus())
+                        && !"DECLINED".equalsIgnoreCase(a.getStatus())
+                        && !isReportedUnable(a))
                 .count();
 
         if (remainingActive < requiredEmployees && Set.of("ASSIGNED", "EN_ROUTE").contains(bookingStatus)) {
@@ -464,7 +515,23 @@ public class ProviderBookingController {
             );
         }
 
-        return Map.of("message", "Đã xóa phân công thành công.", "assignmentId", assignmentId);
+        return Map.of("message", "Đã hủy phân công thành công.", "assignmentId", assignmentId);
+    }
+
+    private boolean isReportedUnable(BookingAssignment assignment) {
+        return assignment != null
+                && assignment.getNote() != null
+                && assignment.getNote().contains("BÁO KHÔNG THỂ THỰC HIỆN [");
+    }
+
+    private int computeRequiredEmployees(Long bookingId) {
+        List<BookingItem> items = bookingItemRepository.findByBookingId(bookingId);
+        int required = (items == null || items.isEmpty()) ? 1 :
+                items.stream()
+                        .mapToInt(it -> (it.getEmployeeCount() != null && it.getEmployeeCount() > 0 ? it.getEmployeeCount() : 1)
+                                * (it.getQuantity() != null && it.getQuantity() > 0 ? it.getQuantity() : 1))
+                        .sum();
+        return Math.max(1, required);
     }
 
     @GetMapping("/schedule")

@@ -128,8 +128,41 @@ function getReportTitle(report) {
     return report?.subject || "Không có tiêu đề";
 }
 
+const ADMIN_ONLY_STATUSES = new Set(["RESOLVED", "REJECTED", "CLOSED"]);
+
+const ALLOWED_TRANSITIONS = {
+    OPEN: ["IN_PROGRESS", "WAITING_PROVIDER", "UNDER_REVIEW"],
+    IN_PROGRESS: ["WAITING_PROVIDER", "UNDER_REVIEW", "RESOLVED", "REJECTED"],
+    WAITING_PROVIDER: ["IN_PROGRESS", "UNDER_REVIEW"],
+    PROVIDER_RESPONDED: ["IN_PROGRESS", "UNDER_REVIEW", "WAITING_PROVIDER", "RESOLVED", "REJECTED"],
+    UNDER_REVIEW: ["WAITING_PROVIDER", "RESOLVED", "REJECTED"],
+    RESOLVED: ["CLOSED"],
+    REJECTED: ["CLOSED"],
+    CLOSED: []
+};
+
+function getCurrentRole() {
+    try {
+        const user = JSON.parse(
+            sessionStorage.getItem("user") || localStorage.getItem("user") || "{}"
+        );
+        return String(user.role || "").trim().toUpperCase().replace(/^ROLE_/, "");
+    } catch {
+        return "";
+    }
+}
+
+function getAllowedNextStatuses(currentStatus, isAdmin) {
+    const candidates = ALLOWED_TRANSITIONS[currentStatus] || [];
+    return candidates.filter((status) => isAdmin || !ADMIN_ONLY_STATUSES.has(status));
+}
+
 function isTerminalStatus(status) {
-    return ["RESOLVED", "REJECTED"].includes(status);
+    return status === "CLOSED";
+}
+
+function isResponseLockedStatus(status) {
+    return ["RESOLVED", "REJECTED", "CLOSED"].includes(status);
 }
 
 function getResponseAuthorRole(role) {
@@ -149,6 +182,7 @@ function getResponseAuthorRole(role) {
 }
 
 function AdminComplaintManagement() {
+    const isAdmin = getCurrentRole() === "ADMIN";
     const [reports, setReports] = useState([]);
     const [keyword, setKeyword] = useState("");
     const [statusFilter, setStatusFilter] = useState("ALL");
@@ -255,23 +289,22 @@ function AdminComplaintManagement() {
         processing: reports.filter(
             (report) => [
                 "IN_PROGRESS",
-                "PROVIDER_RESPONDED"
+                "WAITING_PROVIDER",
+                "PROVIDER_RESPONDED",
+                "UNDER_REVIEW"
             ].includes(getReportStatus(report))
         ).length,
         finished: reports.filter(
-            (report) => isTerminalStatus(getReportStatus(report))
+            (report) => ["RESOLVED", "REJECTED", "CLOSED"].includes(getReportStatus(report))
         ).length
     }), [reports]);
 
     const openDetail = (report) => {
         const status = getReportStatus(report);
+        const allowedOptions = getAllowedNextStatuses(status, isAdmin);
 
         setSelectedReport(report);
-        setNextStatus(
-            status === "OPEN" || status === "PROVIDER_RESPONDED"
-                ? "IN_PROGRESS"
-                : status
-        );
+        setNextStatus(allowedOptions[0] || status);
         setResolution(report.resolution || "");
         setResponses([]);
         setResponseContent("");
@@ -298,13 +331,13 @@ function AdminComplaintManagement() {
 
         if (!selectedReport || submitting) return;
 
-        if (isTerminal) {
-            setError("Khiếu nại đã kết thúc xử lý, không thể cập nhật thêm.");
+        if (isTerminal || availableNextStatuses.length === 0) {
+            setError("Không thể chuyển sang trạng thái tiếp theo ở bước này.");
             return;
         }
 
-        if (!Object.keys(STATUS_OPTIONS).includes(nextStatus)) {
-            setError("Trạng thái xử lý không hợp lệ.");
+        if (!availableNextStatuses.includes(nextStatus)) {
+            setError("Trạng thái xử lý không hợp lệ cho bước hiện tại hoặc quyền tài khoản.");
             return;
         }
 
@@ -355,7 +388,8 @@ function AdminComplaintManagement() {
                 current ? { ...current, ...updatedReport } : current
             );
 
-            setNextStatus(getReportStatus(updatedReport));
+            const updatedNextOptions = getAllowedNextStatuses(getReportStatus(updatedReport), isAdmin);
+            setNextStatus(updatedNextOptions[0] || getReportStatus(updatedReport));
             setResolution(updatedReport.resolution || "");
 
             await loadResponses(updatedReport.id);
@@ -375,9 +409,9 @@ function AdminComplaintManagement() {
 
         if (!selectedReport || sendingResponse) return;
 
-        if (isTerminal) {
+        if (isResponseLocked) {
             setError(
-                "Khiếu nại đã kết thúc xử lý nên không thể gửi phản hồi mới."
+                "Khiếu nại đã có kết luận hoặc đã đóng nên không thể gửi phản hồi mới."
             );
             return;
         }
@@ -422,9 +456,13 @@ function AdminComplaintManagement() {
         }
     };
 
-    const isTerminal = selectedReport
-        ? isTerminalStatus(getReportStatus(selectedReport))
-        : false;
+    const selectedStatus = selectedReport ? getReportStatus(selectedReport) : "";
+    const isTerminal = selectedReport ? isTerminalStatus(selectedStatus) : false;
+    const isResponseLocked = selectedReport ? isResponseLockedStatus(selectedStatus) : false;
+    const availableNextStatuses = selectedReport
+        ? getAllowedNextStatuses(selectedStatus, isAdmin)
+        : [];
+    const canChangeStatus = !isTerminal && availableNextStatuses.length > 0;
 
     return (
         <AdminLayout>
@@ -869,12 +907,12 @@ function AdminComplaintManagement() {
                                             setResponseContent(event.target.value)
                                         }
                                         placeholder="Nhập nội dung phản hồi cho khiếu nại..."
-                                        disabled={sendingResponse || isTerminal}
+                                        disabled={sendingResponse || isResponseLocked}
                                     />
                                     <div className="complaint-response-actions">
                                         <span>
-                                            {isTerminal
-                                                ? "Khiếu nại đã kết thúc, không thể gửi phản hồi mới."
+                                            {isResponseLocked
+                                                ? "Khiếu nại đã có kết luận hoặc đã đóng, không thể gửi phản hồi mới."
                                                 : "Phản hồi sẽ được lưu vào lịch sử trao đổi."}
                                         </span>
                                         <button
@@ -882,7 +920,7 @@ function AdminComplaintManagement() {
                                             className="complaint-btn complaint-btn-primary"
                                             disabled={
                                                 sendingResponse ||
-                                                isTerminal ||
+                                                isResponseLocked ||
                                                 !responseContent.trim()
                                             }
                                         >
@@ -920,14 +958,18 @@ function AdminComplaintManagement() {
                                         onChange={(event) =>
                                             setNextStatus(event.target.value)
                                         }
-                                        disabled={isTerminal || submitting}
+                                        disabled={!canChangeStatus || submitting}
                                     >
-                                        {Object.entries(STATUS_OPTIONS).map(
-                                            ([value, label]) => (
+                                        {availableNextStatuses.length === 0 ? (
+                                            <option value={selectedStatus}>
+                                                {STATUS_LABELS[selectedStatus] || selectedStatus}
+                                            </option>
+                                        ) : (
+                                            availableNextStatuses.map((value) => (
                                                 <option key={value} value={value}>
-                                                    {label}
+                                                    {STATUS_OPTIONS[value] || STATUS_LABELS[value] || value}
                                                 </option>
-                                            )
+                                            ))
                                         )}
                                     </select>
                                 </div>
@@ -942,17 +984,19 @@ function AdminComplaintManagement() {
                                         onChange={(event) =>
                                             setResolution(event.target.value)
                                         }
-                                        disabled={isTerminal || submitting}
+                                        disabled={!canChangeStatus || submitting}
                                         rows={4}
                                         maxLength={10000}
                                         placeholder="Nhập kết quả xử lý hoặc lý do từ chối..."
                                     />
                                 </div>
 
-                                {isTerminal && (
+                                {!canChangeStatus && (
                                     <div className="complaint-terminal-note">
                                         <FontAwesomeIcon icon={faCheck} />
-                                        Khiếu nại đã kết thúc xử lý. Không thể thay đổi trạng thái hoặc gửi phản hồi mới; bạn vẫn có thể xem lịch sử trao đổi.
+                                        {isTerminal
+                                            ? "Khiếu nại đã đóng. Không thể thay đổi trạng thái hoặc gửi phản hồi mới."
+                                            : "Chỉ Quản trị viên (Admin) mới có quyền chuyển sang bước kết luận/đóng tiếp theo."}
                                     </div>
                                 )}
 
@@ -965,7 +1009,7 @@ function AdminComplaintManagement() {
                                     >
                                         Đóng
                                     </button>
-                                    {!isTerminal && (
+                                    {canChangeStatus && (
                                         <button
                                             type="submit"
                                             className="complaint-btn complaint-btn-primary"

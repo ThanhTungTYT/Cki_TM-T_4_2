@@ -683,9 +683,20 @@ export default function Checkout() {
                 );
             } catch {}
 
+            if (apiResponse.holdExpiresAt) {
+                const diffSec = Math.max(
+                    0,
+                    Math.floor((new Date(apiResponse.holdExpiresAt).getTime() - Date.now()) / 1000)
+                );
+                setHoldSecondsLeft(Number.isFinite(diffSec) ? diffSec : 15 * 60);
+            } else {
+                setHoldSecondsLeft(15 * 60);
+            }
+
             setBookingSuccessData({
                 bookingCode: apiResponse.bookingCode,
                 backendBookingId: apiResponse.id,
+                holdExpiresAt: apiResponse.holdExpiresAt || null,
                 ...bookingPayload
             });
 
@@ -817,9 +828,13 @@ export default function Checkout() {
                                     type="button"
                                     className="btn-pay-vnpay"
                                     onClick={handleVNPayPayment}
-                                    disabled={isPaying || !bookingSuccessData.backendBookingId}
+                                    disabled={isPaying || holdSecondsLeft <= 0 || !bookingSuccessData.backendBookingId}
                                 >
-                                    {isPaying ? (
+                                    {holdSecondsLeft <= 0 ? (
+                                        <>
+                                            <FontAwesomeIcon icon={faClock} /> Đã hết thời gian giữ chỗ thanh toán
+                                        </>
+                                    ) : isPaying ? (
                                         <>
                                             <FontAwesomeIcon icon={faSpinner} spin /> Đang chuyển đến VNPay...
                                         </>

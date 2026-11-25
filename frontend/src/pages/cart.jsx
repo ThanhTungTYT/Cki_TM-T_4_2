@@ -197,6 +197,23 @@ function Cart() {
 
                                                     <h4>{item.serviceName || 'Dịch vụ chưa có tên'}</h4>
 
+                                                    {item.unavailable && (
+                                                        <div
+                                                            style={{
+                                                                background: '#fef2f2',
+                                                                border: '1px solid #fecaca',
+                                                                color: '#b91c1c',
+                                                                borderRadius: 6,
+                                                                padding: '4px 8px',
+                                                                fontSize: 12,
+                                                                marginBottom: 6,
+                                                                fontWeight: 600
+                                                            }}
+                                                        >
+                                                            ⚠️ {item.unavailableReason || 'Dịch vụ hiện đã tạm ngừng cung cấp. Vui lòng xóa khỏi giỏ.'}
+                                                        </div>
+                                                    )}
+
                                                     {item.packageName && (
                                                         <span className="item-pkg-tag">
                                                             {item.packageName}
@@ -239,7 +256,7 @@ function Cart() {
                                                         <button
                                                             type="button"
                                                             onClick={() => handleUpdateQty(item, 1)}
-                                                            disabled={isCartLoading}
+                                                            disabled={isCartLoading || item.unavailable}
                                                             aria-label="Tăng số lượng"
                                                         >
                                                             <FontAwesomeIcon icon={faPlus} />
@@ -276,9 +293,12 @@ function Cart() {
                                             type="button"
                                             className="btn-checkout-provider"
                                             onClick={() => handleCheckoutGroup(group)}
-                                            disabled={isCartLoading}
+                                            disabled={isCartLoading || group.items.some(i => i.unavailable)}
+                                            title={group.items.some(i => i.unavailable) ? 'Vui lòng xóa dịch vụ đã tạm ngừng trước khi đặt lịch' : ''}
                                         >
-                                            Đặt lịch đơn vị này
+                                            {group.items.some(i => i.unavailable)
+                                                ? 'Cần xóa dịch vụ ngừng cung cấp'
+                                                : 'Đặt lịch đơn vị này'}
                                             <FontAwesomeIcon icon={faArrowRight} />
                                         </button>
                                     </div>

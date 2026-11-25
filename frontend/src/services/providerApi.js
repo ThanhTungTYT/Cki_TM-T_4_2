@@ -21,12 +21,16 @@ async function handleResponse(res, defaultMsg = "Có lỗi xảy ra.") {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        throw new Error(
+        const err = new Error(
             data.message ||
             data.detail ||
             data.error ||
             defaultMsg
         );
+        err.status = res.status;
+        err.code = data.code || null;
+        err.partnerStatus = data.partnerStatus || null;
+        throw err;
     }
 
     return data;

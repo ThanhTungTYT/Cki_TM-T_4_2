@@ -327,9 +327,9 @@ function App() {
                 <Route
                     path="/admin/staff-operations"
                     element={
-                        <AdminOnly>
+                        <AdminAndStaff>
                             <AdminStaffOperations />
-                        </AdminOnly>
+                        </AdminAndStaff>
                     }
                 />
                 <Route

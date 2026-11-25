@@ -15,7 +15,8 @@ import {
     faGift,
     faBell,
     faBoxOpen,
-    faFileInvoiceDollar
+    faFileInvoiceDollar,
+    faUserGear
 } from "@fortawesome/free-solid-svg-icons";
 import AdminNotificationRealtime from "../../components/AdminNotificationRealtime";
 import AdminOverviewCards from "./AdminOverviewCards";
@@ -28,6 +29,7 @@ const menuItems = [
     { label: "Nhà cung cấp", path: "/admin/providers", icon: faStore },
     { label: "Duyệt yêu cầu đối tác", path: "/admin/provider-requests", icon: faClipboardCheck },
     { label: "Quản lý tài khoản", path: "/admin/accounts", icon: faUsers, adminOnly: true },
+    { label: "Nhân sự & vận hành", path: "/admin/staff-operations", icon: faUserGear },
     { label: "Quản lý dịch vụ", path: "/admin/services", icon: faTags },
     { label: "Duyệt dịch vụ Provider", path: "/admin/provider-service-approvals", icon: faClipboardCheck },
     { label: "Quản lý giao dịch", path: "/admin/transactions", icon: faCreditCard },

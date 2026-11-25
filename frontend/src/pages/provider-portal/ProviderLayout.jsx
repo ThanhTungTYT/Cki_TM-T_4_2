@@ -225,7 +225,15 @@ function ProviderLayout() {
             })
             .catch((err) => {
                 const msg = String(err?.message || '').toLowerCase();
-                if (msg.includes('duyệt') || msg.includes('phê duyệt') || msg.includes('chờ') || msg.includes('từ chối') || msg.includes('hồ sơ')) {
+                if (
+                    err?.code === 'PARTNER_NOT_APPROVED' ||
+                    err?.status === 403 ||
+                    msg.includes('duyệt') ||
+                    msg.includes('phê duyệt') ||
+                    msg.includes('chờ') ||
+                    msg.includes('từ chối') ||
+                    msg.includes('hồ sơ')
+                ) {
                     navigate('/partner-onboarding', { replace: true });
                 }
             });

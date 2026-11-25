@@ -246,17 +246,28 @@ function ProviderBookingDetail() {
     if (!booking) return null;
 
     const status = (booking.status || '').toUpperCase();
-    const canAccept = status === 'PENDING_PROVIDER';
-    const canReject = status === 'PENDING_PROVIDER';
-    const canAssign = status === 'PENDING_PROVIDER' || status === 'CONFIRMED' || status === 'ASSIGNED';
-    const canCancel = status === 'CONFIRMED' || status === 'ASSIGNED';
     const assignments = booking.assignments || [];
     const declinedAssignments = assignments.filter((a) => (a.status || '').toUpperCase() === 'DECLINED');
+    const unableAssignments = assignments.filter(
+        (a) =>
+            (a.status || '').toUpperCase() === 'ACCEPTED' &&
+            String(a.note || '').includes('BÁO KHÔNG THỂ THỰC HIỆN [')
+    );
 
     // Deadline calculation
     const deadlineRemaining = status === 'PENDING_PROVIDER' && booking.providerDeadlineAt
         ? calculateDeadlineRemaining(booking.providerDeadlineAt)
         : null;
+    const isDeadlineExpired = Boolean(deadlineRemaining?.expired);
+
+    const canAccept = status === 'PENDING_PROVIDER' && !isDeadlineExpired;
+    const canReject = status === 'PENDING_PROVIDER';
+    const canAssign =
+        (status === 'PENDING_PROVIDER' && !isDeadlineExpired) ||
+        status === 'CONFIRMED' ||
+        status === 'ASSIGNED' ||
+        ((status === 'EN_ROUTE' || status === 'IN_PROGRESS') && unableAssignments.length > 0);
+    const canCancel = status === 'CONFIRMED' || status === 'ASSIGNED';
 
     return (
         <>
@@ -277,6 +288,41 @@ function ProviderBookingDetail() {
 
             {actionMsg   && <div className="pp-alert pp-alert-success">{actionMsg}</div>}
             {actionError && <div className="pp-alert pp-alert-error">{actionError}</div>}
+
+            {/* Warning banner: Cleaner reported unable */}
+            {unableAssignments.length > 0 && (
+                <div style={{
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderLeft: '4px solid #ef4444',
+                    borderRadius: 8,
+                    padding: '14px 18px',
+                    marginBottom: 16,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <span style={{ fontSize: 18 }}>🚨</span>
+                            <strong style={{ color: '#991b1b', fontSize: 14 }}>
+                                Nhân viên báo KHÔNG THỂ THỰC HIỆN — Cần điều phối thay thế khẩn cấp
+                            </strong>
+                        </div>
+                        {unableAssignments.map((ua) => (
+                            <div key={ua.id} style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>
+                                • Nhân viên: <strong>{ua.employeeName || ua.employeeCode}</strong> ({ua.employeeCode}) —{' '}
+                                <span style={{ color: '#b91c1c', fontWeight: 500 }}>{ua.note}</span>
+                            </div>
+                        ))}
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
+                            Hãy gỡ phân công nhân viên báo bận ở bảng bên dưới rồi phân công nhân viên thay thế để tiếp tục đơn hàng.
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Warning banner: Cleaner declined */}
             {declinedAssignments.length > 0 && (
@@ -444,7 +490,7 @@ function ProviderBookingDetail() {
                                             </span>
                                             {booking.paymentMethod === 'CASH'
                                                 && booking.paymentStatus !== 'PAID'
-                                                && ['IN_PROGRESS', 'PENDING_COMPLETION', 'COMPLETED'].includes(status) && (
+                                                && ['PENDING_COMPLETION', 'COMPLETED'].includes(status) && (
                                                 <button
                                                     type="button"
                                                     className="pp-btn pp-btn-success pp-btn-sm"
@@ -572,10 +618,15 @@ function ProviderBookingDetail() {
                                     </thead>
                                     <tbody>
                                         {assignments.map((a) => {
-                                            const asg = ASSIGNMENT_STATUS_MAP[(a.status || '').toUpperCase()] || { cls: 'pp-badge-confirmed', label: a.status || 'ASSIGNED' };
-                                            const isDeclined = (a.status || '').toUpperCase() === 'DECLINED';
+                                            const upperAsgStatus = (a.status || '').toUpperCase();
+                                            const asg = ASSIGNMENT_STATUS_MAP[upperAsgStatus] || { cls: 'pp-badge-confirmed', label: a.status || 'ASSIGNED' };
+                                            const isDeclined = upperAsgStatus === 'DECLINED';
+                                            const isCancelledAsg = upperAsgStatus === 'CANCELLED';
+                                            const isUnable = upperAsgStatus === 'ACCEPTED' && String(a.note || '').includes('BÁO KHÔNG THỂ THỰC HIỆN [');
+                                            const canRemoveRow = !isCancelledAsg && !isDeclined && !['IN_PROGRESS', 'WORK_SUBMITTED', 'COMPLETED'].includes(upperAsgStatus)
+                                                && (['PENDING_PROVIDER', 'CONFIRMED', 'ASSIGNED', 'EN_ROUTE'].includes(status) || (status === 'IN_PROGRESS' && (isUnable || upperAsgStatus === 'ASSIGNED')));
                                             return (
-                                                <tr key={a.id} style={{ background: isDeclined ? '#fffbeb' : undefined }}>
+                                                <tr key={a.id} style={{ background: isUnable ? '#fef2f2' : isDeclined ? '#fffbeb' : undefined }}>
                                                     <td><strong>{a.employeeCode || '—'}</strong></td>
                                                     <td>
                                                         <div>{a.employeeName || '—'}</div>
@@ -584,10 +635,16 @@ function ProviderBookingDetail() {
                                                         )}
                                                     </td>
                                                     <td>
-                                                        <span className={`pp-badge ${asg.cls}`}>{asg.label}</span>
+                                                        <span className={`pp-badge ${isUnable ? 'pp-badge-cancelled' : asg.cls}`}>
+                                                            {isUnable ? '🚨 Báo không thể làm' : asg.label}
+                                                        </span>
                                                     </td>
                                                     <td>
-                                                        {isDeclined ? (
+                                                        {isUnable ? (
+                                                            <span style={{ color: '#b91c1c', fontWeight: 500 }}>
+                                                                {a.note}
+                                                            </span>
+                                                        ) : isDeclined ? (
                                                             <span style={{ color: '#dc2626', fontWeight: 500 }}>
                                                                 ⛔ Lý do từ chối: {a.note || 'Không có lý do'}
                                                             </span>
@@ -597,12 +654,14 @@ function ProviderBookingDetail() {
                                                     </td>
                                                     {canAssign && (
                                                         <td>
-                                                            <button
-                                                                className="pp-btn pp-btn-danger pp-btn-sm"
-                                                                onClick={() => handleRemoveAssignment(a.id)}
-                                                            >
-                                                                Xóa
-                                                            </button>
+                                                            {canRemoveRow && (
+                                                                <button
+                                                                    className="pp-btn pp-btn-danger pp-btn-sm"
+                                                                    onClick={() => handleRemoveAssignment(a.id)}
+                                                                >
+                                                                    {isUnable ? 'Gỡ & Thay người' : 'Hủy phân công'}
+                                                                </button>
+                                                            )}
                                                         </td>
                                                     )}
                                                 </tr>

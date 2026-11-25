@@ -35,6 +35,27 @@ public class BookingPaymentService {
             String email
     ) {
         User user = getUser(email);
+
+        // Kiểm tra hết hạn giữ chỗ TRƯỚC KHI khóa PESSIMISTIC_WRITE để tránh deadlock với REQUIRES_NEW
+        Booking snapshot = bookingRepository
+                .findById(bookingId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Booking not found")
+                );
+
+        if (!snapshot.getCustomer().getId().equals(user.getId())) {
+            throw new SecurityException("Access denied");
+        }
+
+        if ("PENDING_PAYMENT".equals(snapshot.getStatus())
+                && snapshot.getHoldExpiresAt() != null
+                && LocalDateTime.now().isAfter(snapshot.getHoldExpiresAt())) {
+            bookingStateEngine.expirePendingPayment(snapshot.getId());
+            throw new IllegalStateException(
+                    "Booking reservation expired"
+            );
+        }
+
         Booking booking = bookingRepository
                 .findByIdForUpdate(bookingId)
                 .orElseThrow(() ->
@@ -55,7 +76,7 @@ public class BookingPaymentService {
         if (booking.getHoldExpiresAt() != null
                 && LocalDateTime.now()
                 .isAfter(booking.getHoldExpiresAt())) {
-            bookingStateEngine.expirePendingPayment(booking.getId());
+            // Không gọi REQUIRES_NEW khi đang giữ PESSIMISTIC_WRITE lock trên cùng dòng Booking
             throw new IllegalStateException(
                     "Booking reservation expired"
             );

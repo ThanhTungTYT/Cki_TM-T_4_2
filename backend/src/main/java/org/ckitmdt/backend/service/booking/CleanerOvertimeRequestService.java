@@ -63,6 +63,9 @@ public class CleanerOvertimeRequestService {
         String role = cleaner.getRole() == null
                 ? ""
                 : cleaner.getRole().trim().toUpperCase(Locale.ROOT);
+        if (role.startsWith("ROLE_")) {
+            role = role.substring(5);
+        }
 
         if (!Set.of("CLEANER", "EMPLOYEE").contains(role)) {
             throw new ResponseStatusException(
@@ -89,6 +92,16 @@ public class CleanerOvertimeRequestService {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Hồ sơ nhân viên hiện không hoạt động."
+            );
+        }
+
+        if (employee.getPartner() == null
+                || !"ACTIVE".equalsIgnoreCase(employee.getPartner().getStatus())
+                || employee.getPartner().getUser() == null
+                || !"ACTIVE".equalsIgnoreCase(employee.getPartner().getUser().getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Đơn vị nhà cung cấp hiện không hoạt động hoặc đang bị khóa."
             );
         }
 
@@ -131,11 +144,12 @@ public class CleanerOvertimeRequestService {
             );
         }
 
-        // 5. Chỉ được yêu cầu gia hạn khi đang thực hiện công việc.
-        if (!"IN_PROGRESS".equalsIgnoreCase(assignment.getStatus())) {
+        // 5. Chỉ được yêu cầu gia hạn khi cả phân công và đơn hàng đang thực hiện.
+        if (!"IN_PROGRESS".equalsIgnoreCase(assignment.getStatus())
+                || !"IN_PROGRESS".equalsIgnoreCase(booking.getStatus())) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Chỉ được yêu cầu gia hạn khi công việc đang thực hiện."
+                    "Chỉ được yêu cầu gia hạn khi công việc và đơn hàng đang ở trạng thái thực hiện (IN_PROGRESS)."
             );
         }
 

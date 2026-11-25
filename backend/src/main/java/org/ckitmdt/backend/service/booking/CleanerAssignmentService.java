@@ -96,6 +96,16 @@ public class CleanerAssignmentService {
             );
         }
 
+        if (employee.getPartner() == null
+                || !"ACTIVE".equalsIgnoreCase(employee.getPartner().getStatus())
+                || employee.getPartner().getUser() == null
+                || !"ACTIVE".equalsIgnoreCase(employee.getPartner().getUser().getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Đơn vị nhà cung cấp hiện không hoạt động hoặc đang bị khóa."
+            );
+        }
+
         // 3. Tìm Assignment ban đầu để lấy bookingId
         BookingAssignment initialAssignment =
                 assignmentRepository.findById(assignmentId)
@@ -488,6 +498,7 @@ public class CleanerAssignmentService {
 
         long acceptedEmployees = assignments.stream()
                 .filter(assignment -> assignment.getEmployee() != null)
+                .filter(assignment -> !hasReportedUnable(assignment))
                 .filter(assignment -> {
                     String status = normalizeStatus(assignment.getStatus());
 

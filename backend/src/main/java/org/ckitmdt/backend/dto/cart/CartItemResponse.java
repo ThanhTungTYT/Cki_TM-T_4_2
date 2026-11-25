@@ -23,6 +23,9 @@ public class CartItemResponse {
     private Integer quantity;
     private BigDecimal unitPrice;
     private BigDecimal estimatedPrice;
+    private Integer estimatedMinutes;
+    private Boolean unavailable;
+    private String unavailableReason;
     private LocalDateTime scheduledStart;
     private String note;
 }
