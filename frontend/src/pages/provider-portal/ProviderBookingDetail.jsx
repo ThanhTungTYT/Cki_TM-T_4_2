@@ -92,6 +92,8 @@ function ProviderBookingDetail() {
     const [cancelReason, setCancelReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [ticker, setTicker] = useState(0);
+    const [workLogs, setWorkLogs] = useState([]);
+    const [overtimeRequests, setOvertimeRequests] = useState([]);
 
     // Live tick for countdown timer
     useEffect(() => {
@@ -116,6 +118,17 @@ function ProviderBookingDetail() {
             .finally(() => setLoadingAvailable(false));
     }
 
+    function loadBookingExtras() {
+        providerBookingApi
+            .getWorkLogs(id)
+            .then((logs) => setWorkLogs(Array.isArray(logs) ? logs : []))
+            .catch(() => setWorkLogs([]));
+        providerBookingApi
+            .getOvertimeRequests(id)
+            .then((reqs) => setOvertimeRequests(Array.isArray(reqs) ? reqs : []))
+            .catch(() => setOvertimeRequests([]));
+    }
+
     function loadBooking() {
         setLoading(true);
         providerBookingApi
@@ -123,6 +136,7 @@ function ProviderBookingDetail() {
             .then((b) => {
                 setBooking(b);
                 loadAvailableEmployees();
+                loadBookingExtras();
             })
             .catch((e) => setError(e.message))
             .finally(() => setLoading(false));
@@ -233,6 +247,57 @@ function ProviderBookingDetail() {
         try {
             await providerBookingApi.confirmCashPayment(id);
             setActionMsg('✅ Đã xác nhận thu tiền mặt thành công! Hệ thống đã ghi nhận thanh toán và cập nhật điểm Ccoin (nếu đơn đã hoàn thành).');
+            loadBooking();
+        } catch (e) {
+            setActionError(`❌ ${e.message}`);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function handleUpdateIncidentStatus(logId, incidentStatus) {
+        const note = window.prompt(
+            incidentStatus === 'RESOLVED'
+                ? 'Nhập ghi chú xử lý sự cố (tùy chọn):'
+                : 'Nhập ghi chú tiếp nhận xử lý (tùy chọn):',
+            ''
+        );
+        if (note === null) return;
+        clearMessages();
+        setSubmitting(true);
+        try {
+            await providerBookingApi.updateIncidentStatus(id, logId, incidentStatus, note.trim());
+            setActionMsg('✅ Đã cập nhật trạng thái xử lý sự cố và gửi thông báo cho nhân viên.');
+            loadBookingExtras();
+        } catch (e) {
+            setActionError(`❌ ${e.message}`);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function handleReviewOvertime(requestId, decision) {
+        const isApprove = decision === 'APPROVE';
+        const note = window.prompt(
+            isApprove
+                ? 'Nhập ghi chú khi duyệt gia hạn (tùy chọn):'
+                : 'Nhập lý do từ chối yêu cầu gia hạn (bắt buộc):',
+            ''
+        );
+        if (note === null) return;
+        if (!isApprove && !note.trim()) {
+            setActionError('❌ Vui lòng nhập lý do khi từ chối yêu cầu gia hạn.');
+            return;
+        }
+        clearMessages();
+        setSubmitting(true);
+        try {
+            await providerBookingApi.reviewOvertimeRequest(requestId, decision, note.trim());
+            setActionMsg(
+                isApprove
+                    ? '✅ Đã duyệt gia hạn! Thời gian kết thúc dự kiến đã được cộng thêm và thông báo cho Cleaner + Khách hàng.'
+                    : '✅ Đã từ chối yêu cầu gia hạn và thông báo cho Cleaner.'
+            );
             loadBooking();
         } catch (e) {
             setActionError(`❌ ${e.message}`);
@@ -669,6 +734,203 @@ function ProviderBookingDetail() {
                                         })}
                                     </tbody>
                                 </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Overtime Requests Card */}
+                    {overtimeRequests.length > 0 && (
+                        <div className="pp-card">
+                            <p className="pp-card-title">
+                                ⏱️ Yêu cầu gia hạn thời gian làm việc ({overtimeRequests.length})
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {overtimeRequests.map((req) => {
+                                    const reqStatus = String(req.status || '').toUpperCase();
+                                    const isPending = reqStatus === 'PENDING';
+                                    return (
+                                        <div
+                                            key={req.id}
+                                            style={{
+                                                border: isPending ? '1px solid #fcd34d' : '1px solid #e2e8f0',
+                                                background: isPending ? '#fffbeb' : '#f8fafc',
+                                                borderRadius: 8,
+                                                padding: '12px 14px'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                <strong>
+                                                    {req.cleanerName || 'Nhân viên'} — xin thêm +{req.requestedAdditionalMinutes} phút
+                                                </strong>
+                                                <span className={`pp-badge ${
+                                                    reqStatus === 'APPROVED'
+                                                        ? 'pp-badge-completed'
+                                                        : reqStatus === 'REJECTED'
+                                                            ? 'pp-badge-cancelled'
+                                                            : 'pp-badge-pending'
+                                                }`}>
+                                                    {reqStatus === 'APPROVED'
+                                                        ? 'Đã duyệt'
+                                                        : reqStatus === 'REJECTED'
+                                                            ? 'Đã từ chối'
+                                                            : 'Chờ duyệt'}
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: 13, color: '#334155', marginTop: 6 }}>
+                                                <strong>Lý do:</strong> {req.reason}
+                                            </div>
+                                            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                                                Gửi lúc: {formatDateTime(req.createdAt)}
+                                                {req.originalScheduledEnd && ` · Giờ kết thúc ban đầu: ${formatDateTime(req.originalScheduledEnd)}`}
+                                            </div>
+                                            {req.providerNote && (
+                                                <div style={{ fontSize: 12.5, color: '#475569', marginTop: 4 }}>
+                                                    <strong>Phản hồi đối tác:</strong> {req.providerNote}
+                                                </div>
+                                            )}
+                                            {isPending && (
+                                                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                                    <button
+                                                        type="button"
+                                                        className="pp-btn pp-btn-success pp-btn-sm"
+                                                        disabled={submitting}
+                                                        onClick={() => handleReviewOvertime(req.id, 'APPROVE')}
+                                                    >
+                                                        ✓ Duyệt gia hạn (+{req.requestedAdditionalMinutes}p)
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="pp-btn pp-btn-danger pp-btn-sm"
+                                                        disabled={submitting}
+                                                        onClick={() => handleReviewOvertime(req.id, 'REJECT')}
+                                                    >
+                                                        ✕ Từ chối
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Cleaner Work Logs & Incidents Card */}
+                    <div className="pp-card">
+                        <p className="pp-card-title">
+                            📋 Nhật ký thực hiện &amp; Báo cáo sự cố của nhân viên ({workLogs.length})
+                        </p>
+                        {workLogs.length === 0 ? (
+                            <div className="pp-empty" style={{ padding: '16px 0' }}>
+                                <p>Nhân viên chưa gửi nhật ký tiến độ, sự cố hoặc báo cáo tổng kết nào.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {workLogs.map((log) => {
+                                    const type = String(log.logType || '').toUpperCase();
+                                    const isIncident = type === 'INCIDENT';
+                                    const isFinal = type === 'FINAL_REPORT';
+                                    const incStatus = String(log.incidentStatus || 'OPEN').toUpperCase();
+                                    const images = Array.isArray(log.imageUrls) ? log.imageUrls : [];
+                                    return (
+                                        <div
+                                            key={log.id}
+                                            style={{
+                                                border: isIncident ? '1px solid #fecaca' : isFinal ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                                borderLeft: `4px solid ${isIncident ? '#ef4444' : isFinal ? '#16a34a' : '#3b82f6'}`,
+                                                background: isIncident ? '#fef2f2' : isFinal ? '#f0fdf4' : '#f8fafc',
+                                                borderRadius: 8,
+                                                padding: '12px 14px'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                    <strong>
+                                                        {isIncident
+                                                            ? '🚨 Báo cáo sự cố'
+                                                            : isFinal
+                                                                ? '✅ Báo cáo tổng kết hoàn thành'
+                                                                : '📝 Cập nhật tiến độ'}
+                                                    </strong>
+                                                    {log.cleanerName && (
+                                                        <span style={{ fontSize: 12.5, color: '#475569' }}>
+                                                            — {log.cleanerName}
+                                                        </span>
+                                                    )}
+                                                    {isIncident && log.incidentSeverity && (
+                                                        <span className="pp-badge pp-badge-cancelled">
+                                                            Mức độ: {log.incidentSeverity}
+                                                        </span>
+                                                    )}
+                                                    {isIncident && (
+                                                        <span className={`pp-badge ${incStatus === 'RESOLVED' ? 'pp-badge-completed' : 'pp-badge-warning'}`}>
+                                                            {incStatus === 'RESOLVED'
+                                                                ? 'Đã xử lý'
+                                                                : incStatus === 'IN_PROGRESS'
+                                                                    ? 'Đang xử lý'
+                                                                    : incStatus === 'REJECTED'
+                                                                        ? 'Từ chối'
+                                                                        : 'Mới ghi nhận'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span style={{ fontSize: 12, color: '#64748b' }}>
+                                                    {formatDateTime(log.createdAt)}
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: 13.5, color: '#1e293b', marginTop: 6, whiteSpace: 'pre-line' }}>
+                                                {log.note}
+                                            </div>
+                                            {images.length > 0 && (
+                                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                                                    {images.map((url, imgIdx) => (
+                                                        <a
+                                                            key={`${log.id}-img-${imgIdx}`}
+                                                            href={url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            style={{ display: 'block' }}
+                                                        >
+                                                            <img
+                                                                src={url}
+                                                                alt={`Minh chứng ${imgIdx + 1}`}
+                                                                style={{
+                                                                    width: 76,
+                                                                    height: 76,
+                                                                    objectFit: 'cover',
+                                                                    borderRadius: 6,
+                                                                    border: '1px solid #cbd5e1'
+                                                                }}
+                                                            />
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {isIncident && incStatus !== 'RESOLVED' && incStatus !== 'REJECTED' && (
+                                                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                                    {incStatus === 'OPEN' && (
+                                                        <button
+                                                            type="button"
+                                                            className="pp-btn pp-btn-secondary pp-btn-sm"
+                                                            disabled={submitting}
+                                                            onClick={() => handleUpdateIncidentStatus(log.id, 'IN_PROGRESS')}
+                                                        >
+                                                            Tiếp nhận xử lý
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        className="pp-btn pp-btn-success pp-btn-sm"
+                                                        disabled={submitting}
+                                                        onClick={() => handleUpdateIncidentStatus(log.id, 'RESOLVED')}
+                                                    >
+                                                        ✓ Đánh dấu đã xử lý sự cố
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

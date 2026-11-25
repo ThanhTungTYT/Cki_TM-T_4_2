@@ -110,7 +110,8 @@ public class AdminProviderServiceApprovalController {
             );
         }
 
-        if (service == null || service.getCategory() == null
+        if (service == null || !"ACTIVE".equals(normalize(service.getStatus()))
+                || service.getCategory() == null
                 || !"ACTIVE".equals(normalize(service.getCategory().getStatus()))) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,

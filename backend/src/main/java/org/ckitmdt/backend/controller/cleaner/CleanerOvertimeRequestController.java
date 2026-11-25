@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -17,6 +18,23 @@ import java.util.Map;
 public class CleanerOvertimeRequestController {
 
     private final CleanerOvertimeRequestService overtimeRequestService;
+
+    /**
+     * Lấy danh sách yêu cầu gia hạn của phân công.
+     * GET /api/cleaner/assignments/{assignmentId}/overtime-requests
+     */
+    @GetMapping("/{assignmentId}/overtime-requests")
+    public ResponseEntity<List<Map<String, Object>>> getOvertimeRequests(
+            Authentication authentication,
+            @PathVariable Long assignmentId
+    ) {
+        return ResponseEntity.ok(
+                overtimeRequestService.getRequestsForAssignment(
+                        assignmentId,
+                        authentication != null ? authentication.getName() : null
+                )
+        );
+    }
 
     /**
      * Cleaner gửi yêu cầu gia hạn thời gian làm việc.

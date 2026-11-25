@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -234,32 +235,74 @@ public class CleanerOvertimeRequestService {
                                     + requestedAdditionalMinutes
                                     + " phút cho đơn hàng "
                                     + bookingCode
-                                    + ". Vui lòng xem xét yêu cầu."
+                                    + ". Vui lòng mở chi tiết đơn hàng để duyệt hoặc từ chối."
                     )
-                    .referenceType("CLEANER_OVERTIME_REQUEST")
-                    .referenceId(saved.getId())
+                    .referenceType("BOOKING")
+                    .referenceId(booking.getId())
                     .createdAt(now)
                     .build());
         }
 
         // 10. Trả dữ liệu đơn giản cho Frontend.
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("id", saved.getId());
-        response.put("assignmentId", assignment.getId());
-        response.put("bookingId", booking.getId());
-        response.put("reason", saved.getReason());
-        response.put(
-                "requestedAdditionalMinutes",
-                saved.getRequestedAdditionalMinutes()
-        );
-        response.put("originalScheduledEnd", saved.getOriginalScheduledEnd());
-        response.put("status", saved.getStatus());
-        response.put("createdAt", saved.getCreatedAt());
+        Map<String, Object> response = toRow(saved);
         response.put(
                 "message",
                 "Yêu cầu gia hạn đã được gửi đến Provider."
         );
 
         return response;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getRequestsForAssignment(
+            Long assignmentId,
+            String userEmail
+    ) {
+        User cleaner = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Không tìm thấy tài khoản đăng nhập."
+                ));
+
+        Employee employee = employeeRepository.findByUser_Id(cleaner.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy hồ sơ nhân viên."
+                ));
+
+        BookingAssignment assignment = assignmentRepository.findById(assignmentId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Không tìm thấy phân công công việc."
+                ));
+
+        if (assignment.getEmployee() == null
+                || !Objects.equals(assignment.getEmployee().getId(), employee.getId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Bạn không có quyền xem yêu cầu gia hạn của phân công này."
+            );
+        }
+
+        return overtimeRepository.findByAssignment_IdOrderByCreatedAtDesc(assignmentId)
+                .stream()
+                .map(this::toRow)
+                .toList();
+    }
+
+    private Map<String, Object> toRow(CleanerOvertimeRequest item) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", item.getId());
+        row.put("assignmentId", item.getAssignment() != null ? item.getAssignment().getId() : null);
+        row.put("bookingId", item.getBooking() != null ? item.getBooking().getId() : null);
+        row.put("reason", item.getReason());
+        row.put("requestedAdditionalMinutes", item.getRequestedAdditionalMinutes());
+        row.put("originalScheduledEnd", item.getOriginalScheduledEnd());
+        row.put("status", item.getStatus());
+        row.put("providerNote", item.getProviderNote());
+        row.put("reviewedBy", item.getReviewedBy() != null ? item.getReviewedBy().getFullName() : null);
+        row.put("createdAt", item.getCreatedAt());
+        row.put("reviewedAt", item.getReviewedAt());
+        return row;
     }
 }

@@ -459,21 +459,30 @@ export default function Checkout() {
         return () => clearInterval(timer);
     }, [bookingSuccessData, paymentMethod]);
 
-    const totalDurationHours = useMemo(() =>
-            checkoutItems.reduce(
-                (total, item) =>
-                    total + (Number(item.durationHours) || 1) * (Number(item.quantity) || 1),
-                0
-            ),
-        [checkoutItems]
-    );
+    const totalDurationHours = useMemo(() => {
+        if (quote?.estimatedMinutes != null && Number(quote.estimatedMinutes) > 0) {
+            return Number((Number(quote.estimatedMinutes) / 60).toFixed(2));
+        }
+        return checkoutItems.reduce(
+            (total, item) => {
+                const itemHours = item.estimatedMinutes != null && Number(item.estimatedMinutes) > 0
+                    ? Number(item.estimatedMinutes) / 60
+                    : (Number(item.durationHours) || 1);
+                return total + itemHours * (Number(item.quantity) || 1);
+            },
+            0
+        );
+    }, [checkoutItems, quote?.estimatedMinutes]);
 
     const calculatedEndTime = useMemo(() => {
+        if (quote?.scheduledEnd && String(quote.scheduledEnd).includes('T')) {
+            return String(quote.scheduledEnd).split('T')[1].substring(0, 5);
+        }
         const [hour, minute] = selectedTimeSlot.split(':').map(Number);
         const totalMinutes = hour * 60 + minute + Math.round(totalDurationHours * 60);
 
         return `${String(Math.floor(totalMinutes / 60) % 24).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
-    }, [selectedTimeSlot, totalDurationHours]);
+    }, [selectedTimeSlot, totalDurationHours, quote?.scheduledEnd]);
 
     const selectedAvailability = availabilitySlots.find(slot => slot.time === selectedTimeSlot);
     const selectedSlotAvailable = Boolean(selectedAvailability?.available);
@@ -600,6 +609,8 @@ export default function Checkout() {
             const apiRequest = {
                 partnerId,
                 addressId: Number(defaultAddressId),
+                receiverName: customerInfo.fullName?.trim() || null,
+                receiverPhone: customerInfo.phone?.trim() || null,
                 paymentMethod,
                 items: quoteItems,
                 scheduledStart: `${selectedDate}T${selectedTimeSlot}:00`,

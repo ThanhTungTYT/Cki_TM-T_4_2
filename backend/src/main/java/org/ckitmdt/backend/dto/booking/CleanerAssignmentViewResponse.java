@@ -37,5 +37,9 @@ public class CleanerAssignmentViewResponse {
 
     private String employeePhone;
 
+    private boolean hasFinalReport;
+
+    private String latestOvertimeStatus;
+
     private CleanerBookingViewResponse booking;
 }

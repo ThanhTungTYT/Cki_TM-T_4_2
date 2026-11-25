@@ -1041,6 +1041,15 @@ public class BookingStateEngine {
             cleanerRating = emp.getRatingAverage();
         }
 
+        java.math.BigDecimal subtotalVal = booking.getSubtotal() != null ? booking.getSubtotal() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal discountVal = booking.getDiscountAmount() != null ? booking.getDiscountAmount() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal pointsVal = booking.getPointsDiscount() != null ? booking.getPointsDiscount() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal totalVal = booking.getTotalAmount() != null ? booking.getTotalAmount() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal computedPlatformFee = totalVal.add(discountVal).add(pointsVal).subtract(subtotalVal);
+        if (computedPlatformFee.signum() < 0) {
+            computedPlatformFee = java.math.BigDecimal.ZERO;
+        }
+
         return BookingResponse.builder()
                 .cleanerName(cleanerName)
                 .cleanerPhone(cleanerPhone)
@@ -1061,6 +1070,8 @@ public class BookingStateEngine {
                 .partnerName(booking.getPartner() != null
                         ? booking.getPartner().getBusinessName()
                         : "CleanMate Partner")
+                .partnerPhone(booking.getPartner() != null && booking.getPartner().getUser() != null
+                        ? booking.getPartner().getUser().getPhone() : null)
                 .addressId(booking.getAddress() != null
                         ? booking.getAddress().getId() : null)
                 .receiverName(booking.getReceiverNameSnapshot() != null
@@ -1082,6 +1093,7 @@ public class BookingStateEngine {
                 .subtotal(booking.getSubtotal())
                 .discountAmount(booking.getDiscountAmount())
                 .pointsDiscount(booking.getPointsDiscount())
+                .platformFee(computedPlatformFee)
                 .totalAmount(booking.getTotalAmount())
                 .status(booking.getStatus())
                 .paymentMethod(paymentMethod)

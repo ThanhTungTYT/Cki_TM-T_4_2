@@ -5,6 +5,7 @@ import org.ckitmdt.backend.dto.booking.BookingActionRequest;
 import org.ckitmdt.backend.dto.booking.BookingStatusEnum;
 import org.ckitmdt.backend.entity.*;
 import org.ckitmdt.backend.repository.*;
+import org.ckitmdt.backend.service.CustomerNotificationService;
 import org.ckitmdt.backend.service.booking.BookingStateEngine;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,6 +38,9 @@ public class ProviderBookingController {
     private final PaymentRepository paymentRepository;
     private final AdminNotificationRepository notificationRepository;
     private final BookingStateEngine bookingStateEngine;
+    private final CleanerWorkLogRepository cleanerWorkLogRepository;
+    private final CleanerOvertimeRequestRepository overtimeRequestRepository;
+    private final CustomerNotificationService customerNotificationService;
 
     @GetMapping("/bookings")
     @Transactional(readOnly = true)
@@ -552,6 +556,10 @@ public class ProviderBookingController {
         return assignmentRepository.findByPartner_IdOrderByAssignedAtDesc(partner.getId())
                 .stream()
                 .filter(a -> {
+                    String asgStatus = normalize(a.getStatus());
+                    return !"CANCELLED".equals(asgStatus) && !"DECLINED".equals(asgStatus);
+                })
+                .filter(a -> {
                     LocalDateTime scheduled = a.getBooking() != null
                             ? a.getBooking().getScheduledStart() : null;
                     return scheduled != null
@@ -605,6 +613,7 @@ public class ProviderBookingController {
         row.put("status", booking.getStatus());
         row.put("totalAmount", booking.getTotalAmount());
         row.put("providerDeadlineAt", booking.getProviderDeadlineAt());
+        row.put("version", booking.getVersion());
         row.put("createdAt", booking.getCreatedAt());
         row.put("completedAt", booking.getCompletedAt());
         row.put("cancelReason", booking.getCancelReason());
@@ -625,7 +634,8 @@ public class ProviderBookingController {
 
         List<Payment> payments = paymentRepository.findByBooking_Id(booking.getId());
         boolean isCash = payments.stream().anyMatch(p -> "CASH".equalsIgnoreCase(p.getPaymentProvider()));
-        boolean isPaid = payments.stream().anyMatch(p -> "SUCCESS".equalsIgnoreCase(p.getStatus()));
+        boolean isPaid = payments.stream().anyMatch(p ->
+                "SUCCESS".equalsIgnoreCase(p.getStatus()) || "PAID".equalsIgnoreCase(p.getStatus()));
         row.put("paymentMethod", isCash ? "CASH" : "VNPAY");
         row.put("paymentStatus", isPaid ? "PAID" : "UNPAID");
 
@@ -633,8 +643,12 @@ public class ProviderBookingController {
                 .stream()
                 .map(item -> {
                     Map<String, Object> itemRow = new LinkedHashMap<>();
+                    itemRow.put("serviceId", item.getService() != null ? item.getService().getId() : null);
                     itemRow.put("serviceName", item.getServiceName());
+                    itemRow.put("packageName", item.getServicePackage() != null ? item.getServicePackage().getName() : null);
                     itemRow.put("quantity", item.getQuantity());
+                    itemRow.put("employeeCount", item.getEmployeeCount());
+                    itemRow.put("durationMinutes", item.getDurationMinutes());
                     itemRow.put("unitPrice", item.getUnitPrice());
                     itemRow.put("totalPrice", item.getTotalPrice());
                     return itemRow;
@@ -642,6 +656,230 @@ public class ProviderBookingController {
                 .toList());
 
         return row;
+    }
+
+    @GetMapping("/bookings/{id}/work-logs")
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getBookingWorkLogs(
+            @PathVariable Long id,
+            Authentication auth) {
+        Partner partner = helper.currentPartner(auth);
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng."));
+        if (booking.getPartner() == null || !booking.getPartner().getId().equals(partner.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không có quyền xem nhật ký đơn hàng này.");
+        }
+
+        return cleanerWorkLogRepository.findByBooking_IdOrderByCreatedAtDesc(id)
+                .stream()
+                .map(this::workLogRow)
+                .toList();
+    }
+
+    @PatchMapping("/bookings/{id}/work-logs/{logId}/incident-status")
+    @Transactional
+    public Map<String, Object> updateIncidentStatus(
+            @PathVariable Long id,
+            @PathVariable Long logId,
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
+        Partner partner = helper.currentPartner(auth);
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng."));
+        if (booking.getPartner() == null || !booking.getPartner().getId().equals(partner.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không có quyền xử lý sự cố của đơn hàng này.");
+        }
+
+        CleanerWorkLog workLog = cleanerWorkLogRepository.findById(logId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy nhật ký công việc."));
+        if (workLog.getBooking() == null || !workLog.getBooking().getId().equals(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nhật ký không thuộc đơn hàng này.");
+        }
+        if (!"INCIDENT".equalsIgnoreCase(workLog.getLogType())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ áp dụng cập nhật trạng thái cho báo cáo sự cố (INCIDENT).");
+        }
+
+        String nextStatus = normalize(text(body == null ? null : body.get("incidentStatus")));
+        if (!Set.of("IN_PROGRESS", "RESOLVED", "REJECTED").contains(nextStatus)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái sự cố không hợp lệ (IN_PROGRESS, RESOLVED, REJECTED).");
+        }
+        String resolutionNote = text(body == null ? null : body.get("note"));
+
+        workLog.setIncidentStatus(nextStatus);
+        if (!resolutionNote.isBlank()) {
+            workLog.setNote(workLog.getNote() + "\n[Phản hồi Đối tác]: " + resolutionNote);
+        }
+        CleanerWorkLog saved = cleanerWorkLogRepository.save(workLog);
+
+        if (workLog.getCleaner() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(workLog.getCleaner())
+                    .type("INCIDENT_STATUS_UPDATED")
+                    .title("Đối tác đã cập nhật xử lý sự cố")
+                    .message("Sự cố trên đơn #" + booking.getBookingCode()
+                            + " đã được cập nhật trạng thái: " + nextStatus
+                            + (resolutionNote.isBlank() ? "." : " (" + resolutionNote + ")"))
+                    .referenceType("BOOKING_ASSIGNMENT")
+                    .referenceId(workLog.getAssignment() != null ? workLog.getAssignment().getId() : null)
+                    .createdAt(LocalDateTime.now())
+                    .build());
+        }
+
+        return workLogRow(saved);
+    }
+
+    @GetMapping("/bookings/{id}/overtime-requests")
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getBookingOvertimeRequests(
+            @PathVariable Long id,
+            Authentication auth) {
+        Partner partner = helper.currentPartner(auth);
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng."));
+        if (booking.getPartner() == null || !booking.getPartner().getId().equals(partner.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không có quyền xem yêu cầu gia hạn của đơn hàng này.");
+        }
+
+        return overtimeRequestRepository.findByBooking_IdOrderByCreatedAtDesc(id)
+                .stream()
+                .map(this::overtimeRow)
+                .toList();
+    }
+
+    @PostMapping("/overtime-requests/{requestId}/review")
+    @Transactional
+    public Map<String, Object> reviewOvertimeRequest(
+            @PathVariable Long requestId,
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
+        User providerUser = helper.currentUser(auth);
+        Partner partner = helper.currentPartner(auth);
+
+        CleanerOvertimeRequest overtimeRequest = overtimeRequestRepository.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu gia hạn."));
+        if (overtimeRequest.getPartner() == null
+                || !overtimeRequest.getPartner().getId().equals(partner.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xử lý yêu cầu gia hạn này.");
+        }
+        if (!"PENDING".equalsIgnoreCase(overtimeRequest.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Yêu cầu gia hạn này đã được xử lý trước đó.");
+        }
+
+        String decision = normalize(text(body == null ? null : body.get("decision")));
+        String providerNote = text(body == null ? null : body.get("providerNote"));
+        if (!Set.of("APPROVE", "APPROVED", "REJECT", "REJECTED").contains(decision)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Quyết định phải là APPROVE hoặc REJECT.");
+        }
+        boolean approve = decision.startsWith("APPROV");
+        if (!approve && providerNote.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do khi từ chối yêu cầu gia hạn.");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Booking booking = bookingRepository.findByIdForUpdate(overtimeRequest.getBooking().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng."));
+
+        if (approve) {
+            if (!"IN_PROGRESS".equalsIgnoreCase(booking.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Chỉ có thể duyệt gia hạn khi đơn hàng đang ở trạng thái IN_PROGRESS.");
+            }
+            int addMinutes = overtimeRequest.getRequestedAdditionalMinutes() != null
+                    ? overtimeRequest.getRequestedAdditionalMinutes() : 0;
+            LocalDateTime baseEnd = booking.getScheduledEnd() != null ? booking.getScheduledEnd() : now;
+            LocalDateTime extendedEnd = baseEnd.plusMinutes(addMinutes);
+            booking.setScheduledEnd(extendedEnd);
+            booking.setUpdatedAt(now);
+            bookingRepository.save(booking);
+
+            bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
+                    .booking(booking)
+                    .oldStatus(booking.getStatus())
+                    .newStatus(booking.getStatus())
+                    .changedBy(providerUser)
+                    .note("Đối tác duyệt gia hạn thêm " + addMinutes + " phút cho nhân viên"
+                            + (providerNote.isBlank() ? "." : ": " + providerNote))
+                    .createdAt(now)
+                    .build());
+
+            overtimeRequest.setStatus("APPROVED");
+
+            if (booking.getCustomer() != null) {
+                customerNotificationService.notifyCustomer(
+                        booking.getCustomer(),
+                        "BOOKING_OVERTIME_APPROVED",
+                        "Cập nhật thời gian hoàn thành đơn #" + booking.getBookingCode(),
+                        "Đối tác " + partner.getBusinessName() + " đã duyệt gia hạn thêm " + addMinutes
+                                + " phút thực hiện dịch vụ cho đơn #" + booking.getBookingCode() + ".",
+                        "BOOKING",
+                        booking.getId()
+                );
+            }
+        } else {
+            overtimeRequest.setStatus("REJECTED");
+        }
+
+        overtimeRequest.setProviderNote(providerNote.isBlank() ? null : providerNote);
+        overtimeRequest.setReviewedBy(providerUser);
+        overtimeRequest.setReviewedAt(now);
+        CleanerOvertimeRequest saved = overtimeRequestRepository.save(overtimeRequest);
+
+        if (overtimeRequest.getCleaner() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(overtimeRequest.getCleaner())
+                    .type(approve ? "OVERTIME_APPROVED" : "OVERTIME_REJECTED")
+                    .title(approve ? "Yêu cầu gia hạn đã được duyệt" : "Yêu cầu gia hạn bị từ chối")
+                    .message("Yêu cầu gia hạn " + overtimeRequest.getRequestedAdditionalMinutes()
+                            + " phút cho đơn #" + booking.getBookingCode()
+                            + (approve ? " đã được đối tác phê duyệt." : " đã bị từ chối. Lý do: " + providerNote))
+                    .referenceType("BOOKING_ASSIGNMENT")
+                    .referenceId(overtimeRequest.getAssignment() != null ? overtimeRequest.getAssignment().getId() : null)
+                    .createdAt(now)
+                    .build());
+        }
+
+        return overtimeRow(saved);
+    }
+
+    private Map<String, Object> workLogRow(CleanerWorkLog log) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", log.getId());
+        map.put("assignmentId", log.getAssignment() != null ? log.getAssignment().getId() : null);
+        map.put("bookingId", log.getBooking() != null ? log.getBooking().getId() : null);
+        map.put("logType", log.getLogType());
+        map.put("note", log.getNote());
+        List<String> images = log.getImageUrls() == null || log.getImageUrls().isBlank()
+                ? List.of()
+                : Arrays.stream(log.getImageUrls().split("\\r?\\n"))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+        map.put("imageUrls", images);
+        map.put("incidentSeverity", log.getIncidentSeverity());
+        map.put("incidentCategory", log.getIncidentCategory());
+        map.put("incidentStatus", log.getIncidentStatus());
+        map.put("cleanerName", log.getCleaner() != null ? log.getCleaner().getFullName() : null);
+        map.put("cleanerPhone", log.getCleaner() != null ? log.getCleaner().getPhone() : null);
+        map.put("createdAt", log.getCreatedAt());
+        return map;
+    }
+
+    private Map<String, Object> overtimeRow(CleanerOvertimeRequest req) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", req.getId());
+        map.put("assignmentId", req.getAssignment() != null ? req.getAssignment().getId() : null);
+        map.put("bookingId", req.getBooking() != null ? req.getBooking().getId() : null);
+        map.put("cleanerName", req.getCleaner() != null ? req.getCleaner().getFullName() : null);
+        map.put("cleanerPhone", req.getCleaner() != null ? req.getCleaner().getPhone() : null);
+        map.put("reason", req.getReason());
+        map.put("requestedAdditionalMinutes", req.getRequestedAdditionalMinutes());
+        map.put("originalScheduledEnd", req.getOriginalScheduledEnd());
+        map.put("status", req.getStatus());
+        map.put("providerNote", req.getProviderNote());
+        map.put("reviewedBy", req.getReviewedBy() != null ? req.getReviewedBy().getFullName() : null);
+        map.put("createdAt", req.getCreatedAt());
+        map.put("reviewedAt", req.getReviewedAt());
+        return map;
     }
 
     public Map<String, Object> assignmentRow(BookingAssignment a) {

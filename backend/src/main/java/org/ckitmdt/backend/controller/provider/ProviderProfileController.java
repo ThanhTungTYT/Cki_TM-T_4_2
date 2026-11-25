@@ -1,9 +1,17 @@
 package org.ckitmdt.backend.controller.provider;
 
 import lombok.RequiredArgsConstructor;
+import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.entity.BusinessChangeRequest;
 import org.ckitmdt.backend.entity.Partner;
+import org.ckitmdt.backend.entity.PartnerService;
+import org.ckitmdt.backend.entity.Service;
+import org.ckitmdt.backend.entity.User;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.ckitmdt.backend.repository.BusinessChangeRequestRepository;
+import org.ckitmdt.backend.repository.PartnerServiceRepository;
+import org.ckitmdt.backend.repository.ServiceRepository;
+import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static org.ckitmdt.backend.controller.provider.ProviderSecurityHelper.text;
 
@@ -24,6 +33,10 @@ public class ProviderProfileController {
 
     private final ProviderSecurityHelper helper;
     private final BusinessChangeRequestRepository changeRequestRepository;
+    private final PartnerServiceRepository partnerServiceRepository;
+    private final ServiceRepository serviceRepository;
+    private final AdminNotificationRepository notificationRepository;
+    private final UserRepository userRepository;
 
     @GetMapping("/profile")
     @Transactional(readOnly = true)
@@ -90,18 +103,23 @@ public class ProviderProfileController {
             );
         }
 
+        Long resolvedTargetId = body.get("targetId") == null
+                ? partner.getId()
+                : parseLong(body.get("targetId"), "Mã đối tượng");
+
         boolean hasPending = changeRequestRepository
                 .findByPartner_IdOrderByCreatedAtDesc(partner.getId())
                 .stream()
                 .anyMatch(request ->
                         type.equalsIgnoreCase(request.getRequestType())
                                 && "PENDING_REVIEW".equalsIgnoreCase(request.getStatus())
+                                && Objects.equals(resolvedTargetId, request.getTargetId())
                 );
 
         if (hasPending) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    "Bạn đang có yêu cầu cùng loại chưa được xử lý."
+                    "Bạn đang có yêu cầu cùng loại cho đối tượng này chưa được xử lý."
             );
         }
 
@@ -109,33 +127,59 @@ public class ProviderProfileController {
 
         if (proposedSnapshot.isBlank()) {
             if ("LOCATION_UPDATE".equals(type)) {
-                proposedSnapshot = "address=" + text(body.get("address"))
-                        + ";latitude=" + text(body.get("latitude"))
-                        + ";longitude=" + text(body.get("longitude"));
+                proposedSnapshot = "address=" + safeSnapshotValue(text(body.get("address")))
+                        + ";latitude=" + safeSnapshotValue(text(body.get("latitude")))
+                        + ";longitude=" + safeSnapshotValue(text(body.get("longitude")));
             } else if ("PROFILE_UPDATE".equals(type)) {
-                proposedSnapshot = "businessName=" + text(body.get("businessName"))
-                        + ";description=" + text(body.get("description"))
-                        + ";taxCode=" + text(body.get("taxCode"));
+                proposedSnapshot = "businessName=" + safeSnapshotValue(text(body.get("businessName")))
+                        + ";description=" + safeSnapshotValue(text(body.get("description")))
+                        + ";taxCode=" + safeSnapshotValue(text(body.get("taxCode")));
             } else {
-                proposedSnapshot = body.toString();
+                proposedSnapshot = safeSnapshotValue(body.toString());
             }
         }
 
         String oldSnapshot = "";
         Integer baseVersion = null;
+        String resolvedTargetName = text(body.get("targetName"));
 
         if ("LOCATION_UPDATE".equals(type)) {
-            oldSnapshot = "address=" + (partner.getAddress() == null ? "" : partner.getAddress())
+            oldSnapshot = "address=" + safeSnapshotValue(partner.getAddress())
                     + ";latitude=" + (partner.getLatitude() == null ? "" : partner.getLatitude())
                     + ";longitude=" + (partner.getLongitude() == null ? "" : partner.getLongitude());
 
             baseVersion = partner.getVersion() == null ? 1 : partner.getVersion();
         } else if ("PROFILE_UPDATE".equals(type)) {
-            oldSnapshot = "businessName=" + partner.getBusinessName()
-                    + ";description=" + (partner.getDescription() == null ? "" : partner.getDescription())
-                    + ";taxCode=" + (partner.getTaxCode() == null ? "" : partner.getTaxCode());
+            oldSnapshot = "businessName=" + safeSnapshotValue(partner.getBusinessName())
+                    + ";description=" + safeSnapshotValue(partner.getDescription())
+                    + ";taxCode=" + safeSnapshotValue(partner.getTaxCode());
 
             baseVersion = partner.getVersion() == null ? 1 : partner.getVersion();
+        } else if (List.of("SERVICE_UPDATE", "SERVICE_PAUSE", "SERVICE_RETIRE").contains(type)) {
+            PartnerService ps = partnerServiceRepository.findById(resolvedTargetId)
+                    .filter(item -> item.getPartner() != null && Objects.equals(item.getPartner().getId(), partner.getId()))
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "Không tìm thấy dịch vụ của đối tác để tạo yêu cầu thay đổi."
+                    ));
+            Service svc = ps.getService();
+            oldSnapshot = "serviceId=" + (svc != null ? svc.getId() : "")
+                    + ";name=" + safeSnapshotValue(svc != null ? svc.getName() : "")
+                    + ";price=" + (ps.getPrice() == null ? "" : ps.getPrice())
+                    + ";status=" + safeSnapshotValue(ps.getStatus());
+            if (resolvedTargetName.isBlank() && svc != null) {
+                resolvedTargetName = svc.getName();
+            }
+        } else if ("SERVICE_REGISTER".equals(type)) {
+            Service svc = serviceRepository.findById(resolvedTargetId).orElse(null);
+            if (svc != null) {
+                oldSnapshot = "serviceId=" + svc.getId()
+                        + ";name=" + safeSnapshotValue(svc.getName())
+                        + ";basePrice=" + (svc.getBasePrice() == null ? "" : svc.getBasePrice());
+                if (resolvedTargetName.isBlank()) {
+                    resolvedTargetName = svc.getName();
+                }
+            }
         }
 
         if ("LOCATION_UPDATE".equals(type)) {
@@ -152,12 +196,10 @@ public class ProviderProfileController {
                 .partner(partner)
                 .requestType(type)
                 .status("PENDING_REVIEW")
-                .targetId(body.get("targetId") == null
-                        ? partner.getId()
-                        : parseLong(body.get("targetId"), "Mã đối tượng"))
-                .targetName(text(body.get("targetName")).isBlank()
+                .targetId(resolvedTargetId)
+                .targetName(resolvedTargetName.isBlank()
                         ? partner.getBusinessName()
-                        : text(body.get("targetName")))
+                        : resolvedTargetName)
                 .baseVersion(baseVersion)
                 .oldSnapshot(oldSnapshot)
                 .proposedSnapshot(proposedSnapshot)
@@ -168,7 +210,30 @@ public class ProviderProfileController {
                 .updatedAt(now)
                 .build();
 
-        return changeRequestRow(changeRequestRepository.save(request));
+        BusinessChangeRequest saved = changeRequestRepository.save(request);
+
+        List<User> operators = new java.util.ArrayList<>();
+        operators.addAll(userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("ADMIN", "ACTIVE"));
+        operators.addAll(userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("STAFF", "ACTIVE"));
+        for (User op : operators) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(op)
+                    .type("PROVIDER_CHANGE_REQUEST_CREATED")
+                    .title("Yêu cầu thay đổi mới từ đối tác")
+                    .message("Đối tác " + partner.getBusinessName() + " vừa gửi yêu cầu " + type
+                            + " cho " + saved.getTargetName() + ". Vui lòng kiểm duyệt.")
+                    .referenceType("BUSINESS_CHANGE_REQUEST")
+                    .referenceId(saved.getId())
+                    .createdAt(now)
+                    .build());
+        }
+
+        return changeRequestRow(saved);
+    }
+
+    private String safeSnapshotValue(String raw) {
+        if (raw == null) return "";
+        return raw.replace(";", ",").replace("\r", " ").replace("\n", " ").trim();
     }
 
     private void validateCoordinates(String latitude, String longitude) {

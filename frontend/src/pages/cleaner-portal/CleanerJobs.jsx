@@ -11,6 +11,7 @@ const STATUS_CONFIG = {
     EN_ROUTE: { label: 'Đang di chuyển', type: 'progress' },
     IN_PROGRESS: { label: 'Đang thực hiện', type: 'progress' },
     WORK_SUBMITTED: { label: 'Đã gửi kết quả', type: 'completed' },
+    COMPLETED: { label: 'Đã hoàn thành', type: 'completed' },
     DECLINED: { label: 'Đã từ chối', type: 'cancelled' },
     EXPIRED: { label: 'Đã hết hạn', type: 'cancelled' },
     CANCELLED: { label: 'Đã hủy', type: 'cancelled' }
@@ -599,6 +600,59 @@ function CleanerJobs() {
         }
     }
 
+    async function handleRequestOvertime(booking) {
+        if (processingId !== null) return;
+        const assignment = booking.cleanerAssignment;
+        const assignmentId = assignment?.assignmentId || assignment?.id;
+        if (!assignmentId) return;
+
+        const minutesRaw = window.prompt(
+            'Nhập số phút cần xin gia hạn thêm (từ 15 đến 240 phút):',
+            '30'
+        );
+        if (minutesRaw === null) return;
+        const minutes = Number.parseInt(minutesRaw, 10);
+        if (!Number.isFinite(minutes) || minutes < 1 || minutes > 480) {
+            window.alert('Số phút gia hạn phải từ 1 đến 480 phút.');
+            return;
+        }
+
+        const reason = window.prompt(
+            'Nhập lý do cần gia hạn thời gian thực hiện:'
+        );
+        if (reason === null) return;
+        if (!reason.trim()) {
+            window.alert('Vui lòng nhập lý do xin gia hạn.');
+            return;
+        }
+
+        setProcessingId(booking.id);
+        try {
+            await bookingApi.createCleanerOvertimeRequest(assignmentId, {
+                requestedAdditionalMinutes: minutes,
+                reason: reason.trim()
+            });
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'success',
+                    message: `Đã gửi yêu cầu xin gia hạn thêm ${minutes} phút tới đối tác.`
+                }
+            }));
+            await loadBookings();
+        } catch (err) {
+            setActionFeedback((prev) => ({
+                ...prev,
+                [booking.id]: {
+                    type: 'error',
+                    message: err?.message || 'Không thể gửi yêu cầu gia hạn.'
+                }
+            }));
+        } finally {
+            setProcessingId(null);
+        }
+    }
+
     async function handleReportUnable(booking) {
         if (processingId !== null) return;
 
@@ -765,13 +819,17 @@ function CleanerJobs() {
                             'IN_PROGRESS'
                         ].includes(assignmentStatus);
 
-                        const hasFinalReport = (
-                            workLogs[assignmentId] || []
-                        ).some(
-                            (log) =>
-                                String(log.logType || log.type || '').toUpperCase() ===
-                                'FINAL_REPORT'
-                        );
+                        const hasFinalReport =
+                            Boolean(assignment.hasFinalReport) ||
+                            (workLogs[assignmentId] || []).some(
+                                (log) =>
+                                    String(log.logType || log.type || '').toUpperCase() ===
+                                    'FINAL_REPORT'
+                            );
+
+                        const overtimeStatus = String(
+                            assignment.latestOvertimeStatus || ''
+                        ).toUpperCase();
 
                         return (
                             <article
@@ -913,28 +971,70 @@ function CleanerJobs() {
                                     )}
 
                                     {assignmentStatus === 'IN_PROGRESS' && (
-                                        hasFinalReport ? (
-                                            <button
-                                                type="button"
-                                                disabled={busy}
-                                                onClick={() =>
-                                                    handleBookingAction(
-                                                        booking,
-                                                        'SUBMIT_COMPLETION'
-                                                    )
-                                                }
-                                            >
-                                                {busy
-                                                    ? 'Đang gửi...'
-                                                    : 'Gửi kết quả hoàn thành'}
-                                            </button>
-                                        ) : (
-                                            <p className="cj-action-feedback">
-                                                Hãy mở thông tin công việc, gửi báo cáo
-                                                tổng kết và ảnh minh chứng trước khi
-                                                nộp kết quả.
-                                            </p>
-                                        )
+                                        <>
+                                            {hasFinalReport ? (
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        handleBookingAction(
+                                                            booking,
+                                                            'SUBMIT_COMPLETION'
+                                                        )
+                                                    }
+                                                >
+                                                    {busy
+                                                        ? 'Đang gửi...'
+                                                        : 'Gửi kết quả hoàn thành'}
+                                                </button>
+                                            ) : (
+                                                <p className="cj-action-feedback">
+                                                    Hãy mở thông tin công việc, gửi báo cáo
+                                                    tổng kết và ảnh minh chứng trước khi
+                                                    nộp kết quả.
+                                                </p>
+                                            )}
+
+                                            {overtimeStatus === 'PENDING' ? (
+                                                <span
+                                                    style={{
+                                                        fontSize: 12.5,
+                                                        padding: '6px 10px',
+                                                        borderRadius: 6,
+                                                        background: '#fef3c7',
+                                                        color: '#92400e',
+                                                        fontWeight: 600
+                                                    }}
+                                                >
+                                                    ⏳ Đang chờ duyệt gia hạn
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className="cj-decline-btn"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        handleRequestOvertime(booking)
+                                                    }
+                                                >
+                                                    ⏱ Xin gia hạn giờ làm
+                                                </button>
+                                            )}
+                                            {overtimeStatus === 'APPROVED' && (
+                                                <span
+                                                    style={{
+                                                        fontSize: 12,
+                                                        padding: '4px 8px',
+                                                        borderRadius: 6,
+                                                        background: '#dcfce7',
+                                                        color: '#166534',
+                                                        fontWeight: 600
+                                                    }}
+                                                >
+                                                    ✓ Đã duyệt gia hạn
+                                                </span>
+                                            )}
+                                        </>
                                     )}
                                 </div>
 

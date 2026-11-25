@@ -377,6 +377,38 @@ export const bookingApi = {
             res,
             'Không thể tải nhật ký công việc.'
         );
+    },
+
+    // Xin gia hạn thời gian làm việc (Cleaner Overtime Request)
+    async createCleanerOvertimeRequest(assignmentId, payload) {
+        const res = await fetch(
+            `${BASE_URL}/cleaner/assignments/${encodeURIComponent(assignmentId)}/overtime-requests`,
+            {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload)
+            }
+        );
+
+        return handleResponse(
+            res,
+            'Không thể gửi yêu cầu gia hạn thời gian.'
+        );
+    },
+
+    async getCleanerOvertimeRequests(assignmentId) {
+        const res = await fetch(
+            `${BASE_URL}/cleaner/assignments/${encodeURIComponent(assignmentId)}/overtime-requests`,
+            {
+                method: 'GET',
+                headers: getAuthHeaders()
+            }
+        );
+
+        return handleResponse(
+            res,
+            'Không thể tải danh sách yêu cầu gia hạn.'
+        );
     }
 };
 

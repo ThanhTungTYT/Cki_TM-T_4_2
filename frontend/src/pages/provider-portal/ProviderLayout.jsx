@@ -183,6 +183,14 @@ function ProviderLayout() {
         setShowNotifs(false);
         if (notif.referenceType === 'BOOKING' && notif.referenceId) {
             navigate(`/provider-portal/bookings/${notif.referenceId}`);
+        } else if (notif.referenceType === 'REPORT_TICKET') {
+            navigate('/provider-portal/complaints');
+        } else if (notif.referenceType === 'PROVIDER_SETTLEMENT') {
+            navigate('/provider-portal/revenue');
+        } else if (notif.referenceType === 'CLEANER_OVERTIME_REQUEST') {
+            navigate('/provider-portal/bookings');
+        } else if (notif.referenceType === 'BUSINESS_CHANGE_REQUEST') {
+            navigate('/provider-portal/dashboard');
         }
     }
 

@@ -4,9 +4,15 @@ package org.ckitmdt.backend.controller.auth;
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.dto.booking.BookingActionRequest;
 import org.ckitmdt.backend.dto.booking.BookingResponse;
+import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.entity.Booking;
+import org.ckitmdt.backend.entity.BookingAssignment;
+import org.ckitmdt.backend.entity.CancellationRefund;
 import org.ckitmdt.backend.entity.Payment;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
+import org.ckitmdt.backend.repository.BookingAssignmentRepository;
 import org.ckitmdt.backend.repository.BookingRepository;
+import org.ckitmdt.backend.repository.CancellationRefundRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
 import org.ckitmdt.backend.service.booking.BookingStateEngine;
 import org.springframework.data.domain.Sort;
@@ -32,6 +38,9 @@ public class AdminOrderController {
 
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
+    private final CancellationRefundRepository cancellationRefundRepository;
+    private final BookingAssignmentRepository assignmentRepository;
+    private final AdminNotificationRepository notificationRepository;
     private final BookingStateEngine bookingStateEngine;
 
     @GetMapping
@@ -253,11 +262,66 @@ public class AdminOrderController {
         request.setVersion(requestedVersion);
         request.setNote(auditNote);
 
+        List<BookingAssignment> previousAssignments = assignmentRepository.findByBooking_IdOrderByIdAsc(id);
+
         BookingResponse updated = bookingStateEngine.executeAction(
                 id,
                 request,
                 authentication.getName()
         );
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Tự động tạo yêu cầu hoàn tiền nếu đơn đã thanh toán online (VNPay)
+        Payment paidOnline = payments.stream()
+                .filter(this::isSuccessfulPayment)
+                .filter(p -> !"CASH".equalsIgnoreCase(p.getPaymentProvider())
+                        && !"CASH".equalsIgnoreCase(p.getPaymentMethod())
+                        && !"CASH_ON_SERVICE".equalsIgnoreCase(p.getPaymentMethod()))
+                .findFirst()
+                .orElse(null);
+
+        if (paidOnline != null && booking.getCustomer() != null
+                && !cancellationRefundRepository.existsByBooking_Id(id)) {
+            cancellationRefundRepository.save(CancellationRefund.builder()
+                    .booking(booking)
+                    .requestedBy(booking.getCustomer())
+                    .requestedAmount(paidOnline.getAmount() != null ? paidOnline.getAmount() : booking.getTotalAmount())
+                    .status("PENDING_REVIEW")
+                    .cancellationReason(auditNote)
+                    .requestedAt(now)
+                    .build());
+        }
+
+        // Thông báo cho Đối tác
+        if (booking.getPartner() != null && booking.getPartner().getUser() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(booking.getPartner().getUser())
+                    .type("BOOKING_CANCELLED_BY_ADMIN")
+                    .title("Đơn hàng #" + booking.getBookingCode() + " đã bị Quản trị viên hủy")
+                    .message(auditNote)
+                    .referenceType("BOOKING")
+                    .referenceId(booking.getId())
+                    .createdAt(now)
+                    .build());
+        }
+
+        // Thông báo cho các Cleaner từng được phân công
+        for (BookingAssignment asg : previousAssignments) {
+            String asgStatus = normalize(asg.getStatus());
+            if (!"CANCELLED".equals(asgStatus) && !"DECLINED".equals(asgStatus)
+                    && asg.getEmployee() != null && asg.getEmployee().getUser() != null) {
+                notificationRepository.save(AdminNotification.builder()
+                        .recipient(asg.getEmployee().getUser())
+                        .type("BOOKING_CANCELLED_BY_ADMIN")
+                        .title("Đơn hàng #" + booking.getBookingCode() + " đã bị hủy")
+                        .message("Quản trị viên đã hủy đơn hàng #" + booking.getBookingCode() + ". Lý do: " + reason)
+                        .referenceType("BOOKING_ASSIGNMENT")
+                        .referenceId(asg.getId())
+                        .createdAt(now)
+                        .build());
+            }
+        }
 
         return ResponseEntity.ok(updated);
     }
