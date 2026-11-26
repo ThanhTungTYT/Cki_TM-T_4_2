@@ -243,7 +243,14 @@ export default function CustomerBookingHistory() {
                                     {historyBookings.map((booking, index) => {
                                         const status = String(booking.status || '').toUpperCase();
                                         const isCompleted = status === 'COMPLETED';
+                                        const itemServiceNames = Array.isArray(booking.items)
+                                            ? booking.items
+                                                .map((item) => item.serviceName || item.packageName)
+                                                .filter(Boolean)
+                                                .join(', ')
+                                            : '';
                                         const serviceName =
+                                            itemServiceNames ||
                                             booking.serviceName ||
                                             booking.serviceTitle ||
                                             booking.packageName ||

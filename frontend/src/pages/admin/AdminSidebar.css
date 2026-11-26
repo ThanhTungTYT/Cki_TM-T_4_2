@@ -80,12 +80,12 @@
     align-items: center;
     justify-content: flex-start;
     gap: 12px;
-    padding: 0 12px;
+    padding: 0 13px;
     margin: 0;
     border: 0;
-    border-radius: 9px;
+    border-radius: 10px;
     box-sizing: border-box;
-    color: #63738a;
+    color: #52647c;
     background: transparent;
     font-family: inherit;
     font-size: 13px;
@@ -96,7 +96,7 @@
     white-space: nowrap;
     overflow: hidden;
     cursor: pointer;
-    transition: background 0.2s ease, color 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.22s var(--cm-ease-out, ease), box-shadow 0.22s ease;
 }
 
 .admin-layout .admin-menu-item > svg {
@@ -106,8 +106,9 @@
     height: 18px;
     flex: 0 0 18px;
     margin: 0;
-    font-size: 16px;
+    font-size: 15.5px;
     text-align: center;
+    transition: transform 0.22s var(--cm-ease-spring, ease);
 }
 
 .admin-layout .admin-menu-item > span {
@@ -117,20 +118,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    line-height: 1.2;
+    line-height: 1.25;
 }
 
 .admin-layout .admin-menu-item:hover,
 .admin-layout .admin-menu-item:not(.active):hover {
     color: #2563eb;
-    background: #eef4ff;
+    background: #eff6ff;
+    transform: translateX(3px);
 }
 
 .admin-layout .admin-menu-item.active,
 .admin-layout .admin-menu-item.active:hover {
     color: #fff;
-    background: #2563eb;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     font-weight: 700;
+    transform: none;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.26);
 }
 
 .admin-layout .admin-sidebar-bottom {

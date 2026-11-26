@@ -72,7 +72,8 @@ public class RewardExpiryService {
                         : transaction.getType().trim().toUpperCase();
 
                 boolean shouldExpire = "EARN".equals(type)
-                        || "REDEEM_REFUND".equals(type);
+                        || "REDEEM_REFUND".equals(type)
+                        || "GIFT_REFUND".equals(type);
 
                 if (expiresAt == null
                         && shouldExpire
@@ -95,6 +96,23 @@ public class RewardExpiryService {
                 ));
 
                 continue;
+            }
+
+            String txType = transaction.getType() == null
+                    ? ""
+                    : transaction.getType().trim().toUpperCase();
+            if ("EXPIRE".equals(txType)
+                    && transaction.getEventKey() != null
+                    && transaction.getEventKey().startsWith("REWARD_EXPIRE_EARN_")) {
+                try {
+                    Long targetLotId = Long.valueOf(
+                            transaction.getEventKey().substring("REWARD_EXPIRE_EARN_".length())
+                    );
+                    consumeSpecificLot(lots, targetLotId, Math.abs((long) points));
+                    continue;
+                } catch (NumberFormatException ignored) {
+                    // fall back to FIFO if malformed
+                }
             }
 
             consumeOldestLots(lots, Math.abs((long) points));
@@ -153,6 +171,20 @@ public class RewardExpiryService {
         } else if (changed) {
             account.setUpdatedAt(now);
             rewardAccountRepository.save(account);
+        }
+    }
+
+    private void consumeSpecificLot(
+            Deque<RewardLot> lots,
+            Long targetTransactionId,
+            long pointsToConsume
+    ) {
+        for (RewardLot lot : lots) {
+            if (targetTransactionId.equals(lot.transactionId) && lot.remaining > 0) {
+                long used = Math.min(lot.remaining, pointsToConsume);
+                lot.remaining -= used;
+                return;
+            }
         }
     }
 

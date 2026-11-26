@@ -21,12 +21,16 @@ async function handleResponse(res, defaultMsg = "Có lỗi xảy ra.") {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        throw new Error(
+        const err = new Error(
             data.message ||
             data.detail ||
             data.error ||
             defaultMsg
         );
+        err.status = res.status;
+        err.code = data.code || null;
+        err.partnerStatus = data.partnerStatus || null;
+        throw err;
     }
 
     return data;
@@ -503,6 +507,66 @@ export const providerBookingApi = {
             "Không thể xóa phân công."
         );
     },
+
+    async getWorkLogs(bookingId) {
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings/${bookingId}/work-logs`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải nhật ký thực hiện công việc."
+        );
+    },
+
+    async updateIncidentStatus(bookingId, logId, incidentStatus, note = "") {
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings/${bookingId}/work-logs/${logId}/incident-status`,
+            {
+                method: "PATCH",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ incidentStatus, note }),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể cập nhật trạng thái sự cố."
+        );
+    },
+
+    async getOvertimeRequests(bookingId) {
+        const res = await fetch(
+            `${BASE_URL}/provider/bookings/${bookingId}/overtime-requests`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải yêu cầu gia hạn."
+        );
+    },
+
+    async reviewOvertimeRequest(requestId, decision, providerNote = "") {
+        const res = await fetch(
+            `${BASE_URL}/provider/overtime-requests/${requestId}/review`,
+            {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ decision, providerNote }),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể xử lý yêu cầu gia hạn."
+        );
+    },
 };
 
 // ---------- Employees ----------
@@ -626,6 +690,20 @@ export const providerRevenueApi = {
         return handleResponse(
             res,
             "Không thể tải doanh thu."
+        );
+    },
+
+    async listSettlements() {
+        const res = await fetch(
+            `${BASE_URL}/provider/settlements`,
+            {
+                headers: getAuthHeaders(),
+            }
+        );
+
+        return handleResponse(
+            res,
+            "Không thể tải lịch sử đối soát."
         );
     },
 };

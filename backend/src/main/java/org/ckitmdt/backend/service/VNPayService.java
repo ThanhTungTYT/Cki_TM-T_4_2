@@ -72,7 +72,22 @@ public class VNPayService {
             BigDecimal amount,
             String ipAddress
     ) {
+        return createPaymentUrl(txnRef, amount, ipAddress, null);
+    }
+
+    public String createPaymentUrl(
+            String txnRef,
+            BigDecimal amount,
+            String ipAddress,
+            LocalDateTime holdExpiresAt
+    ) {
         LocalDateTime now = LocalDateTime.now(ZONE);
+        LocalDateTime expireAt = now.plusMinutes(15);
+        if (holdExpiresAt != null && holdExpiresAt.isBefore(expireAt)) {
+            expireAt = holdExpiresAt.isAfter(now.plusMinutes(1))
+                    ? holdExpiresAt
+                    : now.plusMinutes(1);
+        }
 
         Map<String, String> params = new TreeMap<>();
 
@@ -89,7 +104,7 @@ public class VNPayService {
         params.put("vnp_CreateDate", now.format(FORMAT));
         params.put(
                 "vnp_ExpireDate",
-                now.plusMinutes(15).format(FORMAT)
+                expireAt.format(FORMAT)
         );
 
         params.put(

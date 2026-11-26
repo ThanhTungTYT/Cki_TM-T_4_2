@@ -459,21 +459,30 @@ export default function Checkout() {
         return () => clearInterval(timer);
     }, [bookingSuccessData, paymentMethod]);
 
-    const totalDurationHours = useMemo(() =>
-            checkoutItems.reduce(
-                (total, item) =>
-                    total + (Number(item.durationHours) || 1) * (Number(item.quantity) || 1),
-                0
-            ),
-        [checkoutItems]
-    );
+    const totalDurationHours = useMemo(() => {
+        if (quote?.estimatedMinutes != null && Number(quote.estimatedMinutes) > 0) {
+            return Number((Number(quote.estimatedMinutes) / 60).toFixed(2));
+        }
+        return checkoutItems.reduce(
+            (total, item) => {
+                const itemHours = item.estimatedMinutes != null && Number(item.estimatedMinutes) > 0
+                    ? Number(item.estimatedMinutes) / 60
+                    : (Number(item.durationHours) || 1);
+                return total + itemHours * (Number(item.quantity) || 1);
+            },
+            0
+        );
+    }, [checkoutItems, quote?.estimatedMinutes]);
 
     const calculatedEndTime = useMemo(() => {
+        if (quote?.scheduledEnd && String(quote.scheduledEnd).includes('T')) {
+            return String(quote.scheduledEnd).split('T')[1].substring(0, 5);
+        }
         const [hour, minute] = selectedTimeSlot.split(':').map(Number);
         const totalMinutes = hour * 60 + minute + Math.round(totalDurationHours * 60);
 
         return `${String(Math.floor(totalMinutes / 60) % 24).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
-    }, [selectedTimeSlot, totalDurationHours]);
+    }, [selectedTimeSlot, totalDurationHours, quote?.scheduledEnd]);
 
     const selectedAvailability = availabilitySlots.find(slot => slot.time === selectedTimeSlot);
     const selectedSlotAvailable = Boolean(selectedAvailability?.available);
@@ -600,6 +609,8 @@ export default function Checkout() {
             const apiRequest = {
                 partnerId,
                 addressId: Number(defaultAddressId),
+                receiverName: customerInfo.fullName?.trim() || null,
+                receiverPhone: customerInfo.phone?.trim() || null,
                 paymentMethod,
                 items: quoteItems,
                 scheduledStart: `${selectedDate}T${selectedTimeSlot}:00`,
@@ -683,9 +694,20 @@ export default function Checkout() {
                 );
             } catch {}
 
+            if (apiResponse.holdExpiresAt) {
+                const diffSec = Math.max(
+                    0,
+                    Math.floor((new Date(apiResponse.holdExpiresAt).getTime() - Date.now()) / 1000)
+                );
+                setHoldSecondsLeft(Number.isFinite(diffSec) ? diffSec : 15 * 60);
+            } else {
+                setHoldSecondsLeft(15 * 60);
+            }
+
             setBookingSuccessData({
                 bookingCode: apiResponse.bookingCode,
                 backendBookingId: apiResponse.id,
+                holdExpiresAt: apiResponse.holdExpiresAt || null,
                 ...bookingPayload
             });
 
@@ -817,9 +839,13 @@ export default function Checkout() {
                                     type="button"
                                     className="btn-pay-vnpay"
                                     onClick={handleVNPayPayment}
-                                    disabled={isPaying || !bookingSuccessData.backendBookingId}
+                                    disabled={isPaying || holdSecondsLeft <= 0 || !bookingSuccessData.backendBookingId}
                                 >
-                                    {isPaying ? (
+                                    {holdSecondsLeft <= 0 ? (
+                                        <>
+                                            <FontAwesomeIcon icon={faClock} /> Đã hết thời gian giữ chỗ thanh toán
+                                        </>
+                                    ) : isPaying ? (
                                         <>
                                             <FontAwesomeIcon icon={faSpinner} spin /> Đang chuyển đến VNPay...
                                         </>
@@ -1034,6 +1060,7 @@ export default function Checkout() {
                                     latitude={addressForm.lat}
                                     longitude={addressForm.lng}
                                     address={[addressForm.streetAddress, addressForm.ward, addressForm.district, addressForm.city].filter(Boolean).join(', ')}
+                                    saveUserGeo
                                     height={240}
                                     onChange={(loc) => {
                                         setAddressForm(current => ({
@@ -1066,6 +1093,45 @@ export default function Checkout() {
                                     }}
                                 />
                             </div>
+
+                            {quote?.outsideServiceRadius && (
+                                <div
+                                    style={{
+                                        marginTop: 12,
+                                        padding: '12px 14px',
+                                        borderRadius: 10,
+                                        background: '#fffbeb',
+                                        border: '1px solid #fcd34d',
+                                        borderLeft: '4px solid #f59e0b',
+                                        color: '#92400e',
+                                        fontSize: 13,
+                                        lineHeight: 1.5
+                                    }}
+                                    role="status"
+                                >
+                                    <strong>⚠️ Cảnh báo khoảng cách phục vụ:</strong>{' '}
+                                    {quote.serviceRadiusWarning ||
+                                        `Địa chỉ hiện cách đối tác khoảng ${quote.distanceKm} km, vượt bán kính tiêu chuẩn ${quote.serviceRadiusKm || 10} km. Bạn vẫn có thể tiếp tục đặt lịch để đối tác xác nhận.`}
+                                </div>
+                            )}
+
+                            {!quote?.outsideServiceRadius && quote?.distanceKm != null && (
+                                <div
+                                    style={{
+                                        marginTop: 10,
+                                        padding: '8px 12px',
+                                        borderRadius: 8,
+                                        background: '#f0fdf4',
+                                        border: '1px solid #bbf7d0',
+                                        color: '#166534',
+                                        fontSize: 12.5
+                                    }}
+                                >
+                                    ✓ Địa chỉ cách trụ sở <strong>{currentProviderName}</strong> khoảng{' '}
+                                    <strong>{quote.distanceKm} km</strong> (trong bán kính phục vụ{' '}
+                                    {quote.serviceRadiusKm || 10} km).
+                                </div>
+                            )}
                         </section>
 
                         <section className="checkout-section-card">

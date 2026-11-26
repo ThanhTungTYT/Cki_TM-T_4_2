@@ -14,9 +14,10 @@ class BookingRewardLifecycleServiceTest {
     private final PaymentRepository payments = mock(PaymentRepository.class);
     private final RewardAccountRepository accounts = mock(RewardAccountRepository.class);
     private final RewardTransactionRepository transactions = mock(RewardTransactionRepository.class);
+    private final RewardPolicyRepository policies = mock(RewardPolicyRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final BookingRewardLifecycleService service = new BookingRewardLifecycleService(bookings, payments,
-            mock(RewardPolicyRepository.class), accounts, transactions, mock(BookingPromotionRepository.class),
+            policies, accounts, transactions, mock(BookingPromotionRepository.class),
             mock(PromotionRepository.class), mock(RewardRedemptionRepository.class), users);
     private RewardAccount wallet;
     private Booking booking;
@@ -46,5 +47,19 @@ class BookingRewardLifecycleServiceTest {
         booking.setStatus("PENDING_COMPLETION");
         service.processBooking(1L);
         verify(transactions, never()).save(any());
+    }
+    @Test void respectsAdminRewardPolicyRateAndEnabledFlag() {
+        when(payments.existsByBooking_IdAndStatus(1L, "SUCCESS")).thenReturn(true);
+        RewardPolicy disabledPolicy = RewardPolicy.builder()
+                .id(1L).earnAmountStep(new BigDecimal("10000")).earnPoints(5).enabled(false).expiryMonths(6).build();
+        when(policies.findById(1L)).thenReturn(Optional.of(disabledPolicy));
+        service.processBooking(1L);
+        verify(transactions, never()).save(any());
+
+        disabledPolicy.setEnabled(true);
+        service.processBooking(1L);
+        // 125999 / 10000 = 12 steps * 5 = 60 points
+        assertEquals(160, wallet.getBalance());
+        verify(transactions, times(1)).save(argThat(t -> t.getPoints() == 60 && "EARN".equals(t.getType())));
     }
 }

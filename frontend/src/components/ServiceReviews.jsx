@@ -178,7 +178,7 @@ export default function ServiceReviews({ serviceId }) {
                 </span>
             </div>
 
-            {isLoggedIn && canReview && !hasReviewed && (
+            {isLoggedIn && canReview && (
                 <form className="service-review-form" onSubmit={handleSubmit}>
                     <label className="service-review-form-label">Đánh giá của bạn</label>
                     <StarRating value={rating} interactive onChange={setRating} />

@@ -92,6 +92,8 @@ function ProviderBookingDetail() {
     const [cancelReason, setCancelReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [ticker, setTicker] = useState(0);
+    const [workLogs, setWorkLogs] = useState([]);
+    const [overtimeRequests, setOvertimeRequests] = useState([]);
 
     // Live tick for countdown timer
     useEffect(() => {
@@ -116,6 +118,17 @@ function ProviderBookingDetail() {
             .finally(() => setLoadingAvailable(false));
     }
 
+    function loadBookingExtras() {
+        providerBookingApi
+            .getWorkLogs(id)
+            .then((logs) => setWorkLogs(Array.isArray(logs) ? logs : []))
+            .catch(() => setWorkLogs([]));
+        providerBookingApi
+            .getOvertimeRequests(id)
+            .then((reqs) => setOvertimeRequests(Array.isArray(reqs) ? reqs : []))
+            .catch(() => setOvertimeRequests([]));
+    }
+
     function loadBooking() {
         setLoading(true);
         providerBookingApi
@@ -123,6 +136,7 @@ function ProviderBookingDetail() {
             .then((b) => {
                 setBooking(b);
                 loadAvailableEmployees();
+                loadBookingExtras();
             })
             .catch((e) => setError(e.message))
             .finally(() => setLoading(false));
@@ -241,22 +255,84 @@ function ProviderBookingDetail() {
         }
     }
 
+    async function handleUpdateIncidentStatus(logId, incidentStatus) {
+        const note = window.prompt(
+            incidentStatus === 'RESOLVED'
+                ? 'Nhập ghi chú xử lý sự cố (tùy chọn):'
+                : 'Nhập ghi chú tiếp nhận xử lý (tùy chọn):',
+            ''
+        );
+        if (note === null) return;
+        clearMessages();
+        setSubmitting(true);
+        try {
+            await providerBookingApi.updateIncidentStatus(id, logId, incidentStatus, note.trim());
+            setActionMsg('✅ Đã cập nhật trạng thái xử lý sự cố và gửi thông báo cho nhân viên.');
+            loadBookingExtras();
+        } catch (e) {
+            setActionError(`❌ ${e.message}`);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function handleReviewOvertime(requestId, decision) {
+        const isApprove = decision === 'APPROVE';
+        const note = window.prompt(
+            isApprove
+                ? 'Nhập ghi chú khi duyệt gia hạn (tùy chọn):'
+                : 'Nhập lý do từ chối yêu cầu gia hạn (bắt buộc):',
+            ''
+        );
+        if (note === null) return;
+        if (!isApprove && !note.trim()) {
+            setActionError('❌ Vui lòng nhập lý do khi từ chối yêu cầu gia hạn.');
+            return;
+        }
+        clearMessages();
+        setSubmitting(true);
+        try {
+            await providerBookingApi.reviewOvertimeRequest(requestId, decision, note.trim());
+            setActionMsg(
+                isApprove
+                    ? '✅ Đã duyệt gia hạn! Thời gian kết thúc dự kiến đã được cộng thêm và thông báo cho Cleaner + Khách hàng.'
+                    : '✅ Đã từ chối yêu cầu gia hạn và thông báo cho Cleaner.'
+            );
+            loadBooking();
+        } catch (e) {
+            setActionError(`❌ ${e.message}`);
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
     if (loading) return <div className="pp-loading">Đang tải chi tiết đơn hàng...</div>;
     if (error)   return <div className="pp-alert pp-alert-error">⚠️ {error}</div>;
     if (!booking) return null;
 
     const status = (booking.status || '').toUpperCase();
-    const canAccept = status === 'PENDING_PROVIDER';
-    const canReject = status === 'PENDING_PROVIDER';
-    const canAssign = status === 'PENDING_PROVIDER' || status === 'CONFIRMED' || status === 'ASSIGNED';
-    const canCancel = status === 'CONFIRMED' || status === 'ASSIGNED';
     const assignments = booking.assignments || [];
     const declinedAssignments = assignments.filter((a) => (a.status || '').toUpperCase() === 'DECLINED');
+    const unableAssignments = assignments.filter(
+        (a) =>
+            (a.status || '').toUpperCase() === 'ACCEPTED' &&
+            String(a.note || '').includes('BÁO KHÔNG THỂ THỰC HIỆN [')
+    );
 
     // Deadline calculation
     const deadlineRemaining = status === 'PENDING_PROVIDER' && booking.providerDeadlineAt
         ? calculateDeadlineRemaining(booking.providerDeadlineAt)
         : null;
+    const isDeadlineExpired = Boolean(deadlineRemaining?.expired);
+
+    const canAccept = status === 'PENDING_PROVIDER' && !isDeadlineExpired;
+    const canReject = status === 'PENDING_PROVIDER';
+    const canAssign =
+        (status === 'PENDING_PROVIDER' && !isDeadlineExpired) ||
+        status === 'CONFIRMED' ||
+        status === 'ASSIGNED' ||
+        ((status === 'EN_ROUTE' || status === 'IN_PROGRESS') && unableAssignments.length > 0);
+    const canCancel = status === 'CONFIRMED' || status === 'ASSIGNED';
 
     return (
         <>
@@ -277,6 +353,41 @@ function ProviderBookingDetail() {
 
             {actionMsg   && <div className="pp-alert pp-alert-success">{actionMsg}</div>}
             {actionError && <div className="pp-alert pp-alert-error">{actionError}</div>}
+
+            {/* Warning banner: Cleaner reported unable */}
+            {unableAssignments.length > 0 && (
+                <div style={{
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderLeft: '4px solid #ef4444',
+                    borderRadius: 8,
+                    padding: '14px 18px',
+                    marginBottom: 16,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <span style={{ fontSize: 18 }}>🚨</span>
+                            <strong style={{ color: '#991b1b', fontSize: 14 }}>
+                                Nhân viên báo KHÔNG THỂ THỰC HIỆN — Cần điều phối thay thế khẩn cấp
+                            </strong>
+                        </div>
+                        {unableAssignments.map((ua) => (
+                            <div key={ua.id} style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>
+                                • Nhân viên: <strong>{ua.employeeName || ua.employeeCode}</strong> ({ua.employeeCode}) —{' '}
+                                <span style={{ color: '#b91c1c', fontWeight: 500 }}>{ua.note}</span>
+                            </div>
+                        ))}
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>
+                            Hãy gỡ phân công nhân viên báo bận ở bảng bên dưới rồi phân công nhân viên thay thế để tiếp tục đơn hàng.
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Warning banner: Cleaner declined */}
             {declinedAssignments.length > 0 && (
@@ -444,7 +555,7 @@ function ProviderBookingDetail() {
                                             </span>
                                             {booking.paymentMethod === 'CASH'
                                                 && booking.paymentStatus !== 'PAID'
-                                                && ['IN_PROGRESS', 'PENDING_COMPLETION', 'COMPLETED'].includes(status) && (
+                                                && ['PENDING_COMPLETION', 'COMPLETED'].includes(status) && (
                                                 <button
                                                     type="button"
                                                     className="pp-btn pp-btn-success pp-btn-sm"
@@ -572,10 +683,15 @@ function ProviderBookingDetail() {
                                     </thead>
                                     <tbody>
                                         {assignments.map((a) => {
-                                            const asg = ASSIGNMENT_STATUS_MAP[(a.status || '').toUpperCase()] || { cls: 'pp-badge-confirmed', label: a.status || 'ASSIGNED' };
-                                            const isDeclined = (a.status || '').toUpperCase() === 'DECLINED';
+                                            const upperAsgStatus = (a.status || '').toUpperCase();
+                                            const asg = ASSIGNMENT_STATUS_MAP[upperAsgStatus] || { cls: 'pp-badge-confirmed', label: a.status || 'ASSIGNED' };
+                                            const isDeclined = upperAsgStatus === 'DECLINED';
+                                            const isCancelledAsg = upperAsgStatus === 'CANCELLED';
+                                            const isUnable = upperAsgStatus === 'ACCEPTED' && String(a.note || '').includes('BÁO KHÔNG THỂ THỰC HIỆN [');
+                                            const canRemoveRow = !isCancelledAsg && !isDeclined && !['IN_PROGRESS', 'WORK_SUBMITTED', 'COMPLETED'].includes(upperAsgStatus)
+                                                && (['PENDING_PROVIDER', 'CONFIRMED', 'ASSIGNED', 'EN_ROUTE'].includes(status) || (status === 'IN_PROGRESS' && (isUnable || upperAsgStatus === 'ASSIGNED')));
                                             return (
-                                                <tr key={a.id} style={{ background: isDeclined ? '#fffbeb' : undefined }}>
+                                                <tr key={a.id} style={{ background: isUnable ? '#fef2f2' : isDeclined ? '#fffbeb' : undefined }}>
                                                     <td><strong>{a.employeeCode || '—'}</strong></td>
                                                     <td>
                                                         <div>{a.employeeName || '—'}</div>
@@ -584,10 +700,16 @@ function ProviderBookingDetail() {
                                                         )}
                                                     </td>
                                                     <td>
-                                                        <span className={`pp-badge ${asg.cls}`}>{asg.label}</span>
+                                                        <span className={`pp-badge ${isUnable ? 'pp-badge-cancelled' : asg.cls}`}>
+                                                            {isUnable ? '🚨 Báo không thể làm' : asg.label}
+                                                        </span>
                                                     </td>
                                                     <td>
-                                                        {isDeclined ? (
+                                                        {isUnable ? (
+                                                            <span style={{ color: '#b91c1c', fontWeight: 500 }}>
+                                                                {a.note}
+                                                            </span>
+                                                        ) : isDeclined ? (
                                                             <span style={{ color: '#dc2626', fontWeight: 500 }}>
                                                                 ⛔ Lý do từ chối: {a.note || 'Không có lý do'}
                                                             </span>
@@ -597,12 +719,14 @@ function ProviderBookingDetail() {
                                                     </td>
                                                     {canAssign && (
                                                         <td>
-                                                            <button
-                                                                className="pp-btn pp-btn-danger pp-btn-sm"
-                                                                onClick={() => handleRemoveAssignment(a.id)}
-                                                            >
-                                                                Xóa
-                                                            </button>
+                                                            {canRemoveRow && (
+                                                                <button
+                                                                    className="pp-btn pp-btn-danger pp-btn-sm"
+                                                                    onClick={() => handleRemoveAssignment(a.id)}
+                                                                >
+                                                                    {isUnable ? 'Gỡ & Thay người' : 'Hủy phân công'}
+                                                                </button>
+                                                            )}
                                                         </td>
                                                     )}
                                                 </tr>
@@ -610,6 +734,203 @@ function ProviderBookingDetail() {
                                         })}
                                     </tbody>
                                 </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Overtime Requests Card */}
+                    {overtimeRequests.length > 0 && (
+                        <div className="pp-card">
+                            <p className="pp-card-title">
+                                ⏱️ Yêu cầu gia hạn thời gian làm việc ({overtimeRequests.length})
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {overtimeRequests.map((req) => {
+                                    const reqStatus = String(req.status || '').toUpperCase();
+                                    const isPending = reqStatus === 'PENDING';
+                                    return (
+                                        <div
+                                            key={req.id}
+                                            style={{
+                                                border: isPending ? '1px solid #fcd34d' : '1px solid #e2e8f0',
+                                                background: isPending ? '#fffbeb' : '#f8fafc',
+                                                borderRadius: 8,
+                                                padding: '12px 14px'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                <strong>
+                                                    {req.cleanerName || 'Nhân viên'} — xin thêm +{req.requestedAdditionalMinutes} phút
+                                                </strong>
+                                                <span className={`pp-badge ${
+                                                    reqStatus === 'APPROVED'
+                                                        ? 'pp-badge-completed'
+                                                        : reqStatus === 'REJECTED'
+                                                            ? 'pp-badge-cancelled'
+                                                            : 'pp-badge-pending'
+                                                }`}>
+                                                    {reqStatus === 'APPROVED'
+                                                        ? 'Đã duyệt'
+                                                        : reqStatus === 'REJECTED'
+                                                            ? 'Đã từ chối'
+                                                            : 'Chờ duyệt'}
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: 13, color: '#334155', marginTop: 6 }}>
+                                                <strong>Lý do:</strong> {req.reason}
+                                            </div>
+                                            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                                                Gửi lúc: {formatDateTime(req.createdAt)}
+                                                {req.originalScheduledEnd && ` · Giờ kết thúc ban đầu: ${formatDateTime(req.originalScheduledEnd)}`}
+                                            </div>
+                                            {req.providerNote && (
+                                                <div style={{ fontSize: 12.5, color: '#475569', marginTop: 4 }}>
+                                                    <strong>Phản hồi đối tác:</strong> {req.providerNote}
+                                                </div>
+                                            )}
+                                            {isPending && (
+                                                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                                    <button
+                                                        type="button"
+                                                        className="pp-btn pp-btn-success pp-btn-sm"
+                                                        disabled={submitting}
+                                                        onClick={() => handleReviewOvertime(req.id, 'APPROVE')}
+                                                    >
+                                                        ✓ Duyệt gia hạn (+{req.requestedAdditionalMinutes}p)
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="pp-btn pp-btn-danger pp-btn-sm"
+                                                        disabled={submitting}
+                                                        onClick={() => handleReviewOvertime(req.id, 'REJECT')}
+                                                    >
+                                                        ✕ Từ chối
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Cleaner Work Logs & Incidents Card */}
+                    <div className="pp-card">
+                        <p className="pp-card-title">
+                            📋 Nhật ký thực hiện &amp; Báo cáo sự cố của nhân viên ({workLogs.length})
+                        </p>
+                        {workLogs.length === 0 ? (
+                            <div className="pp-empty" style={{ padding: '16px 0' }}>
+                                <p>Nhân viên chưa gửi nhật ký tiến độ, sự cố hoặc báo cáo tổng kết nào.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {workLogs.map((log) => {
+                                    const type = String(log.logType || '').toUpperCase();
+                                    const isIncident = type === 'INCIDENT';
+                                    const isFinal = type === 'FINAL_REPORT';
+                                    const incStatus = String(log.incidentStatus || 'OPEN').toUpperCase();
+                                    const images = Array.isArray(log.imageUrls) ? log.imageUrls : [];
+                                    return (
+                                        <div
+                                            key={log.id}
+                                            style={{
+                                                border: isIncident ? '1px solid #fecaca' : isFinal ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                                borderLeft: `4px solid ${isIncident ? '#ef4444' : isFinal ? '#16a34a' : '#3b82f6'}`,
+                                                background: isIncident ? '#fef2f2' : isFinal ? '#f0fdf4' : '#f8fafc',
+                                                borderRadius: 8,
+                                                padding: '12px 14px'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                                    <strong>
+                                                        {isIncident
+                                                            ? '🚨 Báo cáo sự cố'
+                                                            : isFinal
+                                                                ? '✅ Báo cáo tổng kết hoàn thành'
+                                                                : '📝 Cập nhật tiến độ'}
+                                                    </strong>
+                                                    {log.cleanerName && (
+                                                        <span style={{ fontSize: 12.5, color: '#475569' }}>
+                                                            — {log.cleanerName}
+                                                        </span>
+                                                    )}
+                                                    {isIncident && log.incidentSeverity && (
+                                                        <span className="pp-badge pp-badge-cancelled">
+                                                            Mức độ: {log.incidentSeverity}
+                                                        </span>
+                                                    )}
+                                                    {isIncident && (
+                                                        <span className={`pp-badge ${incStatus === 'RESOLVED' ? 'pp-badge-completed' : 'pp-badge-warning'}`}>
+                                                            {incStatus === 'RESOLVED'
+                                                                ? 'Đã xử lý'
+                                                                : incStatus === 'IN_PROGRESS'
+                                                                    ? 'Đang xử lý'
+                                                                    : incStatus === 'REJECTED'
+                                                                        ? 'Từ chối'
+                                                                        : 'Mới ghi nhận'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span style={{ fontSize: 12, color: '#64748b' }}>
+                                                    {formatDateTime(log.createdAt)}
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: 13.5, color: '#1e293b', marginTop: 6, whiteSpace: 'pre-line' }}>
+                                                {log.note}
+                                            </div>
+                                            {images.length > 0 && (
+                                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                                                    {images.map((url, imgIdx) => (
+                                                        <a
+                                                            key={`${log.id}-img-${imgIdx}`}
+                                                            href={url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            style={{ display: 'block' }}
+                                                        >
+                                                            <img
+                                                                src={url}
+                                                                alt={`Minh chứng ${imgIdx + 1}`}
+                                                                style={{
+                                                                    width: 76,
+                                                                    height: 76,
+                                                                    objectFit: 'cover',
+                                                                    borderRadius: 6,
+                                                                    border: '1px solid #cbd5e1'
+                                                                }}
+                                                            />
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {isIncident && incStatus !== 'RESOLVED' && incStatus !== 'REJECTED' && (
+                                                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                                    {incStatus === 'OPEN' && (
+                                                        <button
+                                                            type="button"
+                                                            className="pp-btn pp-btn-secondary pp-btn-sm"
+                                                            disabled={submitting}
+                                                            onClick={() => handleUpdateIncidentStatus(log.id, 'IN_PROGRESS')}
+                                                        >
+                                                            Tiếp nhận xử lý
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        className="pp-btn pp-btn-success pp-btn-sm"
+                                                        disabled={submitting}
+                                                        onClick={() => handleUpdateIncidentStatus(log.id, 'RESOLVED')}
+                                                    >
+                                                        ✓ Đánh dấu đã xử lý sự cố
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

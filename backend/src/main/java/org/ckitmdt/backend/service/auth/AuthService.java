@@ -32,13 +32,20 @@ public class AuthService {
     private String googleClientId;
 
     public AuthResponse register(RegisterRequest request) {
+        return createCustomerAccount(request, false);
+    }
 
+    public AuthResponse registerVerified(RegisterRequest request) {
+        return createCustomerAccount(request, true);
+    }
+
+    private AuthResponse createCustomerAccount(RegisterRequest request, boolean emailVerified) {
         String email = request.getEmail()
                 .trim()
                 .toLowerCase();
 
         if (userRepository.existsByEmail(email)) {
-            throw new RuntimeException("Email đã được sử dụng");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email đã được sử dụng");
         }
 
         User user = User.builder()
@@ -50,7 +57,7 @@ public class AuthService {
                 )
                 .role("CUSTOMER")
                 .status("ACTIVE")
-                .emailVerified(false)
+                .emailVerified(emailVerified)
                 .build();
 
         User savedUser = userRepository.save(user);
@@ -73,25 +80,29 @@ public class AuthService {
                 .toLowerCase();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() ->
-                        new RuntimeException(
+                        new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
                                 "Email hoặc mật khẩu không chính xác"
                         )
                 );
         if (!"ACTIVE".equals(user.getStatus())) {
-            throw new RuntimeException(
-                    "Tài khoản đã bị khóa"
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Tài khoản đã bị khóa hoặc tạm ngừng hoạt động"
             );
         }
         if (user.getPasswordHash() == null) {
-            throw new RuntimeException(
-                    "Tài khoản này đăng nhập bằng Google"
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Tài khoản này đăng nhập bằng Google/Facebook"
             );
         }
         if (!passwordEncoder.matches(
                 request.getPassword(),
                 user.getPasswordHash()
         )) {
-            throw new RuntimeException(
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
                     "Email hoặc mật khẩu không chính xác"
             );
         }
@@ -121,18 +132,18 @@ public class AuthService {
                             .build();
             GoogleIdToken idToken = verifier.verify(request.getCredential());
             if (idToken == null) {
-                throw new RuntimeException("Google token không hợp lệ");
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Google token không hợp lệ");
             }
             GoogleIdToken.Payload payload = idToken.getPayload();
 
             String email = payload.getEmail();
             if (email == null) {
-                throw new RuntimeException("Không lấy được email từ Google");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Không lấy được email từ Google");
             }
             email = email.trim().toLowerCase();
             Boolean emailVerified = payload.getEmailVerified();
             if (!Boolean.TRUE.equals(emailVerified)) {
-                throw new RuntimeException("Email Google chưa được xác minh");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email Google chưa được xác minh");
             }
             String fullName = (String) payload.get("name");
             String avatarUrl = (String) payload.get("picture");
@@ -152,7 +163,14 @@ public class AuthService {
 
                         return userRepository.save(newUser);
                     });
-            if (!"ACTIVE".equals(user.getStatus())) {throw new RuntimeException("Tài khoản đã bị khóa");
+            if (!"ACTIVE".equals(user.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản đã bị khóa");
+            }
+            // Ngăn chặn pre-hijack: nếu tài khoản cũ chưa xác thực email, xóa mật khẩu chưa xác thực và xác nhận email theo Google
+            if (!Boolean.TRUE.equals(user.getEmailVerified())) {
+                user.setPasswordHash(null);
+                user.setEmailVerified(true);
+                user = userRepository.save(user);
             }
             String token = jwtService.generateToken(
                     user.getId(),
@@ -169,10 +187,10 @@ public class AuthService {
                     user.getEmail(),
                     user.getRole()
             );
-        } catch (RuntimeException e) {
+        } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Đăng nhập Google thất bại", e);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Đăng nhập Google thất bại", e);
         }
     }
 

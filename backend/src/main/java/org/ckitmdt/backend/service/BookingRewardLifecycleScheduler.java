@@ -7,6 +7,7 @@ import org.ckitmdt.backend.repository.BookingRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -18,8 +19,11 @@ public class BookingRewardLifecycleScheduler {
 
     @Scheduled(fixedDelay = 60000)
     public void processRewardLifecycle() {
-        List<Booking> bookings = bookingRepository.findByStatusIn(
-                List.of("COMPLETED", "CANCELLED", "REJECTED", "EXPIRED")
+        // Chỉ quét các đơn có cập nhật trong 14 ngày gần nhất để tránh khóa toàn bảng lịch sử mỗi phút
+        LocalDateTime lookback = LocalDateTime.now().minusDays(14);
+        List<Booking> bookings = bookingRepository.findByStatusInAndUpdatedAtGreaterThanEqual(
+                List.of("COMPLETED", "CANCELLED", "REJECTED", "EXPIRED"),
+                lookback
         );
 
         for (Booking booking : bookings) {

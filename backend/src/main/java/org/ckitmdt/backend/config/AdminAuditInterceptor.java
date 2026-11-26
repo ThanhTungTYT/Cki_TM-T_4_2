@@ -36,7 +36,10 @@ public class AdminAuditInterceptor implements HandlerInterceptor {
             "/api/admin/accounts",
             "/api/admin/providers",
             "/api/admin/operations/assignments",
-            "/api/admin/outbox"
+            "/api/admin/outbox",
+            "/api/admin/provider-settlements",
+            "/api/admin/provider-service-approvals",
+            "/api/admin/rewards/policy"
     );
 
     private final AdminAuditLogService auditLogService;
@@ -129,11 +132,12 @@ public class AdminAuditInterceptor implements HandlerInterceptor {
             String path,
             String method
     ) {
-        if (path.startsWith("/api/admin/")) {
-            return true;
+        // POST /api/admin/promotions đã tự ghi audit log chi tiết trong AdminPromotionController
+        if ("POST".equals(method) && ("/api/admin/promotions".equals(path) || "/api/admin/promotions/".equals(path))) {
+            return false;
         }
 
-        if (path.matches("/api/refunds/\\d+/review/?")) {
+        if (path.startsWith("/api/admin/")) {
             return true;
         }
 

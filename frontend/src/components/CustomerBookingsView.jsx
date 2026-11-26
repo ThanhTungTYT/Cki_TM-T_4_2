@@ -204,6 +204,7 @@ function mapBooking(booking) {
             subtotal: booking.subtotal ?? null,
             discount: booking.discountAmount ?? null,
             pointsDiscount: booking.pointsDiscount ?? null,
+            platformFee: booking.platformFee ?? 0,
             totalAmount: booking.totalAmount ?? null
         },
         paymentMethod: booking.paymentMethod || '',
@@ -1263,6 +1264,15 @@ export default function CustomerBookingsView() {
                                                 </div>
                                             )}
 
+                                            {Number(selectedBooking.pricing.platformFee) > 0 && (
+                                                <div className="calc-row">
+                                                    <span>Phí nền tảng:</span>
+                                                    <span>
+                                                        +{formatPrice(selectedBooking.pricing.platformFee)}
+                                                    </span>
+                                                </div>
+                                            )}
+
                                             <div className="calc-row final">
                                                 <span>
                                                     Tổng tiền
@@ -1375,7 +1385,13 @@ export default function CustomerBookingsView() {
                                             return (
                                                 <article className={`customer-work-log ${logType === 'INCIDENT' ? 'incident' : ''}`} key={log.id}>
                                                     <div className="customer-work-log-heading">
-                                                        <strong>{logType === 'INCIDENT' ? 'Báo cáo sự cố' : 'Cập nhật tiến độ'}</strong>
+                                                        <strong>
+                                                            {logType === 'INCIDENT'
+                                                                ? 'Báo cáo sự cố'
+                                                                : logType === 'FINAL_REPORT'
+                                                                    ? 'Báo cáo hoàn thành'
+                                                                    : 'Cập nhật tiến độ'}
+                                                        </strong>
                                                         <time>{formatDate(log.createdAt)}</time>
                                                     </div>
                                                     {log.cleanerName && <span className="customer-work-log-author">Nhân viên: {log.cleanerName}</span>}

@@ -570,6 +570,20 @@ public class PartnerOnboardingController {
         map.put("bankAccountHolder", p.getBankAccountHolder());
         map.put("termsAcceptedAt", p.getTermsAcceptedAt());
         map.put("rejectionReason", p.getRejectionReason());
+        List<PartnerStatusHistory> histories = historyRepository.findByPartnerIdOrderByChangedAtDesc(p.getId());
+        PartnerStatusHistory latestRequestInfo = null;
+        for (PartnerStatusHistory h : histories) {
+            String action = h.getActionType() == null ? "" : h.getActionType().trim().toUpperCase(Locale.ROOT);
+            if ("RESUBMIT".equals(action) || "APPROVE".equals(action)) {
+                break;
+            }
+            if ("REQUEST_INFO".equals(action) && h.getReason() != null && !h.getReason().isBlank()) {
+                latestRequestInfo = h;
+                break;
+            }
+        }
+        map.put("latestRequestInfoNote", latestRequestInfo != null ? latestRequestInfo.getReason() : null);
+        map.put("latestRequestInfoAt", latestRequestInfo != null ? latestRequestInfo.getChangedAt() : null);
         map.put("createdAt", p.getCreatedAt());
         map.put("updatedAt", p.getUpdatedAt());
         if (p.getUser() != null) {

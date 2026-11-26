@@ -132,6 +132,12 @@ public class RewardController {
 
         for (Promotion promotion : promotionRepository.findCurrentlyAvailable(now)) {
             if (personallyAvailablePromotionIds.contains(promotion.getId())) continue;
+            // Không rò rỉ voucher cá nhân đổi bằng Ccoin của khách hàng khác sang danh sách dùng chung
+            if (rewardRedemptionRepository.existsByPromotion_Id(promotion.getId())
+                    && promotion.getUsageLimit() != null
+                    && promotion.getUsageLimit() <= 1) {
+                continue;
+            }
             vouchers.add(new VoucherResponse(
                     -promotion.getId(), promotion.getCode(), promotion.getName(),
                     promotion.getDescription(), promotion.getDiscountType(),

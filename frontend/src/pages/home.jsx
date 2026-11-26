@@ -261,7 +261,7 @@ function Home() {
                     {!loading && !error && services.length > 0 && (
                         <div className="service-grid">
                             {services.map((service) => (
-                                <article className="service-card" key={service.id}>
+                                <article className="service-card" key={`${service.id}-${service.providerId ?? ''}`}>
                                     {service.thumbnailUrl ? (
                                         <img
                                             className="home-service-image"
@@ -287,7 +287,11 @@ function Home() {
 
                                     <button
                                         type="button"
-                                        onClick={() => navigate(`/service-detail/${service.id}`)}
+                                        onClick={() => navigate(
+                                            service.providerId
+                                                ? `/service-detail/${service.id}?partnerId=${service.providerId}`
+                                                : `/service-detail/${service.id}`
+                                        )}
                                     >
                                         Xem chi tiết
                                     </button>

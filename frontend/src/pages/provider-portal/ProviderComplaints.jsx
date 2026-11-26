@@ -88,8 +88,10 @@ function ProviderComplaints() {
             WAITING_PROVIDER: { cls: 'pp-badge-warning', label: 'Chờ đối tác' },
             PROVIDER_RESPONDED: { cls: 'pp-badge-confirmed', label: 'Đã giải trình' },
             IN_PROGRESS: { cls: 'pp-badge-assigned', label: 'Đang xác minh' },
+            UNDER_REVIEW: { cls: 'pp-badge-warning', label: 'Admin đang thẩm định' },
             RESOLVED: { cls: 'pp-badge-completed', label: 'Đã kết luận' },
             REJECTED: { cls: 'pp-badge-cancelled', label: 'Bị bác bỏ' },
+            CLOSED: { cls: 'pp-badge-completed', label: 'Đã đóng' },
         };
         const cfg = map[(s || '').toUpperCase()] || { cls: '', label: s || '—' };
         return <span className={`pp-badge ${cfg.cls}`}>{cfg.label}</span>;
@@ -129,8 +131,10 @@ function ProviderComplaints() {
                         <option value="WAITING_PROVIDER">Chờ đối tác phản hồi</option>
                         <option value="PROVIDER_RESPONDED">Đã gửi giải trình</option>
                         <option value="IN_PROGRESS">Đang xác minh</option>
+                        <option value="UNDER_REVIEW">Admin đang thẩm định</option>
                         <option value="RESOLVED">Đã kết luận</option>
                         <option value="REJECTED">Bị bác bỏ</option>
+                        <option value="CLOSED">Đã đóng</option>
                     </select>
                 </div>
             </div>
@@ -261,11 +265,23 @@ function ProviderComplaints() {
                                             </div>
                                         ) : (
                                             <div className="pp-timeline">
-                                                {ticketDetail.responses.map((r) => (
-                                                    <div key={r.id} className={`pp-bubble ${r.authorRole?.toLowerCase() === 'provider' ? 'provider' : 'staff'}`}>
+                                                {ticketDetail.responses.map((r) => {
+                                                    const roleUpper = String(r.authorRole || '').toUpperCase();
+                                                    const bubbleClass = roleUpper === 'PROVIDER'
+                                                        ? 'provider'
+                                                        : roleUpper === 'CUSTOMER'
+                                                            ? 'customer'
+                                                            : 'staff';
+                                                    const roleIcon = roleUpper === 'PROVIDER'
+                                                        ? '🏢 '
+                                                        : roleUpper === 'CUSTOMER'
+                                                            ? '👤 '
+                                                            : '🛡️ ';
+                                                    return (
+                                                    <div key={r.id} className={`pp-bubble ${bubbleClass}`}>
                                                         <div className="pp-bubble-header">
                                                             <strong>
-                                                                {r.authorRole === 'PROVIDER' ? '🏢 ' : '🛡️ '}
+                                                                {roleIcon}
                                                                 {r.authorName || r.authorRole}
                                                             </strong>
                                                             <span>{r.createdAt ? new Date(r.createdAt).toLocaleString('vi-VN') : ''}</span>
@@ -286,13 +302,14 @@ function ProviderComplaints() {
                                                             </div>
                                                         )}
                                                     </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </div>
 
                                     {/* Form gửi giải trình mới */}
-                                    {ticketDetail.status !== 'RESOLVED' && ticketDetail.status !== 'REJECTED' && (
+                                    {!['RESOLVED', 'REJECTED', 'CLOSED'].includes(String(ticketDetail.status || '').toUpperCase()) && (
                                         <div style={{ borderTop: '1px solid var(--pp-border)', paddingTop: 14 }}>
                                             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--pp-navy)', marginBottom: 8 }}>
                                                 Gửi giải trình từ Đối tác
@@ -326,7 +343,7 @@ function ProviderComplaints() {
 
                         <div className="pp-modal-footer">
                             <button className="pp-btn pp-btn-ghost" onClick={() => setSelectedTicket(null)}>Đóng</button>
-                            {ticketDetail && ticketDetail.status !== 'RESOLVED' && ticketDetail.status !== 'REJECTED' && (
+                            {ticketDetail && !['RESOLVED', 'REJECTED', 'CLOSED'].includes(String(ticketDetail.status || '').toUpperCase()) && (
                                 <button
                                     className="pp-btn pp-btn-primary"
                                     onClick={handleSubmitResponse}

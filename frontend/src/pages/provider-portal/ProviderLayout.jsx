@@ -1,4 +1,4 @@
-import { NavLink, Link, useNavigate, Outlet } from 'react-router-dom';
+import { NavLink, Link, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import React, { Component, useEffect, useState } from 'react';
 import { providerDashboardApi, providerNotificationApi } from '../../services/providerApi';
 import './ProviderPortal.css';
@@ -155,6 +155,7 @@ class ProviderErrorBoundary extends Component {
 
 function ProviderLayout() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [businessName, setBusinessName] = useState('');
     const [userName, setUserName] = useState('');
     const [notifications, setNotifications] = useState([]);
@@ -183,6 +184,14 @@ function ProviderLayout() {
         setShowNotifs(false);
         if (notif.referenceType === 'BOOKING' && notif.referenceId) {
             navigate(`/provider-portal/bookings/${notif.referenceId}`);
+        } else if (notif.referenceType === 'REPORT_TICKET') {
+            navigate('/provider-portal/complaints');
+        } else if (notif.referenceType === 'PROVIDER_SETTLEMENT') {
+            navigate('/provider-portal/revenue');
+        } else if (notif.referenceType === 'CLEANER_OVERTIME_REQUEST') {
+            navigate('/provider-portal/bookings');
+        } else if (notif.referenceType === 'BUSINESS_CHANGE_REQUEST') {
+            navigate('/provider-portal/dashboard');
         }
     }
 
@@ -225,7 +234,15 @@ function ProviderLayout() {
             })
             .catch((err) => {
                 const msg = String(err?.message || '').toLowerCase();
-                if (msg.includes('duyệt') || msg.includes('phê duyệt') || msg.includes('chờ') || msg.includes('từ chối') || msg.includes('hồ sơ')) {
+                if (
+                    err?.code === 'PARTNER_NOT_APPROVED' ||
+                    err?.status === 403 ||
+                    msg.includes('duyệt') ||
+                    msg.includes('phê duyệt') ||
+                    msg.includes('chờ') ||
+                    msg.includes('từ chối') ||
+                    msg.includes('hồ sơ')
+                ) {
                     navigate('/partner-onboarding', { replace: true });
                 }
             });
@@ -294,7 +311,7 @@ function ProviderLayout() {
                 <header className="pp-topbar">
                     <span className="pp-topbar-title">
                         {NAV_ITEMS.find(n =>
-                            window.location.pathname.startsWith(n.to)
+                            location.pathname.startsWith(n.to)
                         )?.label || 'Cổng đối tác'}
                     </span>
                     <div className="pp-topbar-actions">
@@ -347,7 +364,7 @@ function ProviderLayout() {
                             </button>
 
                             {showNotifs && (
-                                <div style={{
+                                <div className="pp-notif-dropdown" style={{
                                     position: 'absolute',
                                     right: 0,
                                     top: 44,
@@ -454,7 +471,11 @@ function ProviderLayout() {
                 </header>
 
                 <main className="pp-content">
-                    <ProviderErrorBoundary><Outlet /></ProviderErrorBoundary>
+                    <ProviderErrorBoundary>
+                        <div key={location.pathname} className="cm-page-transition">
+                            <Outlet />
+                        </div>
+                    </ProviderErrorBoundary>
                 </main>
             </div>
         </div>

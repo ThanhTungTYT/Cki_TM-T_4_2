@@ -28,6 +28,8 @@ public class CreateBookingRequest {
     @NotNull(message = "scheduledStart is required")
     private LocalDateTime scheduledStart;
 
+    private String receiverName;
+    private String receiverPhone;
     private String customerNote;
     private String voucherCode;
     private String paymentMethod;

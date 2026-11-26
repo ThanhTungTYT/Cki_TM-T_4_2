@@ -2,11 +2,13 @@
 package org.ckitmdt.backend.service.admin;
 
 import lombok.RequiredArgsConstructor;
+import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.entity.ProviderSettlement;
 import org.ckitmdt.backend.entity.ProviderSettlementItem;
 import org.ckitmdt.backend.entity.Payment;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.PartnerRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
@@ -39,14 +41,16 @@ public class ProviderSettlementService {
     private final PartnerRepository partnerRepository;
     private final PaymentRepository paymentRepository;
     private final AdminAuditLogService auditLogService;
+    private final AdminNotificationRepository notificationRepository;
 
     private boolean isOnlinePaidBooking(Booking booking) {
         if (booking == null || booking.getId() == null) {
             return false;
         }
-        return paymentRepository.findByBooking_IdAndStatusIgnoreCase(booking.getId(), "SUCCESS")
+        return paymentRepository.findByBooking_Id(booking.getId())
                 .stream()
-                .anyMatch(p -> p.getPaymentMethod() != null
+                .filter(p -> "SUCCESS".equalsIgnoreCase(p.getStatus()) || "PAID".equalsIgnoreCase(p.getStatus()))
+                .anyMatch(p -> !"CASH".equalsIgnoreCase(p.getPaymentProvider())
                         && !"CASH".equalsIgnoreCase(p.getPaymentMethod())
                         && !"CASH_ON_SERVICE".equalsIgnoreCase(p.getPaymentMethod()));
     }
@@ -269,6 +273,19 @@ public class ProviderSettlementService {
                 "APPROVED; approvedBy=" + actor + "; approvedAt=" + now
         );
 
+        if (settlement.getPartner() != null && settlement.getPartner().getUser() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(settlement.getPartner().getUser())
+                    .type("PROVIDER_SETTLEMENT_APPROVED")
+                    .title("Kỳ đối soát #" + settlement.getId() + " đã được duyệt")
+                    .message("Kỳ đối soát từ " + settlement.getPeriodStart() + " đến " + settlement.getPeriodEnd()
+                            + " với số tiền chi trả " + settlement.getPayoutAmount() + "đ đã được duyệt, chờ chuyển khoản.")
+                    .referenceType("PROVIDER_SETTLEMENT")
+                    .referenceId(settlement.getId())
+                    .createdAt(now)
+                    .build());
+        }
+
         return toMap(settlement);
     }
 
@@ -333,6 +350,20 @@ public class ProviderSettlementService {
                         + "; reference=" + transferReference.trim()
                         + "; evidence=" + evidenceUrl.trim()
         );
+
+        if (settlement.getPartner() != null && settlement.getPartner().getUser() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(settlement.getPartner().getUser())
+                    .type("PROVIDER_SETTLEMENT_PAID")
+                    .title("CleanMate đã chuyển khoản đối soát #" + settlement.getId())
+                    .message("Khoản chi trả đối soát " + settlement.getPayoutAmount() + "đ (kỳ "
+                            + settlement.getPeriodStart() + " - " + settlement.getPeriodEnd()
+                            + ") đã được chuyển khoản. Mã GD: " + transferReference.trim())
+                    .referenceType("PROVIDER_SETTLEMENT")
+                    .referenceId(settlement.getId())
+                    .createdAt(now)
+                    .build());
+        }
 
         return toMap(settlement);
     }

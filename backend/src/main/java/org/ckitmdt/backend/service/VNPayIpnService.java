@@ -1,8 +1,14 @@
 package org.ckitmdt.backend.service;
 
 import lombok.RequiredArgsConstructor;
+import org.ckitmdt.backend.entity.AdminNotification;
+import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.Payment;
+import org.ckitmdt.backend.entity.User;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
+import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
+import org.ckitmdt.backend.repository.UserRepository;
 import org.ckitmdt.backend.dto.booking.BookingActionRequest;
 import org.ckitmdt.backend.dto.booking.BookingActionEnum;
 import org.ckitmdt.backend.service.booking.BookingStateEngine;
@@ -13,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -21,6 +28,9 @@ public class VNPayIpnService {
 
     private final VNPayService vnPayService;
     private final PaymentRepository paymentRepository;
+    private final BookingRepository bookingRepository;
+    private final AdminNotificationRepository adminNotificationRepository;
+    private final UserRepository userRepository;
     private final BookingStateEngine bookingStateEngine;
     private final CancellationRefundService cancellationRefundService;
     private final CustomerNotificationService customerNotificationService;
@@ -91,45 +101,82 @@ public class VNPayIpnService {
             }
 
             LocalDateTime paidAt = LocalDateTime.now();
-            boolean bookingCanAcceptPayment = payment.getBooking() != null
-                    && "PENDING_PAYMENT".equals(payment.getBooking().getStatus())
-                    && (payment.getBooking().getHoldExpiresAt() == null
-                    || !paidAt.isAfter(payment.getBooking().getHoldExpiresAt()));
-            if (!bookingCanAcceptPayment) {
-                payment.setStatus("REVIEW");
-                payment.setTransactionCode(transactionNo);
-                payment.setPaidAt(paidAt);
-                paymentRepository.save(payment);
-                if (payment.getBooking() != null) {
-                    cancellationRefundService.createLatePaymentRefund(
-                            payment.getBooking().getId(), payment.getAmount(), transactionNo);
-                    customerNotificationService.notifyCustomer(payment.getBooking().getCustomer(), "PAYMENT_REVIEW",
-                            "Thanh toán cần được kiểm tra", "Thanh toán cho đơn "
-                                    + payment.getBooking().getBookingCode()
-                                    + " đến sau thời hạn giữ chỗ và đang được xử lý hoàn tiền.",
-                            "BOOKING", payment.getBooking().getId());
-                }
-                return result("00", "Confirm Success");
-            }
+            // Khóa Booking trước khi kiểm tra trạng thái & alreadyPaid để chống race condition thanh toán trùng
+            Booking lockedBooking = payment.getBooking() != null && payment.getBooking().getId() != null
+                    ? bookingRepository.findByIdForUpdate(payment.getBooking().getId()).orElse(null)
+                    : null;
 
-            boolean alreadyPaid =
-                    paymentRepository.existsByBooking_IdAndStatus(
-                            payment.getBooking().getId(),
+            boolean alreadyPaid = lockedBooking != null
+                    && paymentRepository.existsByBooking_IdAndStatus(
+                            lockedBooking.getId(),
                             "SUCCESS"
                     );
 
             if (alreadyPaid) {
                 payment.setStatus("REVIEW");
                 payment.setTransactionCode(transactionNo);
+                payment.setPaidAt(paidAt);
                 paymentRepository.save(payment);
-                moveBookingToProviderQueue(payment);
 
+                cancellationRefundService.createDuplicatePaymentRefund(
+                        lockedBooking.getId(), payment.getAmount(), transactionNo);
+
+                if (lockedBooking.getCustomer() != null) {
+                    customerNotificationService.notifyCustomer(
+                            lockedBooking.getCustomer(),
+                            "PAYMENT_DUPLICATE_REVIEW",
+                            "Phát hiện thanh toán trùng lặp",
+                            "Đơn " + lockedBooking.getBookingCode()
+                                    + " đã được thanh toán trước đó. Giao dịch trùng lặp (" + transactionNo
+                                    + ") đã được tự động tạo yêu cầu hoàn tiền để Admin kiểm tra.",
+                            "BOOKING",
+                            lockedBooking.getId()
+                    );
+                }
+
+                List<User> admins = userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("ADMIN", "ACTIVE");
+                for (User admin : admins) {
+                    adminNotificationRepository.save(AdminNotification.builder()
+                            .recipient(admin)
+                            .type("PAYMENT_DUPLICATE_REVIEW")
+                            .title("Phát hiện thanh toán VNPay trùng lặp")
+                            .message("Đơn #" + lockedBooking.getBookingCode()
+                                    + " phát sinh giao dịch VNPay trùng lặp (" + transactionNo
+                                    + ", số tiền " + payment.getAmount() + "đ). Hệ thống đã tạo yêu cầu hoàn tiền chờ duyệt.")
+                            .referenceType("BOOKING")
+                            .referenceId(lockedBooking.getId())
+                            .createdAt(paidAt)
+                            .build());
+                }
+
+                moveBookingToProviderQueue(payment);
+                return result("00", "Confirm Success");
+            }
+
+            boolean bookingCanAcceptPayment = lockedBooking != null
+                    && "PENDING_PAYMENT".equals(lockedBooking.getStatus())
+                    && (lockedBooking.getHoldExpiresAt() == null
+                    || !paidAt.isAfter(lockedBooking.getHoldExpiresAt()));
+            if (!bookingCanAcceptPayment) {
+                payment.setStatus("REVIEW");
+                payment.setTransactionCode(transactionNo);
+                payment.setPaidAt(paidAt);
+                paymentRepository.save(payment);
+                if (lockedBooking != null) {
+                    cancellationRefundService.createLatePaymentRefund(
+                            lockedBooking.getId(), payment.getAmount(), transactionNo);
+                    customerNotificationService.notifyCustomer(lockedBooking.getCustomer(), "PAYMENT_REVIEW",
+                            "Thanh toán cần được kiểm tra", "Thanh toán cho đơn "
+                                    + lockedBooking.getBookingCode()
+                                    + " đến sau thời hạn giữ chỗ và đang được xử lý hoàn tiền.",
+                            "BOOKING", lockedBooking.getId());
+                }
                 return result("00", "Confirm Success");
             }
 
             payment.setStatus("SUCCESS");
             payment.setTransactionCode(transactionNo);
-            payment.setPaidAt(LocalDateTime.now());
+            payment.setPaidAt(paidAt);
 
         } else if ("07".equals(responseCode)
                 || "07".equals(transactionStatus)) {

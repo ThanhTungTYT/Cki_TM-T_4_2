@@ -33,12 +33,23 @@ const DEFAULT_POLICY = {
     allowCombineWithPromotion: false,
 };
 
+function getCurrentRole() {
+    try {
+        const user = JSON.parse(
+            sessionStorage.getItem("user") || localStorage.getItem("user") || "{}"
+        );
+        return String(user.role || "").trim().toUpperCase().replace(/^ROLE_/, "");
+    } catch {
+        return "";
+    }
+}
+
 function getToken() {
     return (
-        localStorage.getItem("accessToken") ||
-        localStorage.getItem("token") ||
         sessionStorage.getItem("accessToken") ||
         sessionStorage.getItem("token") ||
+        localStorage.getItem("accessToken") ||
+        localStorage.getItem("token") ||
         ""
     );
 }
@@ -114,6 +125,7 @@ function statusLabel(status) {
 }
 
 export default function AdminPromotions() {
+    const isAdmin = getCurrentRole() === "ADMIN";
     const [activeTab, setActiveTab] = useState("promotions");
     const [promotions, setPromotions] = useState([]);
     const [accounts, setAccounts] = useState([]);
@@ -210,14 +222,18 @@ export default function AdminPromotions() {
         });
     }, [promotions, keyword, statusFilter]);
 
+    const toLocalDateTimeInput = (ms) => {
+        const d = new Date(ms);
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+
     const openCreate = () => {
         setEditingPromotion(null);
         setForm({
             ...EMPTY_PROMOTION,
-            startAt: new Date(Date.now() + 60000).toISOString().slice(0, 16),
-            endAt: new Date(Date.now() + 30 * 86400000)
-                .toISOString()
-                .slice(0, 16),
+            startAt: toLocalDateTimeInput(Date.now() + 60000),
+            endAt: toLocalDateTimeInput(Date.now() + 30 * 86400000),
         });
         setError("");
         setModalOpen(true);
@@ -829,18 +845,22 @@ export default function AdminPromotions() {
                                 Cho phép kết hợp điểm với voucher nếu voucher cũng cho phép
                             </label>
 
-                            <button
-                                className="promotion-primary-btn"
-                                type="submit"
-                                disabled={saving}
-                            >
-                                {saving ? "Đang lưu..." : "Lưu chính sách"}
-                            </button>
+                            {isAdmin ? (
+                                <button
+                                    className="promotion-primary-btn"
+                                    type="submit"
+                                    disabled={saving}
+                                >
+                                    {saving ? "Đang lưu..." : "Lưu chính sách"}
+                                </button>
+                            ) : (
+                                <p className="promotion-footnote" style={{ color: "#b45309", fontWeight: 600 }}>
+                                    Chỉ Quản trị viên (Admin) mới có quyền thay đổi chính sách điểm thưởng Ccoin.
+                                </p>
+                            )}
 
                             <p className="promotion-footnote">
-                                Công thức tích điểm được cố định theo quy tắc
-                                nghiệp vụ. Phần này lưu cấu hình đổi điểm, thời hạn
-                                Ccoin và hỗ trợ điều chỉnh điểm thủ công.
+                                Chính sách tích điểm, quy đổi và thời hạn Ccoin tại đây được áp dụng trực tiếp khi hoàn tất đơn hàng và thanh toán.
                             </p>
                         </form>
 
@@ -877,18 +897,22 @@ export default function AdminPromotions() {
                                             <td>{account.totalEarned} điểm</td>
                                             <td>{account.totalRedeemed} điểm</td>
                                             <td>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setAdjustingAccount(account);
-                                                        setAdjustment({
-                                                            points: "",
-                                                            reason: "",
-                                                        });
-                                                    }}
-                                                >
-                                                    Điều chỉnh
-                                                </button>
+                                                {isAdmin ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setAdjustingAccount(account);
+                                                            setAdjustment({
+                                                                points: "",
+                                                                reason: "",
+                                                            });
+                                                        }}
+                                                    >
+                                                        Điều chỉnh
+                                                    </button>
+                                                ) : (
+                                                    <span style={{ color: "#94a3b8", fontSize: 12 }}>Chỉ xem</span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}

@@ -7,6 +7,7 @@ import org.ckitmdt.backend.dto.booking.*;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.BookingAssignment;
 import org.ckitmdt.backend.entity.BookingStatusHistory;
+import org.ckitmdt.backend.entity.CancellationRefund;
 import org.ckitmdt.backend.entity.Employee;
 import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.repository.EmployeeRepository;
@@ -121,10 +122,10 @@ public class BookingStateEngine {
         if (action == BookingActionEnum.CANCEL && currentUser != null) {
             String uRole = normalizeRole(currentUser.getRole());
             boolean isPartnerActor = booking.getPartner() != null && booking.getPartner().getUser() != null && booking.getPartner().getUser().getId().equals(currentUser.getId());
-            if ((isStaffRole(uRole) || isPartnerActor) && (request.getNote() == null || request.getNote().isBlank())) {
+            if ((isAdminRole(uRole) || isPartnerActor) && (request.getNote() == null || request.getNote().isBlank())) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        (isPartnerActor ? "Nhà cung cấp" : "Admin/Staff") + " phải ghi rõ lý do khi hủy đơn hàng."
+                        (isPartnerActor ? "Nhà cung cấp" : "Admin") + " phải ghi rõ lý do khi hủy đơn hàng."
                 );
             }
         }
@@ -201,8 +202,25 @@ public class BookingStateEngine {
                     .build());
 
             customerNotificationService.notifyBookingStatus(expiredBooking);
+            rewardLifecycleService.processBooking(expiredBooking.getId());
 
             return mapToBookingResponse(expiredBooking);
+        }
+
+        if (action == BookingActionEnum.PROVIDER_ACCEPT
+                && currentStatus == BookingStatusEnum.PENDING_PROVIDER) {
+            LocalDateTime checkNow = LocalDateTime.now();
+            LocalDateTime deadline = booking.getProviderDeadlineAt();
+            if (deadline == null && booking.getScheduledStart() != null && booking.getCreatedAt() != null) {
+                deadline = BookingService.calculateProviderDeadline(booking.getScheduledStart(), booking.getCreatedAt());
+            }
+            if ((deadline != null && !checkNow.isBefore(deadline))
+                    || (booking.getScheduledStart() != null && !checkNow.isBefore(booking.getScheduledStart()))) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Đơn hàng đã quá thời hạn tiếp nhận hoặc đã qua giờ hẹn nên không thể xác nhận."
+                );
+            }
         }
 
         BookingStatusEnum targetStatus = determineNextStatus(
@@ -247,6 +265,17 @@ public class BookingStateEngine {
                     if (emp != null) {
                         emp.setTotalCompletedJobs((emp.getTotalCompletedJobs() != null ? emp.getTotalCompletedJobs() : 0) + 1);
                         employeeRepository.save(emp);
+                        if (emp.getUser() != null) {
+                            adminNotificationRepository.save(AdminNotification.builder()
+                                    .recipient(emp.getUser())
+                                    .type("BOOKING_COMPLETED")
+                                    .title("Khách hàng đã nghiệm thu đơn #" + booking.getBookingCode())
+                                    .message("Đơn hàng #" + booking.getBookingCode() + " đã hoàn thành. Cảm ơn bạn đã hoàn thành tốt công việc!")
+                                    .referenceType("BOOKING_ASSIGNMENT")
+                                    .referenceId(a.getId())
+                                    .createdAt(now)
+                                    .build());
+                        }
                     }
                 }
             }
@@ -254,6 +283,17 @@ public class BookingStateEngine {
                 Partner p = booking.getPartner();
                 p.setTotalCompletedJobs((p.getTotalCompletedJobs() != null ? p.getTotalCompletedJobs() : 0) + 1);
                 partnerRepository.save(p);
+                if (p.getUser() != null) {
+                    adminNotificationRepository.save(AdminNotification.builder()
+                            .recipient(p.getUser())
+                            .type("BOOKING_COMPLETED")
+                            .title("Đơn hàng #" + booking.getBookingCode() + " đã hoàn thành")
+                            .message("Khách hàng đã xác nhận nghiệm thu hoàn thành đơn hàng #" + booking.getBookingCode() + ".")
+                            .referenceType("BOOKING")
+                            .referenceId(booking.getId())
+                            .createdAt(now)
+                            .build());
+                }
             }
         }
 
@@ -269,9 +309,44 @@ public class BookingStateEngine {
             List<BookingAssignment> assignments = bookingAssignmentRepository.findByBooking_IdOrderByIdAsc(booking.getId());
             for (BookingAssignment a : assignments) {
                 if (!"COMPLETED".equalsIgnoreCase(a.getStatus())) {
+                    boolean wasActive = !"CANCELLED".equalsIgnoreCase(a.getStatus())
+                            && !"DECLINED".equalsIgnoreCase(a.getStatus());
                     a.setStatus("CANCELLED");
                     bookingAssignmentRepository.save(a);
+                    if (wasActive && a.getEmployee() != null && a.getEmployee().getUser() != null) {
+                        adminNotificationRepository.save(AdminNotification.builder()
+                                .recipient(a.getEmployee().getUser())
+                                .type("BOOKING_CANCELLED")
+                                .title("Đơn hàng #" + booking.getBookingCode() + " đã bị hủy")
+                                .message("Phân công cho đơn hàng #" + booking.getBookingCode() + " đã bị hủy"
+                                        + (booking.getCancelReason() != null && !booking.getCancelReason().isBlank()
+                                                ? ". Lý do: " + booking.getCancelReason() : "."))
+                                .referenceType("BOOKING_ASSIGNMENT")
+                                .referenceId(a.getId())
+                                .createdAt(now)
+                                .build());
+                    }
                 }
+            }
+
+            boolean cancelledByCustomer = currentUser != null
+                    && booking.getCustomer() != null
+                    && currentUser.getId().equals(booking.getCustomer().getId());
+            if (cancelledByCustomer
+                    && booking.getPartner() != null
+                    && booking.getPartner().getUser() != null) {
+                adminNotificationRepository.save(AdminNotification.builder()
+                        .recipient(booking.getPartner().getUser())
+                        .type("BOOKING_CANCELLED_BY_CUSTOMER")
+                        .title("Khách hàng đã hủy đơn #" + booking.getBookingCode())
+                        .message("Khách hàng " + booking.getCustomer().getFullName()
+                                + " đã hủy đơn hàng #" + booking.getBookingCode()
+                                + (booking.getCancelReason() != null && !booking.getCancelReason().isBlank()
+                                        ? ". Lý do: " + booking.getCancelReason() : "."))
+                        .referenceType("BOOKING")
+                        .referenceId(booking.getId())
+                        .createdAt(now)
+                        .build());
             }
         }
 
@@ -375,7 +450,12 @@ public class BookingStateEngine {
                 currentUser != null ? currentUser.getEmail() : "SYSTEM"
         );
 
-        customerNotificationService.notifyBookingStatus(savedBooking);
+        // Tránh gửi thông báo gây hiểu nhầm "Đơn đã được xác nhận" khi đơn bị lùi trạng thái từ ASSIGNED/EN_ROUTE về CONFIRMED do đổi nhân sự
+        boolean isRollbackToConfirmed = targetStatus == BookingStatusEnum.CONFIRMED
+                && ("ASSIGNED".equalsIgnoreCase(oldStatus) || "EN_ROUTE".equalsIgnoreCase(oldStatus));
+        if (!isRollbackToConfirmed) {
+            customerNotificationService.notifyBookingStatus(savedBooking);
+        }
         return savedBooking;
     }
 
@@ -410,7 +490,7 @@ public class BookingStateEngine {
         rewardLifecycleService.processBooking(saved.getId());
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void expirePendingProvider(Long bookingId) {
         Booking booking = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
         LocalDateTime now = LocalDateTime.now();
@@ -457,24 +537,64 @@ public class BookingStateEngine {
                 .createdAt(now)
                 .build());
 
+        // Tự động tạo yêu cầu hoàn tiền nếu khách đã thanh toán online thành công
+        List<Payment> payments = paymentRepository.findByBooking_Id(saved.getId());
+        Payment paidOnline = payments.stream()
+                .filter(this::isSuccessfulPayment)
+                .filter(p -> !"CASH".equalsIgnoreCase(p.getPaymentProvider()))
+                .findFirst()
+                .orElse(null);
+        boolean refundCreated = false;
+        if (paidOnline != null && saved.getCustomer() != null
+                && !cancellationRefundRepository.existsByBooking_Id(saved.getId())) {
+            cancellationRefundRepository.save(CancellationRefund.builder()
+                    .booking(saved)
+                    .requestedBy(saved.getCustomer())
+                    .requestedAmount(paidOnline.getAmount() != null ? paidOnline.getAmount() : saved.getTotalAmount())
+                    .status("PENDING_REVIEW")
+                    .cancellationReason("Hệ thống tự động tạo yêu cầu hoàn tiền do đơn quá hạn tiếp nhận: " + cancellationReason)
+                    .requestedAt(now)
+                    .build());
+            refundCreated = true;
+        }
+
         customerNotificationService.notifyCustomer(
                 saved.getCustomer(),
                 "BOOKING_EXPIRED",
                 "Đơn hàng đã tự hủy",
-                "Đơn " + saved.getBookingCode() + " đã tự hủy. " + cancellationReason,
+                "Đơn " + saved.getBookingCode() + " đã tự hủy. " + cancellationReason
+                        + (refundCreated ? " Yêu cầu hoàn tiền đã được tạo tự động để Admin xử lý." : ""),
                 "BOOKING",
                 saved.getId()
         );
 
-        // Thông báo cho Admin (đơn tiền mặt không cần hoàn tiền, chỉ thông báo)
-        adminNotificationRepository.save(AdminNotification.builder()
-                .type("BOOKING_PROVIDER_EXPIRED")
-                .title("Đơn hàng quá hạn tiếp nhận")
-                .message("Đơn hàng #" + saved.getBookingCode() + " đã tự hủy. " + cancellationReason)
-                .referenceType("BOOKING")
-                .referenceId(saved.getId())
-                .createdAt(now)
-                .build());
+        String adminMsg = "Đơn hàng #" + saved.getBookingCode() + " đã tự hủy. " + cancellationReason
+                + (refundCreated ? " Đã tự động tạo yêu cầu hoàn tiền (chờ duyệt)." : "");
+
+        if (saved.getPartner() != null && saved.getPartner().getUser() != null) {
+            adminNotificationRepository.save(AdminNotification.builder()
+                    .recipient(saved.getPartner().getUser())
+                    .type("BOOKING_PROVIDER_EXPIRED")
+                    .title("Đơn hàng quá hạn tiếp nhận")
+                    .message(adminMsg)
+                    .referenceType("BOOKING")
+                    .referenceId(saved.getId())
+                    .createdAt(now)
+                    .build());
+        }
+
+        List<User> activeAdmins = userRepository.findByRoleIgnoreCaseAndStatusIgnoreCase("ADMIN", "ACTIVE");
+        for (User admin : activeAdmins) {
+            adminNotificationRepository.save(AdminNotification.builder()
+                    .recipient(admin)
+                    .type("BOOKING_PROVIDER_EXPIRED")
+                    .title("Đơn hàng quá hạn tiếp nhận")
+                    .message(adminMsg)
+                    .referenceType("BOOKING")
+                    .referenceId(saved.getId())
+                    .createdAt(now)
+                    .build());
+        }
 
         rewardLifecycleService.processBooking(saved.getId());
     }
@@ -523,7 +643,6 @@ public class BookingStateEngine {
 
             case PENDING_COMPLETION -> switch (action) {
                 case CUSTOMER_ACCEPT -> BookingStatusEnum.COMPLETED;
-                case CANCEL -> BookingStatusEnum.CANCELLED;
                 default -> invalidTransition(currentStatus, action);
             };
 
@@ -626,7 +745,7 @@ public class BookingStateEngine {
             }
 
             case CANCEL -> {
-                if (!isCustomer && !isPartner && !isAdmin && !isStaff) {
+                if (!isCustomer && !isPartner && !isAdmin) {
                     throw new ResponseStatusException(
                             HttpStatus.FORBIDDEN,
                             "Bạn không có quyền hủy đơn hàng này."
@@ -663,11 +782,9 @@ public class BookingStateEngine {
                                 "Nhà cung cấp không thể hủy đơn ở trạng thái hiện tại."
                         );
                     }
-
-
                 }
 
-                if ((isAdmin || isStaff)
+                if (isAdmin
                         && (status.equals("COMPLETED")
                         || status.equals("CANCELLED")
                         || status.equals("REJECTED")
@@ -765,7 +882,7 @@ public class BookingStateEngine {
         boolean isCleaner = user != null
                 && isAssignedCleaner(booking, user, role);
 
-        boolean hasUnpaidCashPayment = (isPartner || isAdmin)
+        boolean hasUnpaidCashPayment = isPartner
                 && paymentRepository.findByBooking_Id(booking.getId())
                 .stream()
                 .anyMatch(payment ->
@@ -775,24 +892,30 @@ public class BookingStateEngine {
 
         switch (status) {
             case PENDING_PAYMENT -> {
-                if (isCustomer || isAdmin || isStaff || isPartner) {
+                if (isCustomer || isAdmin) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
 
             case PENDING_PROVIDER -> {
-                if (isPartner || isAdmin) {
+                LocalDateTime nowCheck = LocalDateTime.now();
+                LocalDateTime deadline = booking.getProviderDeadlineAt();
+                boolean deadlineExpired = (deadline != null && !nowCheck.isBefore(deadline))
+                        || (booking.getScheduledStart() != null && !nowCheck.isBefore(booking.getScheduledStart()));
+                if ((isPartner || isAdmin) && !deadlineExpired) {
                     allowed.add(BookingActionEnum.PROVIDER_ACCEPT.name());
+                }
+                if (isPartner || isAdmin) {
                     allowed.add(BookingActionEnum.PROVIDER_REJECT.name());
                 }
 
-                if (isCustomer || isAdmin || isStaff) {
+                if (isCustomer || isAdmin || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
 
             case CONFIRMED -> {
-                if (isCustomer || isAdmin || isStaff || isPartner) {
+                if (isCustomer || isAdmin || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
@@ -803,7 +926,7 @@ public class BookingStateEngine {
                     allowed.add(BookingActionEnum.START_JOB.name());
                 }
 
-                if (isCustomer || isAdmin || isStaff) {
+                if (isCustomer || isAdmin || isPartner) {
                     allowed.add(BookingActionEnum.CANCEL.name());
                 }
             }
@@ -827,17 +950,13 @@ public class BookingStateEngine {
                 if (isPartner && hasUnpaidCashPayment) {
                     allowed.add(BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT.name());
                 }
-
-                if (isAdmin || isStaff) {
-                    allowed.add(BookingActionEnum.CANCEL.name());
-                }
             }
 
             default -> {
             }
         }
 
-        if (status == BookingStatusEnum.COMPLETED && hasUnpaidCashPayment) {
+        if (status == BookingStatusEnum.COMPLETED && isPartner && hasUnpaidCashPayment) {
             allowed.add(BookingActionEnum.PROVIDER_CONFIRM_CASH_PAYMENT.name());
         }
 
@@ -984,6 +1103,15 @@ public class BookingStateEngine {
             cleanerRating = emp.getRatingAverage();
         }
 
+        java.math.BigDecimal subtotalVal = booking.getSubtotal() != null ? booking.getSubtotal() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal discountVal = booking.getDiscountAmount() != null ? booking.getDiscountAmount() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal pointsVal = booking.getPointsDiscount() != null ? booking.getPointsDiscount() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal totalVal = booking.getTotalAmount() != null ? booking.getTotalAmount() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal computedPlatformFee = totalVal.add(discountVal).add(pointsVal).subtract(subtotalVal);
+        if (computedPlatformFee.signum() < 0) {
+            computedPlatformFee = java.math.BigDecimal.ZERO;
+        }
+
         return BookingResponse.builder()
                 .cleanerName(cleanerName)
                 .cleanerPhone(cleanerPhone)
@@ -1004,6 +1132,8 @@ public class BookingStateEngine {
                 .partnerName(booking.getPartner() != null
                         ? booking.getPartner().getBusinessName()
                         : "CleanMate Partner")
+                .partnerPhone(booking.getPartner() != null && booking.getPartner().getUser() != null
+                        ? booking.getPartner().getUser().getPhone() : null)
                 .addressId(booking.getAddress() != null
                         ? booking.getAddress().getId() : null)
                 .receiverName(booking.getReceiverNameSnapshot() != null
@@ -1025,6 +1155,7 @@ public class BookingStateEngine {
                 .subtotal(booking.getSubtotal())
                 .discountAmount(booking.getDiscountAmount())
                 .pointsDiscount(booking.getPointsDiscount())
+                .platformFee(computedPlatformFee)
                 .totalAmount(booking.getTotalAmount())
                 .status(booking.getStatus())
                 .paymentMethod(paymentMethod)

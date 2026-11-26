@@ -16,15 +16,21 @@ function ProviderRevenue() {
     );
     const [toDate, setToDate] = useState(toInputDate(today));
     const [data, setData] = useState(null);
+    const [settlements, setSettlements] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    function load() {
+    function load(fDate = fromDate, tDate = toDate) {
         setLoading(true);
         setError('');
-        providerRevenueApi
-            .get(fromDate, toDate)
-            .then(setData)
+        Promise.all([
+            providerRevenueApi.get(fDate, tDate),
+            providerRevenueApi.listSettlements().catch(() => [])
+        ])
+            .then(([earningsRes, settlementsRes]) => {
+                setData(earningsRes);
+                setSettlements(Array.isArray(settlementsRes) ? settlementsRes : []);
+            })
             .catch((e) => setError(e.message))
             .finally(() => setLoading(false));
     }
@@ -36,9 +42,12 @@ function ProviderRevenue() {
         const d = new Date();
         d.setMonth(d.getMonth() - monthsAgo);
         const start = new Date(d.getFullYear(), d.getMonth(), 1);
-        const end = monthsAgo === 0 ? today : new Date(d.getFullYear(), d.getMonth() + 1, 0);
-        setFromDate(toInputDate(start));
-        setToDate(toInputDate(end));
+        const end = monthsAgo === 0 ? new Date() : new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        const nextFrom = toInputDate(start);
+        const nextTo = toInputDate(end);
+        setFromDate(nextFrom);
+        setToDate(nextTo);
+        load(nextFrom, nextTo);
     }
 
     // CSV Export function
@@ -134,7 +143,7 @@ function ProviderRevenue() {
                         <button type="button" className="pp-btn pp-btn-ghost pp-btn-sm" onClick={() => setMonthPreset(1)}>Tháng trước</button>
                     </div>
 
-                    <button className="pp-btn pp-btn-primary pp-btn-sm" onClick={load} disabled={loading} style={{ marginLeft: 'auto' }}>
+                    <button className="pp-btn pp-btn-primary pp-btn-sm" onClick={() => load()} disabled={loading} style={{ marginLeft: 'auto' }}>
                         {loading ? 'Đang tải...' : 'Xem báo cáo'}
                     </button>
                 </div>
@@ -170,7 +179,28 @@ function ProviderRevenue() {
                             <span className="pp-stat-value" style={{ fontSize: 26, color: '#16a34a' }}>
                                 {VND(data.valueAfterApprovedRefunds)}
                             </span>
-                            <span style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Doanh thu ròng nhà cung cấp được đối soát</span>
+                            <span style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Bao gồm cả đơn VNPay &amp; Tiền mặt trong kỳ</span>
+                        </div>
+                    </div>
+
+                    {/* VNPay vs Cash Breakdown (aligned with Admin Settlement) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 20 }}>
+                        <div className="pp-card" style={{ margin: 0, borderLeft: '4px solid #2563eb' }}>
+                            <p className="pp-card-title" style={{ marginBottom: 8 }}>💳 Doanh thu VNPay (Đối soát qua CleanMate)</p>
+                            <div style={{ fontSize: 13, color: '#475569', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div>Số đơn hoàn thành VNPay: <strong>{data.onlineCompletedOrders ?? 0} đơn</strong></div>
+                                <div>Giá trị dịch vụ gốc (cơ sở đối soát): <strong style={{ color: '#1d4ed8' }}>{VND(data.onlineGrossSubtotal)}</strong></div>
+                                <div>Đã lập kỳ đối soát: <strong style={{ color: '#16a34a' }}>{VND(data.onlineSettledSubtotal)}</strong></div>
+                                <div>Chưa đối soát (chờ kỳ tiếp theo): <strong style={{ color: '#d97706' }}>{VND(data.onlinePendingSettlementSubtotal)}</strong></div>
+                            </div>
+                        </div>
+                        <div className="pp-card" style={{ margin: 0, borderLeft: '4px solid #16a34a' }}>
+                            <p className="pp-card-title" style={{ marginBottom: 8 }}>💵 Doanh thu Tiền mặt (Đối tác tự thu)</p>
+                            <div style={{ fontSize: 13, color: '#475569', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                <div>Số đơn hoàn thành Tiền mặt: <strong>{data.cashCompletedOrders ?? 0} đơn</strong></div>
+                                <div>Đã xác nhận thu tiền mặt: <strong style={{ color: '#16a34a' }}>{VND(data.cashConfirmedValue)}</strong></div>
+                                <div>Chưa bấm xác nhận thu tiền: <strong style={{ color: '#dc2626' }}>{VND(data.cashPendingValue)}</strong></div>
+                            </div>
                         </div>
                     </div>
 
@@ -304,6 +334,81 @@ function ProviderRevenue() {
                                 <div>
                                     <strong>Ghi chú đối soát:</strong> {data.note}
                                 </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Settlements History from Admin */}
+                    <div className="pp-card" style={{ marginBottom: 20 }}>
+                        <p className="pp-card-title">
+                            🏦 Lịch sử kỳ đối soát &amp; thanh toán từ CleanMate ({settlements.length})
+                        </p>
+                        {settlements.length === 0 ? (
+                            <div className="pp-empty" style={{ padding: '20px 0' }}>
+                                <p>Chưa có kỳ đối soát nào được CleanMate lập cho tài khoản đối tác này.</p>
+                            </div>
+                        ) : (
+                            <div className="pp-table-wrap">
+                                <table className="pp-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Mã kỳ</th>
+                                            <th>Khoảng thời gian</th>
+                                            <th>Số đơn</th>
+                                            <th>Doanh thu gốc</th>
+                                            <th>Phí sàn</th>
+                                            <th>Khấu trừ hoàn</th>
+                                            <th>Thực chi trả</th>
+                                            <th>Trạng thái</th>
+                                            <th>Chứng từ CK</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {settlements.map((s) => {
+                                            const st = String(s.status || '').toUpperCase();
+                                            return (
+                                                <tr key={s.id}>
+                                                    <td><strong>#{s.id}</strong></td>
+                                                    <td>{s.periodStart} → {s.periodEnd}</td>
+                                                    <td>{s.bookingCount}</td>
+                                                    <td>{VND(s.grossAmount)}</td>
+                                                    <td style={{ color: '#b45309' }}>- {VND(s.platformFeeAmount)}</td>
+                                                    <td style={{ color: '#dc2626' }}>- {VND(s.refundDeductionAmount)}</td>
+                                                    <td><strong style={{ color: '#16a34a' }}>{VND(s.payoutAmount)}</strong></td>
+                                                    <td>
+                                                        <span className={`pp-badge ${
+                                                            st === 'PAID'
+                                                                ? 'pp-badge-completed'
+                                                                : st === 'APPROVED'
+                                                                    ? 'pp-badge-confirmed'
+                                                                    : 'pp-badge-pending'
+                                                        }`}>
+                                                            {st === 'PAID'
+                                                                ? 'Đã chuyển khoản'
+                                                                : st === 'APPROVED'
+                                                                    ? 'Đã duyệt — Chờ CK'
+                                                                    : 'Bản nháp'}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        {s.transferReference ? (
+                                                            <div style={{ fontSize: 12 }}>
+                                                                <div><strong>{s.transferReference}</strong></div>
+                                                                {s.transferEvidenceUrl && (
+                                                                    <a href={s.transferEvidenceUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>
+                                                                        Xem chứng từ ↗
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <span style={{ color: '#94a3b8' }}>—</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
                             </div>
                         )}
                     </div>

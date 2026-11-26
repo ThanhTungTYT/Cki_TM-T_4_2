@@ -1,6 +1,11 @@
 package org.ckitmdt.backend.controller.cleaner;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
+import org.ckitmdt.backend.entity.Employee;
+import org.ckitmdt.backend.entity.User;
+import org.ckitmdt.backend.repository.EmployeeRepository;
+import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -16,7 +21,11 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/bookings/cleaner/work-log-images")
+@RequiredArgsConstructor
 public class CleanerWorkLogUploadController {
+
+    private final UserRepository userRepository;
+    private final EmployeeRepository employeeRepository;
 
     @Value("${app.upload.cleaner-log-dir}")
     private String uploadDirectory;
@@ -55,6 +64,33 @@ public class CleanerWorkLogUploadController {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Chỉ Cleaner mới được tải ảnh nhật ký."
+            );
+        }
+
+        User cleanerUser = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Không tìm thấy tài khoản Cleaner."
+                ));
+        if (!"ACTIVE".equalsIgnoreCase(cleanerUser.getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Tài khoản Cleaner hiện không hoạt động."
+            );
+        }
+        Employee employee = employeeRepository.findByUser_Id(cleanerUser.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Không tìm thấy hồ sơ nhân viên."
+                ));
+        if (!"ACTIVE".equalsIgnoreCase(employee.getStatus())
+                || employee.getPartner() == null
+                || !"ACTIVE".equalsIgnoreCase(employee.getPartner().getStatus())
+                || employee.getPartner().getUser() == null
+                || !"ACTIVE".equalsIgnoreCase(employee.getPartner().getUser().getStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Hồ sơ nhân viên hoặc nhà cung cấp hiện không hoạt động."
             );
         }
 

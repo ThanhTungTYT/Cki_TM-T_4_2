@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBroom, faUser, faCartShopping, faStore } from '@fortawesome/free-solid-svg-icons';
 import { useCart } from '../context/CartContext';
@@ -12,6 +12,16 @@ function Header() {
     const user = storedUser ? JSON.parse(storedUser) : null;
     const { totalItems } = useCart();
     const [isCartOpen, setIsCartOpen] = useState(false);
+    const [isScrolled, setIsScrolled] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            setIsScrolled(window.scrollY > 10);
+        };
+        handleScroll();
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
 
     const role = (user?.role || '').toUpperCase();
     const isProvider = ['PROVIDER', 'PARTNER', 'ROLE_PROVIDER', 'ROLE_PARTNER'].includes(role);
@@ -20,7 +30,7 @@ function Header() {
 
     return (
         <>
-            <header className="header">
+            <header className={`header${isScrolled ? ' is-scrolled' : ''}`}>
                 <div className="header-inner">
                     <Link to="/" className="logo">
                         <div className="logo-icon">
@@ -30,11 +40,11 @@ function Header() {
                     </Link>
 
                     <nav className="nav">
-                        <Link to="/">Trang chủ</Link>
-                        <Link to="/services">Dịch vụ</Link>
-                        <Link to="/providers">Đối tác vệ sinh</Link>
-                        <Link to="/become-partner">Trở thành đối tác</Link>
-                        <Link to="/customer/reports">Hỗ trợ</Link>
+                        <NavLink to="/" end className={({ isActive }) => isActive ? 'active' : ''}>Trang chủ</NavLink>
+                        <NavLink to="/services" className={({ isActive }) => isActive ? 'active' : ''}>Dịch vụ</NavLink>
+                        <NavLink to="/providers" className={({ isActive }) => isActive ? 'active' : ''}>Đối tác vệ sinh</NavLink>
+                        <NavLink to="/become-partner" className={({ isActive }) => isActive ? 'active' : ''}>Trở thành đối tác</NavLink>
+                        <NavLink to="/customer/reports" className={({ isActive }) => isActive ? 'active' : ''}>Hỗ trợ</NavLink>
                     </nav>
 
                     <div className="header-actions">
@@ -59,7 +69,7 @@ function Header() {
                         {isCustomer && <CustomerNotifications />}
                         <button className="cart-btn" onClick={() => setIsCartOpen(true)} title="Giỏ dịch vụ">
                             <FontAwesomeIcon icon={faCartShopping} />
-                            {totalItems > 0 && <span className="cart-badge">{totalItems}</span>}
+                            {totalItems > 0 && <span key={totalItems} className="cart-badge">{totalItems}</span>}
                         </button>
                     </div>
                 </div>

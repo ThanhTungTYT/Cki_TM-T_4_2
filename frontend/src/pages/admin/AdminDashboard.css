@@ -2,14 +2,14 @@
 .admin-layout {
     --admin-blue: #2563eb;
     --admin-dark: #1e385c;
-    --admin-muted: #8290a5;
-    --admin-border: #e8edf5;
-    --admin-bg: #f5f7fb;
+    --admin-muted: #64748b;
+    --admin-border: #e5ebf3;
+    --admin-bg: #f4f6fb;
     display: flex;
     min-height: 100vh;
     background: var(--admin-bg);
     color: var(--admin-dark);
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: var(--cm-font-sans, 'Be Vietnam Pro', Inter, "Segoe UI", Arial, sans-serif);
 }
 
 .admin-layout * {
@@ -39,10 +39,17 @@
     height: 42px;
     display: grid;
     place-items: center;
-    border-radius: 12px;
-    background: var(--admin-blue);
+    border-radius: 13px;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     color: #fff;
     font-size: 19px;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.28);
+    transition: transform 0.28s var(--cm-ease-spring, ease), box-shadow 0.25s ease;
+}
+
+.admin-brand:hover .admin-brand-icon {
+    transform: rotate(-5deg) scale(1.06);
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.36);
 }
 
 .admin-brand strong,
@@ -216,13 +223,20 @@
 .admin-panel {
     min-width: 0;
     border: 1px solid var(--admin-border);
-    border-radius: 13px;
+    border-radius: 16px;
     background: #fff;
-    box-shadow: 0 3px 12px rgba(26, 52, 91, 0.025);
+    box-shadow: 0 4px 16px rgba(26, 52, 91, 0.04);
+    transition: transform 0.26s var(--cm-ease-out, ease), box-shadow 0.26s ease, border-color 0.22s ease;
+}
+
+.admin-summary-card:hover {
+    transform: translateY(-3px);
+    border-color: #cbdcf5;
+    box-shadow: 0 14px 30px rgba(30, 56, 92, 0.09);
 }
 
 .admin-summary-card {
-    padding: 19px;
+    padding: 20px;
 }
 
 .summary-card-top {
@@ -523,9 +537,15 @@
 .bar {
     width: 100%;
     min-height: 4px;
-    border-radius: 5px 5px 0 0;
+    border-radius: 6px 6px 0 0;
     background: linear-gradient(180deg, #4e8cff 0%, #2563eb 100%);
-    transition: height 0.3s ease;
+    transform-origin: bottom;
+    animation: cmBarGrow 0.65s var(--cm-ease-out, ease) both;
+    transition: height 0.35s var(--cm-ease-out, ease), filter 0.2s ease, transform 0.2s ease;
+}
+
+.bar-column:hover .bar {
+    filter: brightness(1.09);
 }
 
 .bar-column:nth-child(2n) .bar {

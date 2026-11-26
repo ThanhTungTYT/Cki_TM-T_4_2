@@ -30,6 +30,7 @@ export default function LocationPickerMap({
     radiusKm = 0,
     showRadius = false,
     readOnly = false,
+    saveUserGeo = false,
     height = 280,
     placeholder = 'Tìm địa chỉ đường, phường, quận (VD: 123 Nguyễn Văn Linh, Quận 7)...',
     onChange
@@ -38,6 +39,7 @@ export default function LocationPickerMap({
     const mapRef = useRef(null);
     const markerRef = useRef(null);
     const circleRef = useRef(null);
+    const skipNextSearchRef = useRef(false);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
 
@@ -74,9 +76,12 @@ export default function LocationPickerMap({
                 province: info.province || 'TP. Hồ Chí Minh',
                 fullAddress: info.fullAddress || `${roundedLat}, ${roundedLng}`
             };
+            skipNextSearchRef.current = true;
             setQuery(payload.fullAddress);
             setStatusMsg('Đã cập nhật vị trí từ OpenStreetMap');
-            saveUserGeoPreference(roundedLat, roundedLng, payload.district || payload.fullAddress);
+            if (saveUserGeo) {
+                saveUserGeoPreference(roundedLat, roundedLng, payload.district || payload.fullAddress);
+            }
             if (typeof onChangeRef.current === 'function') {
                 onChangeRef.current(payload);
             }
@@ -168,6 +173,11 @@ export default function LocationPickerMap({
     // Debounced address search via Photon API
     useEffect(() => {
         if (readOnly) return;
+        if (skipNextSearchRef.current) {
+            skipNextSearchRef.current = false;
+            setSuggestions([]);
+            return;
+        }
         const text = query.trim();
         if (text.length < 3) {
             setSuggestions([]);

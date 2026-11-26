@@ -10,6 +10,24 @@ function getToken() {
     return sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
 }
 
+function getCurrentRole() {
+    try {
+        const user = JSON.parse(
+            sessionStorage.getItem('user') || localStorage.getItem('user') || '{}'
+        );
+        return String(user.role || '').trim().toUpperCase().replace(/^ROLE_/, '');
+    } catch {
+        return '';
+    }
+}
+
+function isCustomerSession() {
+    const token = getToken();
+    if (!token) return false;
+    const role = getCurrentRole();
+    return !role || role === 'CUSTOMER';
+}
+
 function normalizeCartResponse(response) {
     const items = [];
 
@@ -28,6 +46,9 @@ function normalizeCartResponse(response) {
                 quantity: Number(item.quantity || 1),
                 unitPrice: Number(item.unitPrice || 0),
                 estimatedPrice: Number(item.estimatedPrice || 0),
+                estimatedMinutes: item.estimatedMinutes != null ? Number(item.estimatedMinutes) : null,
+                unavailable: Boolean(item.unavailable),
+                unavailableReason: item.unavailableReason || '',
                 scheduledDate: scheduledStart ? scheduledStart.split('T')[0] : '',
                 scheduledTime: scheduledStart ? scheduledStart.split('T')[1]?.substring(0, 5) || '' : '',
                 scheduledStart,
@@ -124,6 +145,11 @@ export function CartProvider({ children }) {
             setIsCartLoading(false);
             return;
         }
+        if (!isCustomerSession()) {
+            setCartItems([]);
+            setIsCartLoading(false);
+            return;
+        }
 
         setIsCartLoading(true);
         setCartError('');
@@ -163,7 +189,7 @@ export function CartProvider({ children }) {
         window.addEventListener('cleanmate-auth-changed', syncAuth);
         window.addEventListener('focus', syncAuth);
 
-        if (getToken()) loadServerCart();
+        if (isCustomerSession()) loadServerCart();
 
         return () => {
             window.removeEventListener('storage', onStorage);

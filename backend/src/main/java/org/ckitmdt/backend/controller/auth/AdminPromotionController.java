@@ -18,6 +18,7 @@ import org.ckitmdt.backend.repository.RewardPolicyRepository;
 import org.ckitmdt.backend.repository.RewardTransactionRepository;
 import org.ckitmdt.backend.repository.ServiceRepository;
 import org.ckitmdt.backend.repository.UserRepository;
+import org.ckitmdt.backend.service.admin.AdminAuditLogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +55,7 @@ public class AdminPromotionController {
     private final RewardAccountRepository rewardAccountRepository;
     private final RewardTransactionRepository rewardTransactionRepository;
     private final UserRepository userRepository;
+    private final AdminAuditLogService auditLogService;
 
     @GetMapping("/api/admin/promotions")
     @Transactional(readOnly = true)
@@ -67,7 +69,8 @@ public class AdminPromotionController {
     @PostMapping("/api/admin/promotions")
     @Transactional
     public PromotionResponse createPromotion(
-            @Valid @RequestBody PromotionRequest request
+            @Valid @RequestBody PromotionRequest request,
+            Authentication authentication
     ) {
         String code = normalizeCode(request.code());
 
@@ -85,6 +88,19 @@ public class AdminPromotionController {
 
         Promotion saved = promotionRepository.save(promotion);
         replacePromotionServices(saved, request.serviceIds());
+
+        if (authentication != null) {
+            auditLogService.record(
+                    authentication,
+                    "PROMOTION_CREATED",
+                    "PROMOTION",
+                    saved.getId(),
+                    "Tạo mới chương trình khuyến mãi " + saved.getCode(),
+                    null,
+                    "code=" + saved.getCode() + ";discountType=" + saved.getDiscountType()
+                            + ";discountValue=" + saved.getDiscountValue() + ";status=" + saved.getStatus()
+            );
+        }
 
         return toPromotionResponse(saved);
     }
@@ -182,15 +198,20 @@ public class AdminPromotionController {
                     return created;
                 });
 
-        // Booking earnings follow the fixed customer rule: 1 Ccoin per 1,000 VND.
-        policy.setEarnAmountStep(DEFAULT_EARN_AMOUNT_STEP);
-        policy.setEarnPoints(DEFAULT_EARN_POINTS);
+        String beforeSnapshot = "earnAmountStep=" + policy.getEarnAmountStep()
+                + ";earnPoints=" + policy.getEarnPoints()
+                + ";pointValue=" + policy.getPointValue()
+                + ";expiryMonths=" + policy.getExpiryMonths()
+                + ";enabled=" + policy.getEnabled();
+
+        policy.setEarnAmountStep(request.earnAmountStep());
+        policy.setEarnPoints(request.earnPoints());
         policy.setPointValue(request.pointValue());
         policy.setMaxRedeemPercent(request.maxRedeemPercent());
         policy.setMinRedeemPoints(request.minRedeemPoints());
         policy.setMaxRedeemPoints(request.maxRedeemPoints());
         policy.setExpiryMonths(request.expiryMonths());
-        policy.setEnabled(true);
+        policy.setEnabled(request.enabled() == null || Boolean.TRUE.equals(request.enabled()));
         policy.setAllowCombineWithPromotion(
                 Boolean.TRUE.equals(request.allowCombineWithPromotion())
         );
@@ -198,6 +219,20 @@ public class AdminPromotionController {
         policy.setUpdatedBy(actor.getId());
 
         RewardPolicy saved = rewardPolicyRepository.save(policy);
+
+        auditLogService.record(
+                authentication,
+                "REWARD_POLICY_UPDATED",
+                "REWARD_POLICY",
+                REWARD_POLICY_ID,
+                "Cập nhật chính sách điểm thưởng Ccoin",
+                beforeSnapshot,
+                "earnAmountStep=" + saved.getEarnAmountStep()
+                        + ";earnPoints=" + saved.getEarnPoints()
+                        + ";pointValue=" + saved.getPointValue()
+                        + ";expiryMonths=" + saved.getExpiryMonths()
+                        + ";enabled=" + saved.getEnabled()
+        );
 
         return toRewardPolicyResponse(saved);
     }

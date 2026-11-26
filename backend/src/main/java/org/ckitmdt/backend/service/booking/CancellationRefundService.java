@@ -2,10 +2,12 @@
 package org.ckitmdt.backend.service.booking;
 
 import lombok.RequiredArgsConstructor;
+import org.ckitmdt.backend.entity.AdminNotification;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.CancellationRefund;
 import org.ckitmdt.backend.entity.Payment;
 import org.ckitmdt.backend.entity.User;
+import org.ckitmdt.backend.repository.AdminNotificationRepository;
 import org.ckitmdt.backend.repository.BookingRepository;
 import org.ckitmdt.backend.repository.CancellationRefundRepository;
 import org.ckitmdt.backend.repository.PaymentRepository;
@@ -37,6 +39,41 @@ public class CancellationRefundService {
     private final PaymentRepository paymentRepository;
     private final CustomerNotificationService customerNotificationService;
     private final AdminAuditLogService auditLogService;
+    private final AdminNotificationRepository notificationRepository;
+
+    @Transactional
+    public void createDuplicatePaymentRefund(
+            Long bookingId,
+            BigDecimal receivedAmount,
+            String transactionNo
+    ) {
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElse(null);
+
+        if (booking == null
+                || booking.getCustomer() == null
+                || receivedAmount == null
+                || receivedAmount.signum() <= 0) {
+            return;
+        }
+
+        BigDecimal requestedAmount = receivedAmount.setScale(2, RoundingMode.HALF_UP);
+        String transaction = transactionNo == null || transactionNo.isBlank()
+                ? "không có"
+                : transactionNo.trim();
+
+        refundRepository.save(CancellationRefund.builder()
+                .booking(booking)
+                .requestedBy(booking.getCustomer())
+                .requestedAmount(requestedAmount)
+                .status("PENDING_REVIEW")
+                .cancellationReason(
+                        "Phát hiện thanh toán VNPay trùng lặp cho đơn đã thanh toán thành công. "
+                                + "Cần đối soát và hoàn trả giao dịch thừa. Mã GD: " + transaction
+                )
+                .requestedAt(LocalDateTime.now())
+                .build());
+    }
 
     @Transactional
     public void createLatePaymentRefund(
@@ -274,6 +311,20 @@ public class CancellationRefundService {
 
         CancellationRefund saved = refundRepository.save(refund);
 
+        // Đồng bộ trạng thái Payment sang REFUNDED cho các giao dịch thanh toán thành công của đơn hàng
+        if (saved.getBooking() != null && saved.getApprovedAmount() != null && saved.getApprovedAmount().signum() > 0) {
+            List<Payment> bookingPayments = paymentRepository.findByBooking_Id(saved.getBooking().getId());
+            for (Payment p : bookingPayments) {
+                if (isSuccessfulPayment(p)
+                        && !"CASH".equalsIgnoreCase(p.getPaymentProvider())
+                        && !"CASH".equalsIgnoreCase(p.getPaymentMethod())
+                        && !"CASH_ON_SERVICE".equalsIgnoreCase(p.getPaymentMethod())) {
+                    p.setStatus("REFUNDED");
+                    paymentRepository.save(p);
+                }
+            }
+        }
+
         auditLogService.record(
                 auth,
                 "REFUND_TRANSFER_RECORDED",
@@ -300,6 +351,22 @@ public class CancellationRefundService {
                     "REFUND",
                     saved.getId()
             );
+        }
+
+        if (saved.getBooking() != null
+                && saved.getBooking().getPartner() != null
+                && saved.getBooking().getPartner().getUser() != null) {
+            notificationRepository.save(AdminNotification.builder()
+                    .recipient(saved.getBooking().getPartner().getUser())
+                    .type("REFUND_TRANSFERRED")
+                    .title("Đã hoàn tiền cho khách hàng đơn #" + saved.getBooking().getBookingCode())
+                    .message("CleanMate đã chuyển khoản hoàn tiền " + saved.getApprovedAmount()
+                            + "đ cho đơn hàng #" + saved.getBooking().getBookingCode()
+                            + " (Mã GD: " + reference + ").")
+                    .referenceType("BOOKING")
+                    .referenceId(saved.getBooking().getId())
+                    .createdAt(now)
+                    .build());
         }
 
         return row(saved);

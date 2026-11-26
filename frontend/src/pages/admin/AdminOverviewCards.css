@@ -107,25 +107,30 @@
     display: block;
     width: 100%;
     min-width: 0;
-    padding: 20px;
+    padding: 21px;
     overflow: hidden;
-    border: 1px solid #e8edf5;
-    border-radius: 13px;
+    border: 1px solid #e5ebf3;
+    border-radius: 16px;
     background: #ffffff;
     color: #1e293b;
     text-align: left;
     box-sizing: border-box;
     cursor: pointer;
+    box-shadow: 0 4px 16px rgba(30, 56, 92, 0.04);
     transition:
-            transform 0.2s ease,
-            border-color 0.2s ease,
-            box-shadow 0.2s ease;
+            transform 0.28s var(--cm-ease-out, ease),
+            border-color 0.24s ease,
+            box-shadow 0.28s ease;
 }
 
 .admin-overview-card:hover:not(:disabled) {
-    transform: translateY(-3px);
-    border-color: #cbdcf5;
-    box-shadow: 0 8px 24px rgba(30, 56, 92, 0.09);
+    transform: translateY(-4px);
+    border-color: #bfdbfe;
+    box-shadow: 0 16px 34px rgba(30, 56, 92, 0.1), 0 4px 12px rgba(37, 99, 235, 0.06);
+}
+
+.admin-overview-card:hover:not(:disabled) .admin-overview-icon {
+    transform: scale(1.08) rotate(-3deg);
 }
 
 .admin-overview-card:focus-visible {
@@ -157,8 +162,9 @@
     height: 44px;
     align-items: center;
     justify-content: center;
-    border-radius: 11px;
+    border-radius: 12px;
     font-size: 18px;
+    transition: transform 0.28s var(--cm-ease-spring, ease);
 }
 
 .admin-overview-icon.blue {

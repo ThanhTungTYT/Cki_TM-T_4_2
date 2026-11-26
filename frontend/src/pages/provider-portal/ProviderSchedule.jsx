@@ -71,12 +71,14 @@ function ProviderSchedule() {
 
     function statusBadge(s) {
         const map = {
-            ASSIGNED:  { cls: 'pp-badge-assigned',  label: 'Đã phân công' },
-            ACCEPTED:  { cls: 'pp-badge-confirmed', label: 'Đã nhận việc' },
-            STARTED:   { cls: 'pp-badge-warning',   label: 'Đang làm' },
-            COMPLETED: { cls: 'pp-badge-completed', label: 'Hoàn thành' },
-            CANCELLED: { cls: 'pp-badge-cancelled', label: 'Đã hủy' },
-            REJECTED:  { cls: 'pp-badge-rejected',  label: 'Từ chối' },
+            ASSIGNED:       { cls: 'pp-badge-assigned',  label: 'Đã phân công' },
+            ACCEPTED:       { cls: 'pp-badge-confirmed', label: 'Đã nhận việc' },
+            EN_ROUTE:       { cls: 'pp-badge-progress',  label: 'Đang di chuyển' },
+            IN_PROGRESS:    { cls: 'pp-badge-warning',   label: 'Đang thực hiện' },
+            WORK_SUBMITTED: { cls: 'pp-badge-waiting',   label: 'Đã báo hoàn thành' },
+            COMPLETED:      { cls: 'pp-badge-completed', label: 'Hoàn thành' },
+            CANCELLED:      { cls: 'pp-badge-cancelled', label: 'Đã hủy' },
+            DECLINED:       { cls: 'pp-badge-rejected',  label: 'Từ chối' },
         };
         const cfg = map[(s || '').toUpperCase()] || { cls: '', label: s || '—' };
         return <span className={`pp-badge ${cfg.cls}`}>{cfg.label}</span>;
@@ -125,7 +127,9 @@ function ProviderSchedule() {
     // Summary statistics
     const stats = useMemo(() => {
         const total = filteredSchedule.length;
-        const active = filteredSchedule.filter(i => ['ASSIGNED', 'ACCEPTED', 'STARTED'].includes((i.assignmentStatus || '').toUpperCase())).length;
+        const active = filteredSchedule.filter(i =>
+            ['ASSIGNED', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS', 'WORK_SUBMITTED'].includes((i.assignmentStatus || '').toUpperCase())
+        ).length;
         const completed = filteredSchedule.filter(i => (i.assignmentStatus || '').toUpperCase() === 'COMPLETED').length;
         const uniqueEmployees = new Set(filteredSchedule.map(i => i.employeeId).filter(Boolean)).size;
         return { total, active, completed, uniqueEmployees };

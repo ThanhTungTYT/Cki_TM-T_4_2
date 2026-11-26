@@ -123,7 +123,7 @@ public class RegistrationOtpService {
         }
         session.removeAttribute(REGISTER_OTP);
         session.removeAttribute(OTP_EXPIRES_AT);
-        authService.register(registerData);
+        authService.registerVerified(registerData);
         clearRegistration(session);
     }
 

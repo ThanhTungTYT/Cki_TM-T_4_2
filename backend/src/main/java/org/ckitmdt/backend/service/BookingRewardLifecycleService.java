@@ -118,14 +118,26 @@ public class BookingRewardLifecycleService {
         RewardPolicy policy = rewardPolicyRepository.findById(1L)
                 .orElse(null);
 
+        if (policy != null && Boolean.FALSE.equals(policy.getEnabled())) {
+            return;
+        }
+
         Integer expiryMonths = policy == null
                 ? 12
                 : policy.getExpiryMonths();
 
+        BigDecimal earnAmountStep = (policy != null && policy.getEarnAmountStep() != null
+                && policy.getEarnAmountStep().signum() > 0)
+                ? policy.getEarnAmountStep()
+                : BigDecimal.valueOf(1000);
+        Integer earnPoints = (policy != null && policy.getEarnPoints() != null && policy.getEarnPoints() > 0)
+                ? policy.getEarnPoints()
+                : 1;
+
         int earnedPoints;
 
         try {
-            earnedPoints = CcoinRules.earned(booking.getTotalAmount());
+            earnedPoints = CcoinRules.earned(booking.getTotalAmount(), earnAmountStep, earnPoints);
         } catch (IllegalArgumentException exception) {
             log.error(
                     "Không thể tính điểm cho booking {}: {}",

@@ -151,7 +151,10 @@ function Provider() {
                                                     </span>
                                                     <strong>{formatPrice(service.basePrice)}</strong>
                                                 </div>
-                                                <button type="button" onClick={() => navigate(`/service-detail/${service.id}`)}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate(`/service-detail/${service.id}?partnerId=${profile.id || id}`)}
+                                                >
                                                     Xem chi tiết
                                                 </button>
                                             </div>

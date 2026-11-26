@@ -3,8 +3,10 @@ package org.ckitmdt.backend.controller.cleaner;
 
 import lombok.RequiredArgsConstructor;
 import org.ckitmdt.backend.entity.AdminNotification;
+import org.ckitmdt.backend.entity.Employee;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.AdminNotificationRepository;
+import org.ckitmdt.backend.repository.EmployeeRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -24,6 +26,7 @@ import java.util.Map;
 public class CleanerNotificationController {
 
     private final UserRepository userRepository;
+    private final EmployeeRepository employeeRepository;
     private final AdminNotificationRepository notificationRepository;
 
     /**
@@ -69,6 +72,23 @@ public class CleanerNotificationController {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Tài khoản nhân viên hiện không hoạt động."
+            );
+        }
+
+        Employee employee = employeeRepository.findByUser_Id(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Không tìm thấy hồ sơ nhân viên."
+                ));
+
+        if (!"ACTIVE".equals(normalize(employee.getStatus()))
+                || employee.getPartner() == null
+                || !"ACTIVE".equals(normalize(employee.getPartner().getStatus()))
+                || employee.getPartner().getUser() == null
+                || !"ACTIVE".equals(normalize(employee.getPartner().getUser().getStatus()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Hồ sơ nhân viên hoặc đơn vị nhà cung cấp hiện không hoạt động."
             );
         }
 

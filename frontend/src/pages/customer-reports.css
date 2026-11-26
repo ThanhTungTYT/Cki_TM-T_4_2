@@ -228,11 +228,18 @@
 
 .report-card {
     min-width: 0;
-    padding: 20px;
+    padding: 22px;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border-radius: 16px;
     background: #fff;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.025);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.035);
+    transition: transform 0.25s var(--cm-ease-out, ease), box-shadow 0.25s ease, border-color 0.22s ease;
+}
+
+.report-card:hover {
+    transform: translateY(-2px);
+    border-color: #cbdcf5;
+    box-shadow: 0 12px 28px rgba(30, 56, 92, 0.08);
 }
 
 .report-card-header {

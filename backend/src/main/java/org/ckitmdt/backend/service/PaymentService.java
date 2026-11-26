@@ -54,7 +54,8 @@ public class PaymentService {
         String paymentUrl = vnPayService.createPaymentUrl(
                 txnRef,
                 booking.getTotalAmount(),
-                ipAddress
+                ipAddress,
+                booking.getHoldExpiresAt()
         );
 
         return new VNPayResponse(txnRef, paymentUrl);

@@ -8,11 +8,14 @@ import org.ckitmdt.backend.entity.Address;
 import org.ckitmdt.backend.entity.Booking;
 import org.ckitmdt.backend.entity.BookingAssignment;
 import org.ckitmdt.backend.entity.BookingItem;
+import org.ckitmdt.backend.entity.CleanerOvertimeRequest;
 import org.ckitmdt.backend.entity.Employee;
 import org.ckitmdt.backend.entity.Partner;
 import org.ckitmdt.backend.entity.User;
 import org.ckitmdt.backend.repository.BookingAssignmentRepository;
 import org.ckitmdt.backend.repository.BookingItemRepository;
+import org.ckitmdt.backend.repository.CleanerOvertimeRequestRepository;
+import org.ckitmdt.backend.repository.CleanerWorkLogRepository;
 import org.ckitmdt.backend.repository.EmployeeRepository;
 import org.ckitmdt.backend.repository.UserRepository;
 import org.springframework.http.HttpStatus;
@@ -34,6 +37,8 @@ public class CleanerAssignmentQueryService {
     private final BookingItemRepository bookingItemRepository;
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
+    private final CleanerWorkLogRepository cleanerWorkLogRepository;
+    private final CleanerOvertimeRequestRepository overtimeRequestRepository;
 
     /**
      * Lấy toàn bộ phân công của Cleaner đang đăng nhập.
@@ -201,6 +206,18 @@ public class CleanerAssignmentQueryService {
         User employeeUser =
                 employee != null ? employee.getUser() : null;
 
+        boolean hasFinalReport = cleanerWorkLogRepository
+                .findByAssignment_IdOrderByCreatedAtDesc(assignment.getId())
+                .stream()
+                .anyMatch(log -> "FINAL_REPORT".equalsIgnoreCase(log.getLogType()));
+
+        String latestOvertimeStatus = overtimeRequestRepository
+                .findByAssignment_IdOrderByCreatedAtDesc(assignment.getId())
+                .stream()
+                .findFirst()
+                .map(CleanerOvertimeRequest::getStatus)
+                .orElse(null);
+
         return CleanerAssignmentViewResponse.builder()
                 .assignmentId(assignment.getId())
                 .assignmentStatus(assignment.getStatus())
@@ -223,6 +240,8 @@ public class CleanerAssignmentQueryService {
                                 ? employeeUser.getPhone()
                                 : null
                 )
+                .hasFinalReport(hasFinalReport)
+                .latestOvertimeStatus(latestOvertimeStatus)
                 .booking(toBookingResponse(assignment.getBooking()))
                 .build();
     }

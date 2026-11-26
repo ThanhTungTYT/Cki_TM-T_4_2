@@ -180,6 +180,32 @@ export default function PartnerOnboarding() {
                                 </div>
                             )}
 
+                            {statusUpper === 'PENDING' && statusData.latestRequestInfoNote && (
+                                <div
+                                    className="bp-alert"
+                                    style={{
+                                        background: '#fffbeb',
+                                        border: '1px solid #fcd34d',
+                                        color: '#92400e',
+                                        marginBottom: 16
+                                    }}
+                                >
+                                    <strong>⚠️ Admin yêu cầu bổ sung thông tin hồ sơ:</strong>{' '}
+                                    {statusData.latestRequestInfoNote}
+                                    {!editing && (
+                                        <div style={{ marginTop: 8 }}>
+                                            <button
+                                                type="button"
+                                                className="bp-btn bp-btn-primary"
+                                                onClick={() => setEditing(true)}
+                                            >
+                                                ✏️ Bổ sung hồ sơ &amp; Gửi lại ngay
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {!editing ? (
                                 <div className="bp-grid">
                                     <div className="bp-field">

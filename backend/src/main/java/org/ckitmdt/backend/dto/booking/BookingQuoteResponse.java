@@ -26,4 +26,8 @@ public class BookingQuoteResponse {
     private LocalDateTime scheduledEnd;
     private boolean capacityAvailable;
     private String capacityMessage;
+    private Double distanceKm;
+    private Double serviceRadiusKm;
+    private boolean outsideServiceRadius;
+    private String serviceRadiusWarning;
 }

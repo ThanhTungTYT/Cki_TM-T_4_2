@@ -288,14 +288,14 @@
     height: 100%;
     overflow: hidden;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border-radius: 16px;
     background: #fff;
-    transition: box-shadow 0.2s, transform 0.2s;
+    transition: box-shadow 0.3s var(--cm-ease-out, ease), transform 0.3s var(--cm-ease-out, ease), border-color 0.25s ease;
 }
 
 .services-page .service-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 24px rgba(30, 56, 92, 0.1);
+    transform: translateY(-5px);
+    box-shadow: 0 18px 38px rgba(30, 56, 92, 0.12), 0 4px 12px rgba(37, 99, 235, 0.08);
 }
 
 .services-page .service-image {
@@ -318,11 +318,11 @@
     height: 100%;
     object-fit: cover;
     object-position: center;
-    transition: transform 0.25s;
+    transition: transform 0.45s var(--cm-ease-out, ease);
 }
 
 .services-page .service-card:hover .service-image img {
-    transform: scale(1.025);
+    transform: scale(1.055);
 }
 
 .services-page .service-image-placeholder {

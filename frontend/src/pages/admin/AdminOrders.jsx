@@ -88,11 +88,22 @@ const getOrderServiceNames = (order) => {
     return "Chưa có thông tin dịch vụ";
 };
 
+const getCurrentRole = () => {
+    try {
+        const user = JSON.parse(
+            sessionStorage.getItem("user") || localStorage.getItem("user") || "{}"
+        );
+        return String(user.role || "").trim().toUpperCase().replace(/^ROLE_/, "");
+    } catch {
+        return "";
+    }
+};
+
 const getToken = () =>
-    localStorage.getItem("accessToken") ||
-    localStorage.getItem("token") ||
     sessionStorage.getItem("accessToken") ||
-    sessionStorage.getItem("token");
+    sessionStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("token");
 
 async function apiRequest(url, options = {}) {
     const token = getToken();
@@ -333,8 +344,10 @@ function AdminOrders() {
         }
     };
 
+    const isAdmin = getCurrentRole() === "ADMIN";
+
     const canAdminCancel = (order) =>
-        CANCELLABLE_STATUSES.includes(order.status);
+        isAdmin && CANCELLABLE_STATUSES.includes(order.status);
 
     return (
         <AdminLayout>

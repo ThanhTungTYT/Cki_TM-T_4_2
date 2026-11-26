@@ -42,7 +42,8 @@ public class ChatbotProxyController {
             payload.put("context", body.getOrDefault("context", Map.of()));
             Object topK = body.get("top_k");
             payload.put("top_k", topK instanceof Number ? Math.max(1, Math.min(5, ((Number) topK).intValue())) : 3);
-            payload.put("mode", "hybrid");
+            String requestedMode = body.get("mode") instanceof String s ? s.trim().toLowerCase() : "hybrid";
+            payload.put("mode", "svm".equals(requestedMode) ? "svm" : "hybrid");
         }
         try {
             @SuppressWarnings("unchecked")

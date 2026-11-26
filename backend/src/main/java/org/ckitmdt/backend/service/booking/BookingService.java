@@ -51,6 +51,7 @@ public class BookingService {
     private final PromotionRewardService promotionRewardService;
     private final BookingAssignmentRepository bookingAssignmentRepository;
     private final EmployeeRepository employeeRepository;
+    private final AdminNotificationRepository adminNotificationRepository;
 
     @Transactional(readOnly = true)
     public BookingQuoteResponse calculateQuote(
@@ -413,6 +414,34 @@ public class BookingService {
                 ? "Còn đủ nhân viên cho khung giờ đã chọn."
                 : "Khung giờ này không còn đủ nhân viên hoặc cần thêm thời gian di chuyển. Vui lòng chọn khung giờ khác.";
 
+        Double distanceKm = null;
+        Double serviceRadiusKm = partner.getServiceRadiusKm();
+        boolean outsideServiceRadius = false;
+        String serviceRadiusWarning = null;
+        if (request.getAddressId() != null && partner.getLatitude() != null && partner.getLongitude() != null) {
+            Address address = addressRepository.findByIdAndUserId(request.getAddressId(), customer.getId()).orElse(null);
+            if (address != null && address.getLatitude() != null && address.getLongitude() != null) {
+                double dist = haversineKm(
+                        address.getLatitude().doubleValue(),
+                        address.getLongitude().doubleValue(),
+                        partner.getLatitude().doubleValue(),
+                        partner.getLongitude().doubleValue()
+                );
+                distanceKm = Math.round(dist * 10.0) / 10.0;
+                double maxRadius = (serviceRadiusKm != null && serviceRadiusKm > 0) ? serviceRadiusKm : 10.0;
+                if (distanceKm > maxRadius) {
+                    outsideServiceRadius = true;
+                    serviceRadiusWarning = String.format(
+                            Locale.ROOT,
+                            "Địa chỉ đặt dịch vụ cách trụ sở %s khoảng %.1f km (vượt bán kính phục vụ tiêu chuẩn %.1f km). Đối tác có thể cần trao đổi thêm về thời gian di chuyển.",
+                            partner.getBusinessName(),
+                            distanceKm,
+                            maxRadius
+                    );
+                }
+            }
+        }
+
         BookingQuoteResponse response = BookingQuoteResponse.builder()
                 .partnerId(partner.getId())
                 .partnerName(partner.getBusinessName())
@@ -431,9 +460,24 @@ public class BookingService {
                 .scheduledEnd(scheduledEnd)
                 .capacityAvailable(capacityAvailable)
                 .capacityMessage(capacityMessage)
+                .distanceKm(distanceKm)
+                .serviceRadiusKm(serviceRadiusKm)
+                .outsideServiceRadius(outsideServiceRadius)
+                .serviceRadiusWarning(serviceRadiusWarning)
                 .build();
 
         return new QuoteCalculation(response, pricing);
+    }
+
+    private double haversineKm(double lat1, double lon1, double lat2, double lon2) {
+        final double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     @Transactional
@@ -523,13 +567,20 @@ public class BookingService {
         String bookingCode = generateBookingCode();
         LocalDateTime now = LocalDateTime.now();
 
+        String receiverNameSnapshot = (request.getReceiverName() != null && !request.getReceiverName().isBlank())
+                ? request.getReceiverName().trim()
+                : address.getReceiverName();
+        String receiverPhoneSnapshot = (request.getReceiverPhone() != null && !request.getReceiverPhone().isBlank())
+                ? request.getReceiverPhone().trim()
+                : address.getPhone();
+
         Booking booking = Booking.builder()
                 .bookingCode(bookingCode)
                 .customer(customer)
                 .partner(partner)
                 .address(address)
-                .receiverNameSnapshot(address.getReceiverName())
-                .receiverPhoneSnapshot(address.getPhone())
+                .receiverNameSnapshot(receiverNameSnapshot)
+                .receiverPhoneSnapshot(receiverPhoneSnapshot)
                 .fullAddressSnapshot(formatAddress(address))
                 .latitudeSnapshot(address.getLatitude())
                 .longitudeSnapshot(address.getLongitude())
@@ -788,10 +839,17 @@ public class BookingService {
                 && booking.getPartner().getUser().getId().equals(user.getId());
 
         boolean isAdmin = "ADMIN".equalsIgnoreCase(user.getRole())
-                || "STAFF".equalsIgnoreCase(user.getRole());
-        boolean isAssignedCleaner = isAssignedCleaner(booking, user);
+                || "ROLE_ADMIN".equalsIgnoreCase(user.getRole())
+                || "STAFF".equalsIgnoreCase(user.getRole())
+                || "ROLE_STAFF".equalsIgnoreCase(user.getRole());
 
-        if (!isCustomer && !isPartner && !isAdmin && !isAssignedCleaner) {
+        if (!isCustomer && !isPartner && !isAdmin) {
+            if (isCleanerRole(user.getRole())) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Nhân viên vui lòng xem chi tiết công việc qua cổng Cleaner (/api/cleaner/assignments)."
+                );
+            }
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Bạn không có quyền xem đơn hàng này."
@@ -826,6 +884,12 @@ public class BookingService {
         if (!BookingStatusEnum.PENDING_PROVIDER.name().equals(booking.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Chỉ có thể đổi lịch khi đơn đang chờ nhà cung cấp xác nhận.");
+        }
+        LocalDateTime nowCheck = LocalDateTime.now();
+        if ((booking.getProviderDeadlineAt() != null && !nowCheck.isBefore(booking.getProviderDeadlineAt()))
+                || (booking.getScheduledStart() != null && !nowCheck.isBefore(booking.getScheduledStart()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Đơn hàng đã quá thời hạn xác nhận hoặc đã qua giờ hẹn nên không thể đổi lịch.");
         }
         if (newStart == null || !newStart.isAfter(LocalDateTime.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Thời gian mới phải ở tương lai.");
@@ -871,29 +935,46 @@ public class BookingService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Lịch mới nằm ngoài giờ phục vụ.");
         }
+        // Đồng bộ quy tắc công suất trọn ngày (1 nhân viên / ngày) với createBooking & getAvailability
+        LocalDateTime dayStart = newStart.toLocalDate().atStartOfDay();
+        LocalDateTime dayEnd = newStart.toLocalDate().plusDays(1).atStartOfDay();
         long overlappingEmployees = bookingItemRepository.countReservedEmployeesExcludingBooking(
                 partner.getId(), bookingId,
-                newStart.minusMinutes(effectiveTravelBufferMinutes()),
-                newEnd.plusMinutes(effectiveTravelBufferMinutes()), LocalDateTime.now());
+                dayStart,
+                dayEnd, LocalDateTime.now());
         long activeEmployees = employeeRepository.findByPartner_IdOrderByIdAsc(partner.getId()).stream()
                 .filter(employee -> isActive(employee.getStatus()) && employee.getUser() != null
                         && isActive(employee.getUser().getStatus()))
                 .count();
         if (activeEmployees == 0 || overlappingEmployees + requiredEmployees > activeEmployees) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Khung giờ mới không còn đủ nhân viên. Vui lòng chọn thời gian khác.");
+                    "Ngày mới không còn đủ nhân viên trống lịch. Vui lòng chọn ngày khác.");
         }
 
+        LocalDateTime now = LocalDateTime.now();
         booking.setScheduledStart(newStart);
         booking.setScheduledEnd(newEnd);
-        booking.setProviderDeadlineAt(calculateProviderDeadline(newStart, LocalDateTime.now()));
-        booking.setUpdatedAt(LocalDateTime.now());
+        booking.setProviderDeadlineAt(calculateProviderDeadline(newStart, now));
+        booking.setUpdatedAt(now);
         Booking saved = bookingRepository.save(booking);
         bookingStatusHistoryRepository.save(BookingStatusHistory.builder()
                 .booking(saved).oldStatus(saved.getStatus()).newStatus(saved.getStatus())
                 .changedBy(customer)
                 .note("Khách hàng đổi lịch từ " + oldStart + " sang " + newStart)
-                .createdAt(LocalDateTime.now()).build());
+                .createdAt(now).build());
+
+        if (partner.getUser() != null) {
+            adminNotificationRepository.save(AdminNotification.builder()
+                    .recipient(partner.getUser())
+                    .type("BOOKING_RESCHEDULED")
+                    .title("Khách hàng vừa đổi lịch đơn #" + saved.getBookingCode())
+                    .message("Khách hàng " + customer.getFullName() + " đã đổi lịch đơn #"
+                            + saved.getBookingCode() + " sang " + newStart + ".")
+                    .referenceType("BOOKING")
+                    .referenceId(saved.getId())
+                    .createdAt(now)
+                    .build());
+        }
         return bookingStateEngine.mapToBookingResponse(saved);
     }
 
@@ -1025,9 +1106,13 @@ public class BookingService {
 
         return Objects.equals(employee.getPartner().getId(), assignmentPartner.getId())
                 && Objects.equals(assignmentPartner.getId(), booking.getPartner().getId())
+                && isActive(assignmentPartner.getStatus())
+                && isActive(assignmentPartner.getUser().getStatus())
                 && isActive(employee.getStatus())
                 && employee.getUser() != null
-                && isActive(employee.getUser().getStatus());
+                && isActive(employee.getUser().getStatus())
+                && !"DECLINED".equalsIgnoreCase(assignment.getStatus())
+                && !"CANCELLED".equalsIgnoreCase(assignment.getStatus());
     }
 
 

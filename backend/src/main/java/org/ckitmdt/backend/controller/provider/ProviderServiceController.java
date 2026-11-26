@@ -190,6 +190,8 @@ public class ProviderServiceController {
         }
 
         return serviceRepository.findAll().stream()
+                .filter(s -> "ACTIVE".equalsIgnoreCase(s.getStatus()))
+                .filter(s -> s.getCategory() == null || "ACTIVE".equalsIgnoreCase(s.getCategory().getStatus()))
                 .map(s -> {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", s.getId());
@@ -199,10 +201,12 @@ public class ProviderServiceController {
                     row.put("thumbnailUrl", s.getThumbnailUrl());
                     row.put("basePrice", s.getBasePrice());
                     row.put("estimatedMinutes", s.getEstimatedMinutes());
-                    boolean isReg = registeredServiceIds.contains(s.getId());
+                    PartnerService ps = psMap.get(s.getId());
+                    boolean isReg = ps != null
+                            && !"REJECTED".equalsIgnoreCase(ps.getStatus())
+                            && !"INACTIVE".equalsIgnoreCase(ps.getStatus());
                     row.put("registered", isReg);
-                    if (isReg) {
-                        PartnerService ps = psMap.get(s.getId());
+                    if (ps != null) {
                         row.put("partnerServiceId", ps.getId());
                         row.put("partnerPrice", ps.getPrice());
                         row.put("partnerStatus", ps.getStatus());
@@ -224,15 +228,38 @@ public class ProviderServiceController {
         Long serviceId = requiredLong(body, "serviceId");
         Service service = serviceRepository.findById(serviceId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy dịch vụ sàn."));
+        if (!"ACTIVE".equalsIgnoreCase(service.getStatus())
+                || (service.getCategory() != null && !"ACTIVE".equalsIgnoreCase(service.getCategory().getStatus()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Dịch vụ sàn này hiện không còn hoạt động.");
+        }
 
         String reason = text(body.get("reason"));
         if (reason.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do.");
         }
 
-        BigDecimal proposedPrice = body.get("proposedPrice") != null
-                ? new BigDecimal(String.valueOf(body.get("proposedPrice")))
-                : service.getBasePrice();
+        final String finalType = type;
+        boolean hasDuplicatePending = changeRequestRepository
+                .findByPartner_IdOrderByCreatedAtDesc(partner.getId())
+                .stream()
+                .anyMatch(r -> finalType.equalsIgnoreCase(r.getRequestType())
+                        && "PENDING_REVIEW".equalsIgnoreCase(r.getStatus())
+                        && Objects.equals(service.getId(), r.getTargetId()));
+        if (hasDuplicatePending) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Bạn đã có yêu cầu đang chờ duyệt cho dịch vụ này.");
+        }
+
+        BigDecimal proposedPrice;
+        try {
+            proposedPrice = body.get("proposedPrice") != null
+                    ? new BigDecimal(String.valueOf(body.get("proposedPrice")))
+                    : service.getBasePrice();
+        } catch (NumberFormatException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giá đề xuất không hợp lệ.");
+        }
+        if (proposedPrice == null || proposedPrice.signum() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giá đề xuất phải lớn hơn 0.");
+        }
 
         LocalDateTime now = LocalDateTime.now();
         BusinessChangeRequest req = BusinessChangeRequest.builder()

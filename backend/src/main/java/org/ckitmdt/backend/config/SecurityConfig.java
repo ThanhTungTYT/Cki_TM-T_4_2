@@ -93,7 +93,6 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/error",
                                 "/api/auth/login",
-                                "/api/auth/register",
                                 "/api/auth/register-partner",
                                 "/api/auth/register-partner/send-otp",
                                 "/api/auth/register-partner/verify-otp",
@@ -295,6 +294,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/provider/services/*/status",
+                                "/api/provider/services/*/pause",
                                 "/api/provider/services/*/resume"
                         ).denyAll()
 

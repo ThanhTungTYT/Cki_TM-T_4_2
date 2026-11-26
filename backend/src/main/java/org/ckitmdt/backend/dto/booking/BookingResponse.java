@@ -19,6 +19,7 @@ public class BookingResponse {
     private String customerPhone;
     private Long partnerId;
     private String partnerName;
+    private String partnerPhone;
     private Long addressId;
     private String receiverName;
     private String receiverPhone;
@@ -30,6 +31,7 @@ public class BookingResponse {
     private BigDecimal subtotal;
     private BigDecimal discountAmount;
     private BigDecimal pointsDiscount;
+    private BigDecimal platformFee;
     private BigDecimal totalAmount;
     private String status;
     private String paymentMethod;

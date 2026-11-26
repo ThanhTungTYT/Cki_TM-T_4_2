@@ -95,6 +95,10 @@ function Login() {
                     data.message || "Đăng nhập thất bại"
                 );
             }
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            localStorage.removeItem("userInfo");
             sessionStorage.setItem("accessToken", data.accessToken);
             sessionStorage.setItem("user", JSON.stringify({
                 userId: data.userId,
@@ -102,6 +106,7 @@ function Login() {
                 email: data.email,
                 role: data.role
             }));
+            window.dispatchEvent(new Event("cleanmate-auth-changed"));
 
             setMessage("Đăng nhập thành công");
             redirectByRole(data.role);
@@ -141,6 +146,10 @@ function Login() {
                     data.message || "Đăng nhập Google thất bại"
                 );
             }
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            localStorage.removeItem("userInfo");
             sessionStorage.setItem("accessToken", data.accessToken);
 
             sessionStorage.setItem("user", JSON.stringify({
@@ -149,6 +158,7 @@ function Login() {
                 email: data.email,
                 role: data.role
             }));
+            window.dispatchEvent(new Event("cleanmate-auth-changed"));
             setMessage("Đăng nhập Google thành công");
             redirectByRole(data.role);
         } catch (error) {

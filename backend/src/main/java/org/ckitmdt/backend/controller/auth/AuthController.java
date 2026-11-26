@@ -13,6 +13,7 @@ import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.core.Authentication;
 
 @RestController
@@ -28,8 +29,9 @@ public class AuthController {
     public ResponseEntity<AuthResponse> register(
             @Valid @RequestBody RegisterRequest request
     ) {
-        return ResponseEntity.ok(
-                authService.register(request)
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Vui lòng đăng ký qua luồng xác thực OTP email (/api/auth/register/request-otp)."
         );
     }
 

@@ -98,6 +98,8 @@ public class ServiceReviewService {
         Employee assignedEmployee = bookingAssignmentRepository
                 .findByBooking_IdOrderByIdAsc(completedBookingItem.getBooking().getId())
                 .stream()
+                .filter(a -> !"DECLINED".equalsIgnoreCase(a.getStatus())
+                        && !"CANCELLED".equalsIgnoreCase(a.getStatus()))
                 .map(BookingAssignment::getEmployee)
                 .filter(Objects::nonNull)
                 .findFirst()

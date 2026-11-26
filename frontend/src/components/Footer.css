@@ -1,13 +1,26 @@
 .footer {
+    position: relative;
     margin-top: 80px;
-    background: #1b365d;
+    background: linear-gradient(180deg, #1b365d 0%, #122645 100%);
     color: #ffffff;
+    overflow: hidden;
+}
+
+.footer::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent 0%, #2563eb 35%, #60a5fa 65%, transparent 100%);
+    opacity: 0.85;
 }
 
 .footer-content {
     max-width: 1280px;
     margin: 0 auto;
-    padding: 60px 32px 40px;
+    padding: 64px 32px 44px;
     display: grid;
     grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr;
     gap: 40px;
@@ -16,63 +29,73 @@
 .footer-brand .logo {
     color: #ffffff;
     margin-bottom: 16px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 11px;
     font-size: 24px;
     font-weight: 800;
+    letter-spacing: -0.02em;
     text-decoration: none;
 }
 
 .footer-brand .logo-icon {
-    background: #2563eb;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     color: #ffffff;
     width: 42px;
     height: 42px;
-    border-radius: 12px;
+    border-radius: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 19px;
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+    transition: transform 0.28s var(--cm-ease-spring, ease);
+}
+
+.footer-brand .logo:hover .logo-icon {
+    transform: rotate(-6deg) scale(1.06);
 }
 
 .footer-brand > p {
     max-width: 320px;
     color: #94a3b8;
-    font-size: 13px;
-    line-height: 1.7;
+    font-size: 13.5px;
+    line-height: 1.75;
     margin-bottom: 16px;
 }
 
 .footer-brand > span {
     display: block;
     color: #94a3b8;
-    font-size: 12px;
+    font-size: 12.5px;
     margin-top: 6px;
 }
 
 .footer-column {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 11px;
 }
 
 .footer-column h3 {
     font-size: 14px;
     font-weight: 700;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     color: #ffffff;
+    letter-spacing: 0.01em;
 }
 
 .footer-column a {
     color: #94a3b8;
-    font-size: 13px;
+    font-size: 13.5px;
     text-decoration: none;
-    transition: color 0.2s;
+    transition: color 0.2s ease, transform 0.22s var(--cm-ease-out, ease);
+    width: fit-content;
 }
 
 .footer-column a:hover {
     color: #ffffff;
+    transform: translateX(4px);
 }
 
 .socials {
@@ -82,34 +105,38 @@
 }
 
 .socials span {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.09);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     display: flex;
     align-items: center;
     justify-content: center;
     color: #ffffff;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background-color 0.22s ease, border-color 0.22s ease, transform 0.25s var(--cm-ease-spring, ease), box-shadow 0.22s ease;
 }
 
 .socials span:hover {
     background: #2563eb;
+    border-color: #60a5fa;
+    transform: translateY(-3px);
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.4);
 }
 
 .footer-bottom {
     max-width: 1280px;
     margin: 0 auto;
     padding: 24px 32px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.09);
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 12px;
-    color: #64748b;
-    font-size: 12px;
+    color: #94a3b8;
+    font-size: 12.5px;
 }
 
 .footer-bottom div {
@@ -118,11 +145,29 @@
 }
 
 .footer-bottom a {
-    color: #64748b;
+    color: #94a3b8;
     text-decoration: none;
-    transition: color 0.2s;
+    transition: color 0.2s ease;
 }
 
 .footer-bottom a:hover {
     color: #ffffff;
+}
+
+@media (max-width: 960px) {
+    .footer-content {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 32px;
+    }
+}
+
+@media (max-width: 560px) {
+    .footer-content {
+        grid-template-columns: 1fr;
+        padding: 48px 20px 32px;
+    }
+
+    .footer-bottom {
+        padding: 20px;
+    }
 }

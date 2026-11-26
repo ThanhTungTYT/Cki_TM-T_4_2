@@ -4,6 +4,7 @@ import {
     NavLink,
     Link,
     useNavigate,
+    useLocation,
     Outlet
 } from 'react-router-dom';
 import CleanerJobReminder from './CleanerJobReminder';
@@ -137,6 +138,7 @@ function Icon({ name, size = 20 }) {
 
 function CleanerLayout() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [user, setUser] = useState(getCleanerUser);
 
@@ -301,7 +303,9 @@ function CleanerLayout() {
 
                 <main className="cl-content">
                     <CleanerJobReminder />
-                    <Outlet />
+                    <div key={location.pathname} className="cm-page-transition">
+                        <Outlet />
+                    </div>
                 </main>
             </div>
         </div>
