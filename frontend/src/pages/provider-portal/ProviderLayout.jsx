@@ -1,4 +1,4 @@
-import { NavLink, Link, useNavigate, Outlet } from 'react-router-dom';
+import { NavLink, Link, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import React, { Component, useEffect, useState } from 'react';
 import { providerDashboardApi, providerNotificationApi } from '../../services/providerApi';
 import './ProviderPortal.css';
@@ -155,6 +155,7 @@ class ProviderErrorBoundary extends Component {
 
 function ProviderLayout() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [businessName, setBusinessName] = useState('');
     const [userName, setUserName] = useState('');
     const [notifications, setNotifications] = useState([]);
@@ -310,7 +311,7 @@ function ProviderLayout() {
                 <header className="pp-topbar">
                     <span className="pp-topbar-title">
                         {NAV_ITEMS.find(n =>
-                            window.location.pathname.startsWith(n.to)
+                            location.pathname.startsWith(n.to)
                         )?.label || 'Cổng đối tác'}
                     </span>
                     <div className="pp-topbar-actions">
@@ -363,7 +364,7 @@ function ProviderLayout() {
                             </button>
 
                             {showNotifs && (
-                                <div style={{
+                                <div className="pp-notif-dropdown" style={{
                                     position: 'absolute',
                                     right: 0,
                                     top: 44,
@@ -470,7 +471,11 @@ function ProviderLayout() {
                 </header>
 
                 <main className="pp-content">
-                    <ProviderErrorBoundary><Outlet /></ProviderErrorBoundary>
+                    <ProviderErrorBoundary>
+                        <div key={location.pathname} className="cm-page-transition">
+                            <Outlet />
+                        </div>
+                    </ProviderErrorBoundary>
                 </main>
             </div>
         </div>

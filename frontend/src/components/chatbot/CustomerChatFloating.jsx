@@ -7,14 +7,17 @@ export default function CustomerChatFloating() {
   return (
     <>
       <button
-        className="cm-float-button"
+        className={`cm-float-button${visible ? ' is-open' : ''}`}
         type="button"
         aria-expanded={visible}
         onClick={() => setVisible((v) => !v)}
       >
-        {visible ? 'Đóng tư vấn' : '✦ Tư vấn dịch vụ'}
+        {visible ? '✕ Đóng tư vấn' : '✦ Tư vấn dịch vụ'}
       </button>
-      <aside className="cm-float-panel" style={{ display: visible ? 'block' : 'none' }}>
+      <aside
+        className={`cm-float-panel${visible ? ' is-open' : ''}`}
+        aria-hidden={!visible}
+      >
         {/* Giữ nguyên mount để bảo toàn context hội thoại khi đóng/mở hoặc chuyển trang Customer */}
         <CleanMateChatWidget onAfterSelect={() => setVisible(false)} />
       </aside>

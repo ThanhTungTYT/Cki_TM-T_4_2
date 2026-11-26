@@ -12,13 +12,15 @@
     z-index: 500;
     top: calc(100% + 12px);
     right: 0;
-    width: min(380px, calc(100vw - 24px));
+    width: min(390px, calc(100vw - 24px));
     overflow: hidden;
     border: 1px solid #dbe5f2;
-    border-radius: 14px;
+    border-radius: 16px;
     background: #fff;
-    box-shadow: 0 16px 42px rgb(23 45 78 / 18%);
+    box-shadow: 0 20px 50px rgba(23, 45, 78, 0.18), 0 4px 12px rgba(15, 23, 42, 0.06);
     color: #243b5a;
+    transform-origin: top right;
+    animation: cmPopDown 0.24s var(--cm-ease-out, ease);
 }
 
 .customer-notifications-heading {
@@ -41,8 +43,13 @@
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    padding: 13px 15px;
+    padding: 14px 16px;
     border-bottom: 1px solid #eef2f7;
+    transition: background-color 0.18s ease;
+}
+
+.customer-notification-item:hover {
+    background: #f8fbff;
 }
 
 .customer-notification-item.unread { background: #f3f7ff; }

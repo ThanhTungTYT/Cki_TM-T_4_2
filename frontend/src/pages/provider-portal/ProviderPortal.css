@@ -28,14 +28,14 @@
     display: flex;
     min-height: 100vh;
     background: var(--pp-content-bg);
-    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--cm-font-sans, 'Be Vietnam Pro', 'Inter', 'Segoe UI', system-ui, sans-serif);
     color: var(--pp-text);
 }
 
 /* ======== Sidebar ======== */
 .pp-sidebar {
     width: var(--pp-sidebar-w);
-    background: var(--pp-sidebar-bg);
+    background: linear-gradient(180deg, #1e385c 0%, #152a47 100%);
     color: var(--pp-sidebar-text);
     display: flex;
     flex-direction: column;
@@ -44,8 +44,8 @@
     left: 0;
     bottom: 0;
     z-index: 200;
-    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.18);
-    transition: transform 0.25s ease;
+    box-shadow: 4px 0 24px rgba(15, 23, 42, 0.18);
+    transition: transform 0.28s var(--cm-ease-out, ease);
 }
 
 .pp-sidebar-logo {
@@ -85,33 +85,43 @@
 
 .pp-sidebar-nav {
     flex: 1;
-    padding: 12px 0;
+    padding: 12px 10px;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .pp-nav-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 11px 20px;
+    gap: 11px;
+    padding: 11px 14px;
+    border-radius: 10px;
     cursor: pointer;
-    color: var(--pp-sidebar-text);
+    color: rgba(226, 232, 240, 0.88);
     text-decoration: none;
-    font-size: 14px;
+    font-size: 13.5px;
     font-weight: 500;
-    transition: background 0.15s, color 0.15s;
-    border-left: 3px solid transparent;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.22s var(--cm-ease-out, ease), box-shadow 0.22s ease;
+    border-left: none;
 }
 
 .pp-nav-item:hover {
-    background: var(--pp-sidebar-hover);
+    background: rgba(255, 255, 255, 0.09);
     color: #fff;
+    transform: translateX(3px);
 }
 
 .pp-nav-item.active {
-    background: var(--pp-sidebar-hover);
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     color: #fff;
-    border-left-color: var(--pp-primary);
+    font-weight: 600;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.36);
+}
+
+.pp-nav-item.active:hover {
+    transform: none;
 }
 
 .pp-nav-item svg,
@@ -190,17 +200,24 @@
 }
 
 .pp-topbar {
-    background: var(--pp-card-bg);
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--pp-border);
     padding: 0 28px;
-    height: 60px;
+    height: 64px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 18px rgba(30, 56, 92, 0.05);
+}
+
+.pp-notif-dropdown {
+    transform-origin: top right;
+    animation: cmPopDown 0.24s var(--cm-ease-out, ease);
 }
 
 .pp-topbar-title {
@@ -272,14 +289,15 @@
 .pp-card {
     background: var(--pp-card-bg);
     border: 1px solid var(--pp-border);
-    border-radius: 12px;
-    padding: 20px 24px;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+    border-radius: 16px;
+    padding: 22px 24px;
+    box-shadow: 0 4px 16px rgba(30, 56, 92, 0.045);
+    transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 .pp-card-title {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 15.5px;
+    font-weight: 700;
     color: var(--pp-navy);
     margin: 0 0 16px;
 }
@@ -287,7 +305,7 @@
 /* ======== Stat cards ======== */
 .pp-stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     gap: 16px;
     margin-bottom: 24px;
 }
@@ -295,11 +313,19 @@
 .pp-stat-card {
     background: var(--pp-card-bg);
     border: 1px solid var(--pp-border);
-    border-radius: 12px;
-    padding: 18px 20px;
+    border-radius: 15px;
+    padding: 19px 20px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 7px;
+    box-shadow: 0 4px 14px rgba(30, 56, 92, 0.04);
+    transition: transform 0.26s var(--cm-ease-out, ease), box-shadow 0.26s ease, border-color 0.24s ease;
+}
+
+.pp-stat-card:hover {
+    transform: translateY(-3px);
+    border-color: #bfdbfe;
+    box-shadow: 0 14px 30px rgba(30, 56, 92, 0.09);
 }
 
 .pp-stat-label {
@@ -506,29 +532,42 @@
 .pp-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 999;
     padding: 20px;
+    box-sizing: border-box;
+    overflow: hidden;
+    animation: cmFadeIn 0.2s var(--cm-ease-out, ease);
 }
 
 .pp-modal {
+    display: flex;
+    flex-direction: column;
     background: #fff;
-    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
     width: 100%;
-    max-width: 480px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    max-height: min(90vh, calc(100dvh - 40px));
+    box-shadow: 0 24px 64px rgba(15, 23, 42, 0.24);
     overflow: hidden;
+    animation: cmScaleIn 0.28s var(--cm-ease-out, ease);
 }
 
 .pp-modal-header {
+    flex-shrink: 0;
     padding: 18px 24px;
     border-bottom: 1px solid var(--pp-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+    background: #fff;
 }
 
 .pp-modal-title {
@@ -544,8 +583,9 @@
     cursor: pointer;
     color: var(--pp-muted);
     line-height: 1;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 .pp-modal-close:hover {
@@ -554,12 +594,20 @@
 }
 
 .pp-modal-body {
-    padding: 24px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding: 22px 24px;
+    box-sizing: border-box;
 }
 
 .pp-modal-footer {
+    flex-shrink: 0;
     padding: 14px 24px;
     border-top: 1px solid var(--pp-border);
+    background: #fafcff;
     display: flex;
     justify-content: flex-end;
     gap: 10px;
@@ -659,6 +707,27 @@
     .pp-stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+
+    .pp-modal-overlay {
+        padding: 12px;
+    }
+
+    .pp-modal {
+        max-height: calc(100dvh - 24px);
+        border-radius: 14px;
+    }
+
+    .pp-modal-header {
+        padding: 14px 18px;
+    }
+
+    .pp-modal-body {
+        padding: 16px 18px;
+    }
+
+    .pp-modal-footer {
+        padding: 12px 18px;
+    }
 }
 
 /* ======== Tabs ======== */
@@ -709,6 +778,7 @@
 /* ======== Diff Table ======== */
 .pp-diff-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
     margin-top: 10px;
@@ -721,12 +791,15 @@
     border: 1px solid var(--pp-border);
     font-size: 12px;
     color: var(--pp-muted);
+    overflow-wrap: anywhere;
 }
 
 .pp-diff-table td {
     padding: 8px 12px;
     border: 1px solid var(--pp-border);
     vertical-align: top;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .pp-diff-old {

@@ -96,9 +96,15 @@
 .checkout-section-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 16px;
+    border-radius: 18px;
     padding: 26px 28px;
-    box-shadow: 0 4px 16px rgba(30, 56, 92, 0.04);
+    box-shadow: 0 6px 22px rgba(30, 56, 92, 0.045);
+    transition: box-shadow 0.28s var(--cm-ease-out, ease), border-color 0.24s ease;
+}
+
+.checkout-section-card:hover {
+    border-color: #d2e2f7;
+    box-shadow: 0 12px 30px rgba(30, 56, 92, 0.075);
 }
 
 .section-card-header {
@@ -109,9 +115,9 @@
 }
 
 .step-number {
-    width: 32px;
-    height: 32px;
-    background: #2563eb;
+    width: 34px;
+    height: 34px;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     color: #ffffff;
     font-size: 15px;
     font-weight: 800;
@@ -121,6 +127,7 @@
     justify-content: center;
     flex-shrink: 0;
     margin-top: 2px;
+    box-shadow: 0 6px 14px rgba(37, 99, 235, 0.26);
 }
 
 .section-card-header h2 {

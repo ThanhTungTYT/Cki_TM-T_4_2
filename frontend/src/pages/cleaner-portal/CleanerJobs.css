@@ -57,11 +57,18 @@
     align-items: center;
     gap: 13px;
     min-width: 0;
-    padding: 18px;
+    padding: 19px;
     background: #fff;
     border: 1px solid #e8edf5;
-    border-radius: 13px;
-    box-shadow: 0 2px 8px rgba(30, 56, 92, .035);
+    border-radius: 15px;
+    box-shadow: 0 4px 14px rgba(30, 56, 92, .045);
+    transition: transform 0.25s var(--cm-ease-out, ease), box-shadow 0.25s ease, border-color 0.22s ease;
+}
+
+.cj-stat-card:hover {
+    transform: translateY(-3px);
+    border-color: #bfdbfe;
+    box-shadow: 0 12px 26px rgba(30, 56, 92, .09);
 }
 
 .cj-stat-icon {
@@ -182,9 +189,16 @@
 .cj-booking-card {
     background: #fff;
     border: 1px solid #e8edf5;
-    border-radius: 13px;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(30, 56, 92, .035);
+    border-radius: 16px;
+    padding: 21px;
+    box-shadow: 0 4px 14px rgba(30, 56, 92, .04);
+    transition: transform 0.25s var(--cm-ease-out, ease), box-shadow 0.25s ease, border-color 0.22s ease;
+}
+
+.cj-booking-card:hover {
+    transform: translateY(-2px);
+    border-color: #bfdbfe;
+    box-shadow: 0 12px 28px rgba(30, 56, 92, .085);
 }
 
 .cj-card-top {

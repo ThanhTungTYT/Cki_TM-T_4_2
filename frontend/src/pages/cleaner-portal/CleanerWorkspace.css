@@ -27,23 +27,32 @@
 }
 
 .cw-eyebrow {
-    font-size: 10px;
+    font-size: 10.5px;
     letter-spacing: 1.25px;
     font-weight: 800;
-    color: #32836d;
+    color: #2563eb;
 }
 
 .cw-button {
     border: 0;
-    border-radius: 9px;
+    border-radius: 10px;
     padding: 10px 16px;
     font-weight: 650;
     cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .cw-button.secondary {
-    background: #eaf3f0;
-    color: #28745f;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.cw-button.secondary:hover:not(:disabled) {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+    transform: translateY(-1px);
 }
 
 .cw-button:disabled {
@@ -138,8 +147,8 @@
 .cw-day {
     min-height: 54px;
     border: 1px solid transparent;
-    background: #f8fafb;
-    border-radius: 9px;
+    background: #f8fafc;
+    border-radius: 10px;
     color: #354a62;
     display: flex;
     align-items: center;
@@ -147,6 +156,14 @@
     flex-direction: column;
     gap: 3px;
     cursor: pointer;
+    transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease, color 0.18s ease;
+}
+
+.cw-day:not(.empty):hover {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    transform: translateY(-1px);
 }
 
 .cw-day.empty {
@@ -154,23 +171,24 @@
 }
 
 .cw-day.selected {
-    background: #e6f3ef;
-    border-color: #3b927a;
-    color: #17684f;
+    background: #eff6ff;
+    border-color: #2563eb;
+    color: #1d4ed8;
     font-weight: 800;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.14);
 }
 
 .cw-day.today span {
-    border-bottom: 2px solid #32836d;
+    border-bottom: 2px solid #2563eb;
 }
 
 .cw-day i {
     font-size: 9px;
     font-style: normal;
-    background: #32836d;
+    background: #2563eb;
     color: white;
     border-radius: 10px;
-    padding: 1px 5px;
+    padding: 1px 6px;
 }
 
 .cw-legend {
@@ -192,12 +210,12 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #32836d;
+    background: #2563eb;
 }
 
 .cw-legend b {
     background: #fff;
-    border: 2px solid #32836d;
+    border: 2px solid #2563eb;
 }
 
 .cw-panel-title {
@@ -215,10 +233,12 @@
 
 .cw-count {
     font-size: 11px;
-    background: #eef5f3;
-    color: #28745f;
-    padding: 6px 9px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #dbeafe;
+    padding: 6px 10px;
     border-radius: 20px;
+    font-weight: 700;
     white-space: nowrap;
 }
 
@@ -241,7 +261,7 @@
 
 .cw-job-time {
     min-width: 58px;
-    color: #26765f;
+    color: #2563eb;
     font-size: 14px;
     font-weight: 750;
 }
@@ -334,12 +354,18 @@
     color: #68798d;
     font-size: 12px;
     cursor: pointer;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.cw-tabs button:hover {
+    border-color: #93c5fd;
+    color: #2563eb;
 }
 
 .cw-tabs button.active {
-    background: #e9f4f0;
-    border-color: #cce6dc;
-    color: #24735c;
+    background: #eff6ff;
+    border-color: #2563eb;
+    color: #1d4ed8;
     font-weight: 700;
 }
 
@@ -353,16 +379,17 @@
     box-sizing: border-box;
     padding: 10px 14px;
     border: 1px solid #e1e8ee;
-    border-radius: 9px;
+    border-radius: 10px;
     outline: none;
     color: #263d57;
     background: #fff;
     font-size: 13px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .cw-search input:focus {
-    border-color: #3b927a;
-    box-shadow: 0 0 0 3px rgba(59, 146, 122, .1);
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .cw-search input::placeholder {
@@ -420,7 +447,7 @@
 
 .cw-history-side b {
     font-size: 11px;
-    color: #32836d;
+    color: #2563eb;
 }
 
 .cw-history-side span {
@@ -429,7 +456,7 @@
 }
 
 .cw-status-label.success {
-    color: #238363;
+    color: #16a34a;
 }
 
 .cw-status-label.waiting {
@@ -437,7 +464,7 @@
 }
 
 .cw-status-label.cancelled {
-    color: #b44e4e;
+    color: #dc2626;
 }
 
 .cw-status-label.default {
@@ -449,17 +476,22 @@
 .cw-unread {
     font-size: 12px;
     font-weight: 700;
-    color: #32836d;
+    color: #2563eb;
 }
 
 .cw-text-button {
     border: 0;
     background: transparent;
-    color: #287a64;
+    color: #2563eb;
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
+}
+
+.cw-text-button:hover:not(:disabled) {
+    color: #1d4ed8;
+    text-decoration: underline;
 }
 
 .cw-text-button:disabled {
@@ -469,10 +501,11 @@
 
 .cw-notification {
     align-items: flex-start;
+    transition: background-color 0.18s ease;
 }
 
 .cw-notification.unread {
-    background: #f8fcfa;
+    background: #f3f7ff;
     margin: 0 -20px;
     padding: 17px 20px;
 }
@@ -481,7 +514,8 @@
     width: 38px;
     height: 38px;
     border-radius: 11px;
-    background: #edf5f2;
+    background: #eff6ff;
+    color: #2563eb;
     display: grid;
     place-items: center;
     flex-shrink: 0;
@@ -500,15 +534,16 @@
 
 .cw-notification-title strong {
     font-size: 13px;
-    color: #263d57;
+    color: #1e385c;
 }
 
 .cw-notification-title i {
     font-style: normal;
-    font-size: 9px;
-    color: #28745f;
-    background: #e2f2eb;
-    padding: 3px 7px;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #1d4ed8;
+    background: #dbeafe;
+    padding: 3px 8px;
     border-radius: 10px;
 }
 

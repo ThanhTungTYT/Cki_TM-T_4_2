@@ -449,10 +449,11 @@
 }
 
 .st-node.current .st-circle {
-    background: #2563eb;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
     border-color: #2563eb;
     color: #ffffff;
-    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.2);
+    animation: cmPulseRing 2.4s infinite;
 }
 
 .st-node.current .st-label {

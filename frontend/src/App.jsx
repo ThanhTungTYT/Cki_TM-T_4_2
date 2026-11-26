@@ -11,6 +11,7 @@ import { useEffect } from "react";
 
 import CustomerChatFloating from "./components/chatbot/CustomerChatFloating";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RouteMotionManager, { PageTransition } from "./components/RouteMotionManager";
 
 import Home from "./pages/home";
 import Rewards from "./pages/rewards";
@@ -128,7 +129,9 @@ function HomeRoute() {
 function CustomerLayout() {
     return (
         <>
-            <Outlet />
+            <PageTransition>
+                <Outlet />
+            </PageTransition>
             <CustomerChatFloating />
         </>
     );
@@ -153,6 +156,7 @@ function AdminAndStaff({ children }) {
 function App() {
     return (
         <BrowserRouter>
+            <RouteMotionManager />
             <AuthSessionExpiryHandler />
 
             <Routes>
@@ -214,16 +218,18 @@ function App() {
                     />
                 </Route>
 
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
-                <Route path="/verify-otp" element={<VerifyOtp />} />
-                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+                <Route path="/register" element={<PageTransition><Register /></PageTransition>} />
+                <Route path="/verify-otp" element={<PageTransition><VerifyOtp /></PageTransition>} />
+                <Route path="/forgot-password" element={<PageTransition><ForgotPassword /></PageTransition>} />
 
                 <Route
                     path="/partner-onboarding"
                     element={
                         <ProtectedRoute roles={["PROVIDER", "PARTNER"]}>
-                            <PartnerOnboarding />
+                            <PageTransition>
+                                <PartnerOnboarding />
+                            </PageTransition>
                         </ProtectedRoute>
                     }
                 />

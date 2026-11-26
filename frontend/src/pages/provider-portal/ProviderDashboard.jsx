@@ -79,6 +79,20 @@ function ProviderDashboard() {
         loadDashboard();
     }, []); // eslint-disable-line
 
+    useEffect(() => {
+        if (!showChangeModal) return undefined;
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') setShowChangeModal(false);
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.body.style.overflow = prevOverflow;
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [showChangeModal]);
+
     function openChangeModal(tab = 'LOCATION_UPDATE') {
         setModalTab(tab);
         setModalError('');
@@ -574,7 +588,7 @@ function ProviderDashboard() {
             {/* MODAL POP-UP YÊU CẦU THAY ĐỔI THÔNG TIN / VỊ TRÍ */}
             {showChangeModal && (
                 <div className="pp-modal-overlay">
-                    <div className="pp-modal" style={{ maxWidth: 600 }}>
+                    <div className="pp-modal" style={{ maxWidth: 'min(660px, 100%)' }}>
                         <div className="pp-modal-header">
                             <span className="pp-modal-title">Yêu cầu thay đổi hồ sơ doanh nghiệp</span>
                             <button className="pp-modal-close" onClick={() => setShowChangeModal(false)}>×</button>
@@ -623,7 +637,7 @@ function ProviderDashboard() {
                                             onChange={(e) => setPropAddress(e.target.value)}
                                         />
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                                         <div className="pp-form-group">
                                             <label className="pp-label">Latitude đề xuất *</label>
                                             <input

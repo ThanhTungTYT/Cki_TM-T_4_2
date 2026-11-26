@@ -175,11 +175,13 @@ function AdminLayout({ children }) {
             </aside>
 
             <main className="admin-main">
-                {hasAdminAccess && location.pathname === "/admin" && (
-                    <AdminOverviewCards />
-                )}
+                <div key={location.pathname} className="cm-page-transition">
+                    {hasAdminAccess && location.pathname === "/admin" && (
+                        <AdminOverviewCards />
+                    )}
 
-                {children}
+                    {children}
+                </div>
             </main>
         </div>
     );
