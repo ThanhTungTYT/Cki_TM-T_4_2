@@ -38,6 +38,8 @@ function Login() {
                 appId: "2165525424321923",
                 cookie: true,
                 xfbml: false,
+                // Tránh luồng FedCM đang trả lỗi 500 từ endpoint của Meta.
+                fedCM: false,
                 version: "v26.0"
             });
             setFacebookReady(true);
@@ -168,63 +170,72 @@ function Login() {
             setLoading(false);
         }
     };
+    const completeFacebookLogin = async (facebookResponse) => {
+        try {
+            const response = await fetch(
+                "https://handmade-opponent-punk.ngrok-free.dev/api/auth/facebook",
+                {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({accessToken: facebookResponse.authResponse.accessToken})
+                }
+            );
+            const text = await response.text();
+            let data = {};
+            if (text) {
+                try {
+                    data = JSON.parse(text);
+                } catch {
+                    throw new Error("Backend trả về dữ liệu không hợp lệ");
+                }
+            }
+            if (!response.ok) {
+                throw new Error(data.message || "Đăng nhập Facebook thất bại");
+            }
+            sessionStorage.setItem("accessToken", data.accessToken);
+            sessionStorage.setItem("user", JSON.stringify({
+                userId: data.userId,
+                fullName: data.fullName,
+                email: data.email,
+                role: data.role
+            }));
+            setMessage("Đăng nhập Facebook thành công");
+            redirectByRole(data.role);
+        } catch (error) {
+            console.error(error);
+            setMessage(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleFacebookLogin = () => {
         setMessage("");
 
+        if (loading) return;
         if (!facebookReady || !window.FB) {
             setMessage("Facebook Login chưa sẵn sàng");
             return;
         }
 
-        window.FB.login(async (facebookResponse) => {
-            if (!facebookResponse.authResponse?.accessToken) {
-                setMessage("Đăng nhập Facebook thất bại hoặc đã bị hủy");
-                return;
-            }
-
-            setLoading(true);
-
-            try {
-                const response = await fetch(
-                    "http://localhost:8080/api/auth/facebook",
-                    {
-                        method: "POST",
-                        headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({accessToken: facebookResponse.authResponse.accessToken})
-                    }
-                );
-                const text = await response.text();
-                let data = {};
-                if (text) {
-                    try {
-                        data = JSON.parse(text);
-                    } catch {
-                        throw new Error("Backend trả về dữ liệu không hợp lệ");
-                    }
+        setLoading(true);
+        try {
+            window.FB.login((facebookResponse) => {
+                if (!facebookResponse.authResponse?.accessToken) {
+                    setMessage("Đăng nhập Facebook thất bại hoặc đã bị hủy");
+                    setLoading(false);
+                    return;
                 }
-                if (!response.ok) {
-                    throw new Error(
-                        data.message || "Đăng nhập Facebook thất bại"
-                    );
-                }
-                sessionStorage.setItem("accessToken", data.accessToken);
-                sessionStorage.setItem("user", JSON.stringify({
-                    userId: data.userId,
-                    fullName: data.fullName,
-                    email: data.email,
-                    role: data.role
-                }));
-                setMessage("Đăng nhập Facebook thành công");
-                redirectByRole(data.role);
-            } catch (error) {
-                console.error(error);
-                setMessage(error.message);
-            } finally {
-                setLoading(false);
-            }
-        }, {
-            scope: "public_profile,email"
-        });
+
+                void completeFacebookLogin(facebookResponse);
+            }, {
+                scope: "public_profile,email"
+            });
+        } catch (error) {
+            console.error(error);
+            setMessage(error.message || "Không thể mở cửa sổ đăng nhập Facebook.");
+            setLoading(false);
+        }
     };
     return (
         <div className="home">
