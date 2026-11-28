@@ -1,0 +1,343 @@
+
+.admin-layout {
+    --admin-blue: #2563eb;
+    --admin-blue-dark: #1d4ed8;
+    --admin-dark: #183153;
+    --admin-muted: #718096;
+    --admin-border: #e4eaf2;
+    --admin-bg: #f4f7fb;
+    background: var(--admin-bg);
+    color: var(--admin-dark);
+}
+
+.admin-layout .admin-main {
+    min-width: 0;
+    width: calc(100% - 240px);
+    padding: 28px 30px 36px;
+    background: #f4f7fb;
+}
+
+.admin-layout .admin-sidebar {
+    z-index: 20;
+    box-shadow: 5px 0 22px rgba(25, 48, 78, 0.035);
+}
+
+.admin-layout .admin-brand {
+    margin-bottom: 5px;
+}
+
+.admin-layout .admin-brand-icon {
+    border-radius: 13px;
+    background: linear-gradient(145deg, #2f80ed, #1754c8);
+    box-shadow: 0 7px 16px rgba(37, 99, 235, 0.2);
+}
+
+.admin-layout .admin-menu-title {
+    color: #9aa8ba;
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: 1.15px;
+}
+
+.admin-layout .admin-menu-item {
+    min-height: 44px;
+    border-radius: 11px;
+    transition: color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.admin-layout .admin-menu-item.active {
+    color: #fff;
+    background: linear-gradient(110deg, #2868e8, #1f55d7);
+    box-shadow: 0 6px 14px rgba(37, 99, 235, .2);
+}
+
+.admin-layout .admin-menu-item:not(.active):hover {
+    color: #1d5ed5;
+    background: #edf4ff;
+}
+
+.admin-layout .admin-sidebar-bottom {
+    padding-top: 17px;
+}
+
+.admin-layout .admin-user {
+    min-width: 0;
+}
+
+.admin-layout .admin-avatar {
+    background: #e5efff;
+    color: #245bd0;
+}
+
+.admin-layout .admin-user-info strong {
+    color: #243b5a;
+}
+
+.admin-layout .admin-user-info span {
+    color: #8795a8;
+}
+
+.admin-layout .cm-page-transition {
+    width: 100%;
+    min-width: 0;
+    animation: adminPageEnter .22s ease both;
+}
+
+@keyframes adminPageEnter {
+    from {
+        opacity: .75;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.admin-layout .admin-topbar,
+.admin-layout .transactions-heading,
+.admin-layout .complaint-page-header,
+.admin-layout .complaint-toolbar,
+.admin-layout .accounts-page-heading {
+    gap: 16px;
+}
+
+.admin-layout .admin-topbar h1,
+.admin-layout .transactions-heading h1,
+.admin-layout .complaint-page-heading h1,
+.admin-layout .accounts-page-heading h1 {
+    color: #193657;
+    letter-spacing: -.45px;
+}
+
+.admin-layout .admin-panel,
+.admin-layout .admin-card,
+.admin-layout .accounts-list-card,
+.admin-layout .complaint-panel,
+.admin-layout .transactions-filter,
+.admin-layout .transactions-result-summary,
+.admin-layout .transactions-table-wrapper,
+.admin-layout .admin-outbox-panel-heading,
+.admin-layout .admin-outbox-table-panel {
+    border-color: #e5ebf3;
+    border-radius: 14px;
+    box-shadow: 0 4px 16px rgba(31, 55, 85, .035);
+}
+
+.admin-layout .admin-summary-card,
+.admin-layout .admin-overview-card,
+.admin-layout .transaction-stat-card,
+.admin-layout .accounts-stat-card,
+.admin-layout .complaint-stat-card {
+    border: 1px solid #e5ebf3;
+    border-radius: 14px;
+    box-shadow: 0 4px 15px rgba(31, 55, 85, .045);
+}
+
+.admin-layout .admin-summary-card:hover,
+.admin-layout .admin-overview-card:hover,
+.admin-layout .transaction-stat-card:hover,
+.admin-layout .accounts-stat-card:hover,
+.admin-layout .complaint-stat-card:hover {
+    box-shadow: 0 9px 22px rgba(31, 55, 85, .075);
+}
+
+.admin-layout input:not([type="checkbox"]):not([type="radio"]),
+.admin-layout select,
+.admin-layout textarea {
+    border-radius: 9px;
+}
+
+.admin-layout input:focus-visible,
+.admin-layout select:focus-visible,
+.admin-layout textarea:focus-visible,
+.admin-layout button:focus-visible,
+.admin-layout a:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, .17);
+    outline-offset: 2px;
+}
+
+.admin-layout .admin-table,
+.admin-layout .accounts-table,
+.admin-layout .complaint-table,
+.admin-layout .transactions-table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.admin-layout .admin-table th,
+.admin-layout .accounts-table th,
+.admin-layout .complaint-table th,
+.admin-layout .transactions-table th {
+    color: #5d6f86;
+    background: #f4f7fc;
+    font-weight: 750;
+    letter-spacing: .1px;
+}
+
+.admin-layout .admin-table tbody tr:hover,
+.admin-layout .accounts-table tbody tr:hover,
+.admin-layout .complaint-table tbody tr:hover,
+.admin-layout .transactions-table tbody tr:hover {
+    background: #f7faff;
+}
+
+.admin-layout .admin-btn,
+.admin-layout .complaint-btn,
+.admin-layout .accounts-create-btn,
+.admin-layout .admin-outbox-retry {
+    border-radius: 9px;
+    font-weight: 650;
+    transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.admin-layout .admin-btn:hover,
+.admin-layout .complaint-btn:hover,
+.admin-layout .accounts-create-btn:hover,
+.admin-layout .admin-outbox-retry:hover {
+    transform: translateY(-1px);
+}
+
+.admin-layout .transactions-filter {
+    display: grid;
+    grid-template-columns: minmax(230px, 1.8fr) minmax(165px, .95fr) minmax(175px, 1fr) minmax(245px, 1.35fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+}
+
+.admin-layout .transactions-search,
+.admin-layout .transactions-filter > select,
+.admin-layout .transactions-date-filter input,
+.admin-layout .transaction-reset-btn {
+    min-width: 0;
+    height: 41px;
+    border: 1px solid #dce5f0;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.admin-layout .transactions-search {
+    width: 100%;
+}
+
+.admin-layout .transactions-filter > select {
+    padding: 0 11px;
+    color: #40536c;
+}
+
+.admin-layout .transactions-date-filter {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    width: 100%;
+}
+
+.admin-layout .transactions-date-filter input {
+    flex: 1 1 0;
+    width: 1%;
+    min-width: 0;
+    padding: 0 8px;
+    color: #40536c;
+    font-size: 11px;
+}
+
+.admin-layout .transactions-date-filter span {
+    flex: 0 0 auto;
+    color: #8492a5;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.admin-layout .transaction-reset-btn {
+    padding: 0 15px;
+    color: #52647b;
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.admin-layout .transaction-reset-btn:hover {
+    color: #1d5ed5;
+    border-color: #b8d1fb;
+    background: #f2f7ff;
+}
+
+.admin-layout .transactions-filter button:focus-visible,
+.admin-layout .transactions-filter input:focus-visible,
+.admin-layout .transactions-filter select:focus-visible {
+    outline: none;
+    border-color: #77a8f5;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .1);
+}
+
+.admin-layout .transactions-result-summary {
+    gap: 12px 24px;
+}
+
+@media (max-width: 1320px) {
+    .admin-layout .transactions-filter {
+        grid-template-columns: minmax(220px, 1.6fr) minmax(155px, 1fr) minmax(165px, 1fr);
+    }
+
+    .admin-layout .transactions-date-filter {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 1050px) {
+    .admin-layout .admin-main {
+        padding: 22px 20px 30px;
+    }
+
+    .admin-layout .transactions-filter {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-layout .transactions-search {
+        grid-column: 1 / -1;
+    }
+
+    .admin-layout .transactions-date-filter {
+        grid-column: auto;
+    }
+}
+
+@media (max-width: 760px) {
+    .admin-layout {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .admin-layout .admin-main {
+        width: 100%;
+        padding: 18px 13px 26px;
+    }
+
+    .admin-layout .transactions-filter {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 12px;
+    }
+
+    .admin-layout .transactions-search,
+    .admin-layout .transactions-date-filter {
+        grid-column: auto;
+    }
+
+    .admin-layout .transactions-date-filter {
+        justify-content: stretch;
+    }
+
+    .admin-layout .transactions-date-filter input {
+        flex: 1 1 0;
+    }
+
+    .admin-layout .transaction-reset-btn {
+        width: 100%;
+    }
+}
