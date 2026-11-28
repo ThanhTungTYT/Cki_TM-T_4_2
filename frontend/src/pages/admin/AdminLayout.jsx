@@ -22,6 +22,7 @@ import AdminNotificationRealtime from "../../components/AdminNotificationRealtim
 import AdminOverviewCards from "./AdminOverviewCards";
 import "./AdminDashboard.css";
 import "./AdminSidebar.css";
+import "./AdminPolish.css";
 
 const menuItems = [
     { label: "Tổng quan", path: "/admin", icon: faHouse },
