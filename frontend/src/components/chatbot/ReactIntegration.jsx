@@ -1,4 +1,4 @@
-// React/Vite integration for CleanMate Chatbot V3 (Word TF-IDF + Linear SVM).
+// React/Vite integration for CleanMate Chatbot V4 (100% Local Deep Learning + Hybrid RRF + Policy RAG).
 // Static files:
 //   public/cleanmate-chatbot/widget.js
 //   public/cleanmate-chatbot/embed.css
@@ -29,7 +29,7 @@ export default function CleanMateChatWidget({ onAfterSelect }) {
         // Kết nối qua Spring Boot Proxy (/api/customer/ai -> FastAPI :8000),
         // tự động fallback sang http://127.0.0.1:8000 khi chạy thử nghiệm trực tiếp.
         apiBase: import.meta.env.VITE_CHATBOT_API_BASE || '/api/customer/ai',
-        mode: 'hybrid',
+        mode: 'v4',
         onSelect: ({ service_id, partner_service_id, partner_id }) => {
           onAfterSelectRef.current?.();
           // Điều hướng sang route chi tiết dịch vụ thực tế của CleanMate (/service-detail/:id).
